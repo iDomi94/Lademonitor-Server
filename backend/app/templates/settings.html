@@ -1,0 +1,330 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Einstellungen</h1>
+
+<h2 id="vehicle-form-heading">Fahrzeuge</h2>
+<form class="inline-form" id="vehicle-form">
+  <div><label>Name</label><input id="v-name" required></div>
+  <div><label>External ID (für HA)</label><input id="v-external" required placeholder="z.B. enyaq"></div>
+  <div><label>Marke</label><input id="v-brand"></div>
+  <div><label>Modell</label><input id="v-model"></div>
+  <div><label>Akku-Kapazität (kWh)</label><input type="number" step="0.1" id="v-capacity"></div>
+  <div class="form-actions">
+    <button type="button" id="vehicle-cancel-btn" style="background:var(--muted); display:none">Abbrechen</button>
+    <button type="submit" id="vehicle-submit-btn">Fahrzeug anlegen</button>
+  </div>
+</form>
+<table><thead><tr><th>Name</th><th>External ID</th><th>Marke/Modell</th><th>Akku</th><th></th></tr></thead>
+<tbody id="vehicle-rows"></tbody></table>
+
+<h2 id="provider-form-heading">Ladeanbieter</h2>
+<form class="inline-form" id="provider-form">
+  <div><label>Name</label><input id="p-name" required></div>
+  <div><label>Letzter AC-Preis (€/kWh)</label><input type="number" step="0.0001" id="p-ac"></div>
+  <div><label>Letzter DC-Preis (€/kWh)</label><input type="number" step="0.0001" id="p-dc"></div>
+  <div class="form-actions">
+    <button type="button" id="provider-cancel-btn" style="background:var(--muted); display:none">Abbrechen</button>
+    <button type="submit" id="provider-submit-btn">Anbieter anlegen</button>
+  </div>
+</form>
+<table><thead><tr><th>Name</th><th>AC-Preis</th><th>DC-Preis</th><th></th></tr></thead>
+<tbody id="provider-rows"></tbody></table>
+
+<h2 id="location-form-heading">Bekannte Ladeorte</h2>
+<form class="inline-form" id="location-form">
+  <div><label>Name</label><input id="l-name" required></div>
+  <div>
+    <label>Adresse suchen (optional)</label>
+    <input id="l-address" placeholder="z.B. Marktstraße 5, Leonberg">
+    <button type="button" id="l-geocode-btn">Koordinaten suchen</button>
+    <div id="l-geocode-results" style="display:none; font-size:0.9em; margin-top:4px"></div>
+  </div>
+  <div><label>Breitengrad</label><input type="number" step="any" id="l-lat" required></div>
+  <div><label>Längengrad</label><input type="number" step="any" id="l-lon" required></div>
+  <div><label>Radius (m)</label><input type="number" id="l-radius" value="100"></div>
+  <div>
+    <label>Standard-Anbieter</label>
+    <select id="l-provider"><option value="">– keiner –</option></select>
+  </div>
+  <div class="form-actions">
+    <button type="button" id="location-cancel-btn" style="background:var(--muted); display:none">Abbrechen</button>
+    <button type="submit" id="location-submit-btn">Ladeort anlegen</button>
+  </div>
+</form>
+<table><thead><tr><th>Name</th><th>Koordinaten</th><th>Radius</th><th>Standard-Anbieter</th><th></th></tr></thead>
+<tbody id="location-rows"></tbody></table>
+
+<script>
+let providers = [];
+let vehicles = [];
+let locations = [];
+let editingVehicleId = null;
+let editingProviderId = null;
+let editingLocationId = null;
+
+function actionButtons(kind, id) {
+  return `<button type="button" onclick="startEdit${kind}('${id}')" style="background:var(--accent2)">Bearbeiten</button>
+    <button type="button" onclick="deleteItem${kind}('${id}')" style="background:var(--danger)">Löschen</button>`;
+}
+
+// ---------- Fahrzeuge ----------
+
+async function loadVehicles() {
+  vehicles = await (await fetch('/api/vehicles')).json();
+  document.getElementById('vehicle-rows').innerHTML = vehicles.map(v => `
+    <tr><td>${v.name}</td><td>${v.external_id}</td><td>${[v.brand, v.model].filter(Boolean).join(' ') || '–'}</td>
+    <td>${v.battery_capacity_kwh ?? '–'}</td>
+    <td style="white-space:nowrap">${actionButtons('Vehicle', v.id)}</td></tr>`).join('');
+}
+
+function startEditVehicle(id) {
+  const v = vehicles.find(x => x.id === id);
+  if (!v) return;
+  editingVehicleId = id;
+  document.getElementById('v-name').value = v.name;
+  document.getElementById('v-external').value = v.external_id;
+  document.getElementById('v-external').disabled = true; // external_id ist nach Anlage nicht mehr aenderbar
+  document.getElementById('v-brand').value = v.brand || '';
+  document.getElementById('v-model').value = v.model || '';
+  document.getElementById('v-capacity').value = v.battery_capacity_kwh ?? '';
+  document.getElementById('vehicle-form-heading').textContent = 'Fahrzeug bearbeiten';
+  document.getElementById('vehicle-submit-btn').textContent = 'Änderungen speichern';
+  document.getElementById('vehicle-cancel-btn').style.display = 'inline-block';
+  document.getElementById('vehicle-form').scrollIntoView({ behavior: 'smooth' });
+}
+
+function cancelEditVehicle() {
+  editingVehicleId = null;
+  document.getElementById('vehicle-form').reset();
+  document.getElementById('v-external').disabled = false;
+  document.getElementById('vehicle-form-heading').textContent = 'Fahrzeuge';
+  document.getElementById('vehicle-submit-btn').textContent = 'Fahrzeug anlegen';
+  document.getElementById('vehicle-cancel-btn').style.display = 'none';
+}
+document.getElementById('vehicle-cancel-btn').addEventListener('click', cancelEditVehicle);
+
+async function deleteItemVehicle(id) {
+  if (!confirm('Fahrzeug wirklich löschen? Alle zugehörigen Ladevorgänge werden dabei mitgelöscht.')) return;
+  await fetch(`/api/vehicles/${id}`, { method: 'DELETE' });
+  if (editingVehicleId === id) cancelEditVehicle();
+  loadVehicles();
+}
+
+document.getElementById('vehicle-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (editingVehicleId) {
+    await fetch(`/api/vehicles/${editingVehicleId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: document.getElementById('v-name').value,
+        brand: document.getElementById('v-brand').value || null,
+        model: document.getElementById('v-model').value || null,
+        battery_capacity_kwh: document.getElementById('v-capacity').value || null,
+      })
+    });
+    cancelEditVehicle();
+  } else {
+    await fetch('/api/vehicles', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: document.getElementById('v-name').value,
+        external_id: document.getElementById('v-external').value,
+        brand: document.getElementById('v-brand').value || null,
+        model: document.getElementById('v-model').value || null,
+        battery_capacity_kwh: document.getElementById('v-capacity').value || null,
+      })
+    });
+    e.target.reset();
+  }
+  loadVehicles();
+});
+
+// ---------- Ladeanbieter ----------
+
+async function loadProviders() {
+  providers = await (await fetch('/api/providers')).json();
+  document.getElementById('provider-rows').innerHTML = providers.map(p => `
+    <tr><td>${p.name}</td><td>${p.last_price_ac_per_kwh ?? '–'}</td><td>${p.last_price_dc_per_kwh ?? '–'}</td>
+    <td style="white-space:nowrap">${actionButtons('Provider', p.id)}</td></tr>`).join('');
+  document.getElementById('l-provider').innerHTML = '<option value="">– keiner –</option>' +
+    providers.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+}
+
+function startEditProvider(id) {
+  const p = providers.find(x => x.id === id);
+  if (!p) return;
+  editingProviderId = id;
+  document.getElementById('p-name').value = p.name;
+  document.getElementById('p-ac').value = p.last_price_ac_per_kwh ?? '';
+  document.getElementById('p-dc').value = p.last_price_dc_per_kwh ?? '';
+  document.getElementById('provider-form-heading').textContent = 'Ladeanbieter bearbeiten';
+  document.getElementById('provider-submit-btn').textContent = 'Änderungen speichern';
+  document.getElementById('provider-cancel-btn').style.display = 'inline-block';
+  document.getElementById('provider-form').scrollIntoView({ behavior: 'smooth' });
+}
+
+function cancelEditProvider() {
+  editingProviderId = null;
+  document.getElementById('provider-form').reset();
+  document.getElementById('provider-form-heading').textContent = 'Ladeanbieter';
+  document.getElementById('provider-submit-btn').textContent = 'Anbieter anlegen';
+  document.getElementById('provider-cancel-btn').style.display = 'none';
+}
+document.getElementById('provider-cancel-btn').addEventListener('click', cancelEditProvider);
+
+async function deleteItemProvider(id) {
+  if (!confirm('Anbieter wirklich löschen?')) return;
+  await fetch(`/api/providers/${id}`, { method: 'DELETE' });
+  if (editingProviderId === id) cancelEditProvider();
+  loadProviders();
+}
+
+document.getElementById('provider-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const payload = {
+    name: document.getElementById('p-name').value,
+    last_price_ac_per_kwh: document.getElementById('p-ac').value || null,
+    last_price_dc_per_kwh: document.getElementById('p-dc').value || null,
+  };
+  if (editingProviderId) {
+    await fetch(`/api/providers/${editingProviderId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    cancelEditProvider();
+  } else {
+    await fetch('/api/providers', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    e.target.reset();
+  }
+  loadProviders();
+});
+
+// ---------- Ladeorte ----------
+
+async function loadLocations() {
+  locations = await (await fetch('/api/locations')).json();
+  document.getElementById('location-rows').innerHTML = locations.map(l => {
+    const provider = providers.find(p => p.id === l.default_provider_id);
+    return `<tr><td>${l.name}</td><td>${l.latitude.toFixed(4)}, ${l.longitude.toFixed(4)}</td>
+    <td>${l.radius_m} m</td><td>${provider ? provider.name : '–'}</td>
+    <td style="white-space:nowrap">${actionButtons('Location', l.id)}</td></tr>`;
+  }).join('');
+}
+
+function startEditLocation(id) {
+  const l = locations.find(x => x.id === id);
+  if (!l) return;
+  editingLocationId = id;
+  document.getElementById('l-name').value = l.name;
+  document.getElementById('l-lat').value = l.latitude;
+  document.getElementById('l-lon').value = l.longitude;
+  document.getElementById('l-radius').value = l.radius_m;
+  document.getElementById('l-provider').value = l.default_provider_id || '';
+  clearGeocodeResults();
+  document.getElementById('location-form-heading').textContent = 'Ladeort bearbeiten';
+  document.getElementById('location-submit-btn').textContent = 'Änderungen speichern';
+  document.getElementById('location-cancel-btn').style.display = 'inline-block';
+  document.getElementById('location-form').scrollIntoView({ behavior: 'smooth' });
+}
+
+function cancelEditLocation() {
+  editingLocationId = null;
+  document.getElementById('location-form').reset();
+  document.getElementById('l-radius').value = 100;
+  document.getElementById('location-form-heading').textContent = 'Bekannte Ladeorte';
+  document.getElementById('location-submit-btn').textContent = 'Ladeort anlegen';
+  document.getElementById('location-cancel-btn').style.display = 'none';
+  clearGeocodeResults();
+}
+document.getElementById('location-cancel-btn').addEventListener('click', cancelEditLocation);
+
+function clearGeocodeResults() {
+  const resultsDiv = document.getElementById('l-geocode-results');
+  resultsDiv.textContent = '';
+  resultsDiv.style.display = 'none';
+}
+
+document.getElementById('l-geocode-btn').addEventListener('click', async () => {
+  const query = document.getElementById('l-address').value.trim();
+  const resultsDiv = document.getElementById('l-geocode-results');
+  if (!query) return;
+
+  resultsDiv.textContent = 'Suche…';
+  resultsDiv.style.display = 'block';
+
+  let results = [];
+  try {
+    const res = await fetch('/api/geocode/forward?query=' + encodeURIComponent(query));
+    if (res.ok) results = await res.json();
+  } catch (err) {
+    // wird unten als "keine Treffer" behandelt
+  }
+
+  resultsDiv.textContent = '';
+  if (!results.length) {
+    resultsDiv.textContent = 'Keine Treffer gefunden – bitte Koordinaten manuell eintragen.';
+    return;
+  }
+
+  // Kandidaten als Buttons per DOM aufbauen statt innerHTML, da display_name
+  // von einer externen Quelle (Nominatim) kommt und nicht vertrauenswuerdig ist
+  results.forEach(r => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = r.display_name;
+    btn.style.display = 'block';
+    btn.style.margin = '4px 0';
+    btn.style.textAlign = 'left';
+    btn.addEventListener('click', () => {
+      document.getElementById('l-lat').value = r.latitude;
+      document.getElementById('l-lon').value = r.longitude;
+      resultsDiv.textContent = `Übernommen: ${r.display_name}`;
+    });
+    resultsDiv.appendChild(btn);
+  });
+});
+
+async function deleteItemLocation(id) {
+  if (!confirm('Ladeort wirklich löschen?')) return;
+  await fetch(`/api/locations/${id}`, { method: 'DELETE' });
+  if (editingLocationId === id) cancelEditLocation();
+  loadLocations();
+}
+
+document.getElementById('location-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const payload = {
+    name: document.getElementById('l-name').value,
+    latitude: parseFloat(parseFloat(document.getElementById('l-lat').value).toFixed(6)),
+    longitude: parseFloat(parseFloat(document.getElementById('l-lon').value).toFixed(6)),
+    radius_m: parseInt(document.getElementById('l-radius').value || 100),
+    default_provider_id: document.getElementById('l-provider').value || null,
+  };
+  if (editingLocationId) {
+    await fetch(`/api/locations/${editingLocationId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    cancelEditLocation();
+  } else {
+    await fetch('/api/locations', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    e.target.reset();
+    document.getElementById('l-radius').value = 100;
+    clearGeocodeResults();
+  }
+  loadLocations();
+});
+
+(async () => {
+  await loadVehicles();
+  await loadProviders();
+  await loadLocations();
+})();
+</script>
+{% endblock %}

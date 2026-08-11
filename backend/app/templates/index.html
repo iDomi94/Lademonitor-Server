@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Dashboard</h1>
+
+<div class="grid" id="stat-cards">
+  <div class="card"><div class="stat-label">Ladevorgänge</div><div class="stat-value" id="s-count">–</div></div>
+  <div class="card"><div class="stat-label">Gesamt kWh</div><div class="stat-value" id="s-kwh">–</div></div>
+  <div class="card"><div class="stat-label">Gesamtkosten</div><div class="stat-value" id="s-cost">–</div></div>
+  <div class="card"><div class="stat-label">Ø Preis/kWh</div><div class="stat-value" id="s-price">–</div></div>
+  <div class="card"><div class="stat-label">Ø Verbrauch/100km</div><div class="stat-value" id="s-consumption">–</div></div>
+  <div class="card"><div class="stat-label">Preis pro 100km</div><div class="stat-value" id="s-price-100km">–</div></div>
+  <div class="card"><div class="stat-label">AC / DC Anteil</div><div class="stat-value" id="s-acdc">–</div></div>
+  <div class="card"><div class="stat-label">Gefahrene Kilometer</div><div class="stat-value" id="s-km">–</div></div>
+</div>
+
+<h2>Kosten pro Monat</h2>
+<div class="card" id="chart-cost"></div>
+
+<h2>kWh pro Monat</h2>
+<div class="card" id="chart-kwh"></div>
+
+<script>
+function setText(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = value;
+}
+
+const MONTH_NAMES = [
+  'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
+  'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'
+];
+
+// Wandelt "2026-08" in "August 2026" um
+function formatMonthLabel(monthKey) {
+  const [year, month] = monthKey.split('-').map(Number);
+  return `${MONTH_NAMES[month - 1]} ${year}`;
+}
+
+// Leichtgewichtiger SVG-Balkendiagramm ohne externe Abhaengigkeit (z.B. falls kein
+// Internetzugriff zu einem CDN besteht - laeuft komplett lokal im Server-HTML).
+function renderBarChart(containerId, labels, values, color, unit) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const max = Math.max(...values, 0.0001);
+  const barHeight = 28;
+  const gap = 10;
+  const labelWidth = 110;
+  const chartWidth = 500;
+  const height = labels.length * (barHeight + gap) + gap;
+
+  let bars = '';
+  labels.forEach((label, i) => {
+    const y = gap + i * (barHeight + gap);
+    const barW = Math.max((values[i] / max) * (chartWidth - labelWidth - 60), 2);
+    bars += `
+      <text x="0" y="${y + barHeight / 2 + 4}" fill="#8b95ab" font-size="12">${label}</text>
+      <rect x="${labelWidth}" y="${y}" width="${barW}" height="${barHeight}" rx="4" fill="${color}"></rect>
+      <text x="${labelWidth + barW + 8}" y="${y + barHeight / 2 + 4}" fill="#e6e9f0" font-size="12">${values[i].toFixed(1)}${unit}</text>
+    `;
+  });
+
+  container.innerHTML = `<svg viewBox="0 0 ${chartWidth} ${height}" width="100%" height="${height}">${bars}</svg>`;
+}
+
+async function loadStats() {
+  try {
+    const res = await fetch('/api/stats/summary');
+    if (!res.ok) {
+      console.error('Stats-Request fehlgeschlagen:', res.status, await res.text());
+      return;
+    }
+    const data = await res.json();
+
+    setText('s-count', data.total_sessions);
+    setText('s-kwh', data.total_kwh.toFixed(1) + ' kWh');
+    setText('s-cost', data.total_cost.toFixed(2) + ' €');
+    setText('s-price', data.avg_price_per_kwh ? data.avg_price_per_kwh.toFixed(3) + ' €' : '–');
+    setText('s-consumption', data.avg_consumption_kwh_per_100km ? data.avg_consumption_kwh_per_100km.toFixed(1) + ' kWh' : '–');
+    setText('s-price-100km', data.price_per_100km != null ? data.price_per_100km.toFixed(2) + ' €' : '–');
+    setText('s-acdc', (data.ac_share_pct ?? '–') + '% / ' + (data.dc_share_pct ?? '–') + '%');
+    setText('s-km', data.total_km_driven != null ? data.total_km_driven.toLocaleString('de-DE') + ' km' : '–');
+
+    if (!data.monthly || data.monthly.length === 0) {
+      console.warn('Keine monatlichen Daten vorhanden - Diagramme bleiben leer.');
+      return;
+    }
+
+    const months = data.monthly.map(m => formatMonthLabel(m.month));
+    const costs = data.monthly.map(m => m.total_cost);
+    const kwhs = data.monthly.map(m => m.total_kwh);
+
+    renderBarChart('chart-cost', months, costs, '#5b8def', ' €');
+    renderBarChart('chart-kwh', months, kwhs, '#4fd1a5', ' kWh');
+  } catch (err) {
+    console.error('Fehler beim Laden der Statistiken:', err);
+  }
+}
+loadStats();
+</script>
+{% endblock %}

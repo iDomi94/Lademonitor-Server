@@ -1,0 +1,278 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Ladevorgänge</h1>
+
+<h2 id="form-heading" style="margin-top:0">Neuer Ladevorgang</h2>
+<form class="inline-form" id="session-form">
+  <div>
+    <label>Fahrzeug</label>
+    <select id="f-vehicle" required></select>
+  </div>
+  <div>
+    <label>Anbieter</label>
+    <select id="f-provider">
+      <option value="">– keiner –</option>
+    </select>
+  </div>
+  <div>
+    <label>Ladeort (bekannt)</label>
+    <select id="f-location">
+      <option value="">– keiner –</option>
+    </select>
+  </div>
+  <div>
+    <label>Ladeort als Text (falls kein bekannter Ort passt)</label>
+    <input id="f-location-text" placeholder="z.B. Stuttgart Hbf">
+  </div>
+  <div>
+    <label>Start</label>
+    <input type="datetime-local" id="f-start" required>
+  </div>
+  <div>
+    <label>Lade-Typ</label>
+    <select id="f-type">
+      <option value="">–</option>
+      <option value="AC">AC</option>
+      <option value="DC">DC</option>
+    </select>
+  </div>
+  <div>
+    <label>SoC Start (%)</label>
+    <input type="number" id="f-soc-start" min="0" max="100">
+  </div>
+  <div>
+    <label>SoC Ende (%)</label>
+    <input type="number" id="f-soc-end" min="0" max="100">
+  </div>
+  <div>
+    <label>kWh (leer = automatisch)</label>
+    <input type="number" step="0.01" id="f-kwh">
+  </div>
+  <div>
+    <label>Preis/kWh (€)</label>
+    <input type="number" step="0.0001" id="f-price-kwh">
+  </div>
+  <div>
+    <label>Gesamtpreis (€)</label>
+    <input type="number" step="0.01" id="f-price-total">
+  </div>
+  <div>
+    <label>Kilometerstand</label>
+    <input type="number" id="f-odo">
+  </div>
+  <div class="form-actions">
+    <button type="button" id="cancel-edit-btn" style="background:var(--muted); display:none">Abbrechen</button>
+    <button type="submit" id="submit-btn">Ladevorgang speichern</button>
+  </div>
+</form>
+
+<table>
+  <thead>
+    <tr>
+      <th>Datum</th><th>Fahrzeug</th><th>Anbieter</th><th>Ort</th><th>Typ</th><th>SoC</th><th>kWh</th>
+      <th>Preis</th><th>km-Stand</th><th>Verbrauch</th><th>Quelle</th><th></th>
+    </tr>
+  </thead>
+  <tbody id="session-rows"></tbody>
+</table>
+
+<script>
+let vehicles = [];
+let providers = [];
+let locations = [];
+let allSessions = [];
+let editingSessionId = null;
+
+async function loadDropdowns() {
+  vehicles = await (await fetch('/api/vehicles')).json();
+  providers = await (await fetch('/api/providers')).json();
+  locations = await (await fetch('/api/locations')).json();
+
+  const vSel = document.getElementById('f-vehicle');
+  vSel.innerHTML = vehicles.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+
+  const pSel = document.getElementById('f-provider');
+  pSel.innerHTML = '<option value="">– keiner –</option>' +
+    providers.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+
+  const lSel = document.getElementById('f-location');
+  lSel.innerHTML = '<option value="">– keiner –</option>' +
+    locations.map(l => `<option value="${l.id}">${l.name}</option>`).join('');
+}
+
+// Anbieter-Preis automatisch vorschlagen, wenn Anbieter + Typ gewählt sind
+function suggestPrice() {
+  if (editingSessionId) return; // beim Bearbeiten nicht überschreiben
+  const providerId = document.getElementById('f-provider').value;
+  const type = document.getElementById('f-type').value;
+  const priceField = document.getElementById('f-price-kwh');
+  if (!providerId || priceField.value) return;
+  const provider = providers.find(p => p.id === providerId);
+  if (!provider) return;
+  const price = type === 'DC' ? provider.last_price_dc_per_kwh : provider.last_price_ac_per_kwh;
+  if (price != null) priceField.value = price;
+}
+document.getElementById('f-provider').addEventListener('change', suggestPrice);
+document.getElementById('f-type').addEventListener('change', suggestPrice);
+
+function badgeFor(source) {
+  const map = { manual: 'Manuell', automatic: 'Automatisch', import: 'Import' };
+  return `<span class="badge badge-${source}">${map[source] || source}</span>`;
+}
+
+const CONSUMPTION_ICON = {
+  full_charge_interval: '🎯',
+  soc_corrected: '✓',
+  naive: '~',
+  estimated_energy: '~',
+};
+const CONSUMPTION_TOOLTIP = {
+  full_charge_interval: 'Exakt: aus Vollladungs-Intervall (SoC 100% → 100%) berechnet',
+  soc_corrected: 'SoC-korrigiert, auf Basis gemessener kWh',
+  naive: 'Einfache Rechnung ohne SoC-Korrektur (keine SoC-Werte verfügbar)',
+  estimated_energy: 'Basiert auf geschätzter Energiemenge (SoC-Delta × Akkukapazität) - Fehler können sich häufen',
+  unavailable: 'Keine Berechnung möglich (kein Vorgänger-Ladevorgang oder Kilometerstand fehlt/unplausibel)',
+};
+
+function consumptionCell(kwhPer100km, method) {
+  const tooltip = CONSUMPTION_TOOLTIP[method] || CONSUMPTION_TOOLTIP.unavailable;
+  if (kwhPer100km == null) {
+    return `<span title="${tooltip}">–</span>`;
+  }
+  const icon = CONSUMPTION_ICON[method] || '';
+  return `<span title="${tooltip}">${kwhPer100km.toFixed(1)} kWh ${icon}</span>`;
+}
+
+async function loadSessions() {
+  allSessions = await (await fetch('/api/sessions')).json();
+  const tbody = document.getElementById('session-rows');
+  tbody.innerHTML = allSessions.map(s => {
+    const vehicle = vehicles.find(v => v.id === s.vehicle_id);
+    const provider = providers.find(p => p.id === s.provider_id);
+    const location = locations.find(l => l.id === s.location_id);
+    const date = new Date(s.start_time).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' });
+
+    let ortText = location ? location.name : (s.geocoded_place || '–');
+    if (!location && !s.geocoded_place && s.notes) {
+      const m = s.notes.match(/Ort:\s*(.+)$/);
+      if (m && m[1]) ortText = m[1];
+    }
+
+    let socText = '–';
+    if (s.soc_start != null && s.soc_end != null) socText = `${s.soc_start}→${s.soc_end}%`;
+    else if (s.soc_end != null) socText = `${s.soc_end}%`;
+
+    return `<tr class="${s.needs_review ? 'needs-review' : ''}">
+      <td>${date}</td>
+      <td>${vehicle ? vehicle.name : '–'}</td>
+      <td>${provider ? provider.name : '–'}</td>
+      <td>${ortText}</td>
+      <td>${s.charging_type || '–'}</td>
+      <td>${socText}</td>
+      <td>${s.energy_kwh != null ? s.energy_kwh.toFixed(1) : '–'}</td>
+      <td>${s.price_total != null ? s.price_total.toFixed(2) + ' €' : '–'}</td>
+      <td>${s.odometer_km ?? '–'}</td>
+      <td>${consumptionCell(s.consumption_kwh_per_100km, s.consumption_method)}</td>
+      <td>${badgeFor(s.source)}</td>
+      <td style="white-space:nowrap">
+        <button onclick="startEdit('${s.id}')" style="background:var(--accent2)">Bearbeiten</button>
+        <button onclick="deleteSession('${s.id}')" style="background:var(--danger)">Löschen</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function toDatetimeLocalValue(isoString) {
+  // "2026-08-09T14:32:00" -> passt direkt ins datetime-local Feld (ohne Sekunden/Zeitzone)
+  return isoString ? isoString.slice(0, 16) : '';
+}
+
+function startEdit(id) {
+  const s = allSessions.find(x => x.id === id);
+  if (!s) return;
+  editingSessionId = id;
+
+  document.getElementById('f-vehicle').value = s.vehicle_id;
+  document.getElementById('f-provider').value = s.provider_id || '';
+  document.getElementById('f-location').value = s.location_id || '';
+  document.getElementById('f-location-text').value = s.geocoded_place || '';
+  document.getElementById('f-start').value = toDatetimeLocalValue(s.start_time);
+  document.getElementById('f-type').value = s.charging_type || '';
+  document.getElementById('f-soc-start').value = s.soc_start ?? '';
+  document.getElementById('f-soc-end').value = s.soc_end ?? '';
+  document.getElementById('f-kwh').value = s.energy_kwh ?? '';
+  document.getElementById('f-price-kwh').value = s.price_per_kwh ?? '';
+  document.getElementById('f-price-total').value = s.price_total ?? '';
+  document.getElementById('f-odo').value = s.odometer_km ?? '';
+
+  document.getElementById('form-heading').textContent = 'Ladevorgang bearbeiten';
+  document.getElementById('submit-btn').textContent = 'Änderungen speichern';
+  document.getElementById('cancel-edit-btn').style.display = 'inline-block';
+  document.getElementById('session-form').scrollIntoView({ behavior: 'smooth' });
+}
+
+function cancelEdit() {
+  editingSessionId = null;
+  document.getElementById('session-form').reset();
+  document.getElementById('form-heading').textContent = 'Neuer Ladevorgang';
+  document.getElementById('submit-btn').textContent = 'Ladevorgang speichern';
+  document.getElementById('cancel-edit-btn').style.display = 'none';
+}
+document.getElementById('cancel-edit-btn').addEventListener('click', cancelEdit);
+
+async function deleteSession(id) {
+  if (!confirm('Ladevorgang wirklich löschen?')) return;
+  await fetch(`/api/sessions/${id}`, { method: 'DELETE' });
+  if (editingSessionId === id) cancelEdit();
+  loadSessions();
+}
+
+document.getElementById('session-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const payload = {
+    vehicle_id: document.getElementById('f-vehicle').value,
+    provider_id: document.getElementById('f-provider').value || null,
+    location_id: document.getElementById('f-location').value || null,
+    geocoded_place: document.getElementById('f-location-text').value || null,
+    start_time: document.getElementById('f-start').value,
+    charging_type: document.getElementById('f-type').value || null,
+    soc_start: document.getElementById('f-soc-start').value || null,
+    soc_end: document.getElementById('f-soc-end').value || null,
+    energy_kwh: document.getElementById('f-kwh').value || null,
+    price_per_kwh: document.getElementById('f-price-kwh').value || null,
+    price_total: document.getElementById('f-price-total').value || null,
+    odometer_km: document.getElementById('f-odo').value || null,
+  };
+
+  let res;
+  if (editingSessionId) {
+    // vehicle_id lässt sich beim PATCH nicht ändern (Backend erlaubt es aktuell nicht) - daher entfernen
+    const { vehicle_id, ...patchPayload } = payload;
+    res = await fetch(`/api/sessions/${editingSessionId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patchPayload)
+    });
+  } else {
+    res = await fetch('/api/sessions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  }
+
+  if (res.ok) {
+    cancelEdit();
+    loadSessions();
+    loadDropdowns();
+  } else {
+    alert('Fehler beim Speichern: ' + await res.text());
+  }
+});
+
+(async () => {
+  await loadDropdowns();
+  await loadSessions();
+})();
+</script>
+{% endblock %}

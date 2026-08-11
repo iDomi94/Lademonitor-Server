@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Charging Tracker</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <nav class="topnav">
+    <div class="brand">⚡ Charging Tracker</div>
+    <a href="/">Dashboard</a>
+    <a href="/sessions">Ladevorgänge</a>
+    <a href="/import">Import</a>
+    <a href="/settings">Einstellungen</a>
+  </nav>
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Spritmonitor-Import</h1>
+
+<form class="inline-form" id="import-form">
+  <div>
+    <label>Fahrzeug</label>
+    <select id="i-vehicle" required></select>
+  </div>
+  <div>
+    <label>CSV-Datei</label>
+    <input type="file" id="i-file" accept=".csv" required>
+  </div>
+  <div class="form-actions">
+    <button type="submit">Vorschau laden</button>
+  </div>
+</form>
+
+<div id="preview-area" style="display:none">
+  <h2>Vorschau</h2>
+  <p id="preview-summary" style="color: var(--muted); font-size: 14px;"></p>
+  <table>
+    <thead><tr><th>Datum</th><th>km-Stand</th><th>Menge</th><th>Preis gesamt</th><th>Preis/Einheit</th><th>Status</th></tr></thead>
+    <tbody id="preview-rows"></tbody>
+  </table>
+  <div class="form-actions" style="margin-top:16px">
+    <button id="commit-btn">Import bestätigen</button>
+  </div>
+</div>
+
+<script>
+async function loadVehicles() {
+  const vehicles = await (await fetch('/api/vehicles')).json();
+  document.getElementById('i-vehicle').innerHTML =
+    vehicles.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+}
+loadVehicles();
+
+document.getElementById('import-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const vehicleId = document.getElementById('i-vehicle').value;
+  const file = document.getElementById('i-file').files[0];
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const res = await fetch(`/api/import/spritmonitor/preview?vehicle_id=${vehicleId}`, {
+    method: 'POST', body: formData
+  });
+  if (!res.ok) { alert('Fehler: ' + await res.text()); return; }
+  const data = await res.json();
+
+  const toImport = data.rows.filter(r => r.will_import).length;
+  document.getElementById('preview-summary').textContent =
+    `${data.rows.length} Zeilen gefunden, ${toImport} werden importiert, ${data.rows.length - toImport} übersprungen (Duplikate/Fehler).`;
+
+  document.getElementById('preview-rows').innerHTML = data.rows.map(r => `
+    <tr class="${r.will_import ? '' : 'needs-review'}">
+      <td>${r.date ?? '–'}</td>
+      <td>${r.odometer ?? '–'}</td>
+      <td>${r.quantity ?? '–'}</td>
+      <td>${r.price_total ?? '–'}</td>
+      <td>${r.price_per_unit ?? '–'}</td>
+      <td>${r.will_import ? '✅ wird importiert' : '⏭ ' + (r.reason || 'übersprungen')}</td>
+    </tr>`).join('');
+
+  document.getElementById('preview-area').style.display = 'block';
+
+  document.getElementById('commit-btn').onclick = async () => {
+    const commitRes = await fetch(`/api/import/spritmonitor/commit?vehicle_id=${vehicleId}`, {
+      method: 'POST', body: formData
+    });
+    const result = await commitRes.json();
+    alert(`Import abgeschlossen: ${result.imported} importiert, ${result.skipped_duplicates} übersprungen.`);
+    document.getElementById('preview-area').style.display = 'none';
+    e.target.reset();
+  };
+});
+</script>
+{% endblock %}
