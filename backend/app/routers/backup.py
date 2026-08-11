@@ -19,6 +19,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from .. import models
+from ..auth import get_current_user
 from ..database import get_db
 
 router = APIRouter(prefix="/api/backup", tags=["backup"])
@@ -96,11 +97,31 @@ def _write_csv(fieldnames: list[str], rows: list[dict]) -> str:
 
 
 @router.get("/export")
-def export_backup(db: Session = Depends(get_db)):
-    vehicles = db.query(models.Vehicle).order_by(models.Vehicle.created_at).all()
-    providers = db.query(models.Provider).order_by(models.Provider.created_at).all()
-    locations = db.query(models.ChargingLocation).order_by(models.ChargingLocation.created_at).all()
-    sessions = db.query(models.ChargingSession).order_by(models.ChargingSession.start_time).all()
+def export_backup(db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+    vehicles = (
+        db.query(models.Vehicle)
+        .filter(models.Vehicle.user_id == user.id)
+        .order_by(models.Vehicle.created_at)
+        .all()
+    )
+    providers = (
+        db.query(models.Provider)
+        .filter(models.Provider.user_id == user.id)
+        .order_by(models.Provider.created_at)
+        .all()
+    )
+    locations = (
+        db.query(models.ChargingLocation)
+        .filter(models.ChargingLocation.user_id == user.id)
+        .order_by(models.ChargingLocation.created_at)
+        .all()
+    )
+    sessions = (
+        db.query(models.ChargingSession)
+        .filter(models.ChargingSession.user_id == user.id)
+        .order_by(models.ChargingSession.start_time)
+        .all()
+    )
 
     vehicles_by_id = {v.id: v for v in vehicles}
     providers_by_id = {p.id: p for p in providers}
@@ -217,7 +238,11 @@ def _read_csv(content: bytes) -> list[dict]:
 
 
 @router.post("/import", response_model=BackupImportResult)
-async def import_backup(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def import_backup(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
     if not (file.filename or "").endswith(".zip"):
         raise HTTPException(422, "Bitte die vom Export erzeugte ZIP-Datei hochladen")
 
@@ -234,19 +259,26 @@ async def import_backup(file: UploadFile = File(...), db: Session = Depends(get_
                 422, f"{required} fehlt in der ZIP-Datei - bitte die vollstaendige Export-ZIP hochladen"
             )
 
-    existing_vehicle_ids = {row[0] for row in db.query(models.Vehicle.id).all()}
-    existing_provider_ids = {row[0] for row in db.query(models.Provider.id).all()}
-    existing_location_ids = {row[0] for row in db.query(models.ChargingLocation.id).all()}
+    # id -> owner user_id, damit sessions.csv spaeter nicht versehentlich auf
+    # Fahrzeuge/Anbieter/Orte EINES ANDEREN Nutzers verweisen kann (z.B. falls
+    # eine fremde Backup-ZIP hochgeladen wird, die zufaellig dieselben UUIDs
+    # enthaelt wie bereits vorhandene Daten)
+    existing_vehicle_owners = {row[0]: row[1] for row in db.query(models.Vehicle.id, models.Vehicle.user_id).all()}
+    existing_provider_owners = {row[0]: row[1] for row in db.query(models.Provider.id, models.Provider.user_id).all()}
+    existing_location_owners = {
+        row[0]: row[1] for row in db.query(models.ChargingLocation.id, models.ChargingLocation.user_id).all()
+    }
     existing_session_ids = {row[0] for row in db.query(models.ChargingSession.id).all()}
 
     vehicles_imported = vehicles_skipped = 0
     for row in _read_csv(zf.read("vehicles.csv")):
-        if row["id"] in existing_vehicle_ids:
+        if row["id"] in existing_vehicle_owners:
             vehicles_skipped += 1
             continue
         db.add(
             models.Vehicle(
                 id=row["id"],
+                user_id=user.id,
                 external_id=row["external_id"],
                 name=row["name"],
                 brand=_parse_str(row.get("brand")),
@@ -256,18 +288,19 @@ async def import_backup(file: UploadFile = File(...), db: Session = Depends(get_
                 created_at=_parse_dt(row.get("created_at")),
             )
         )
-        existing_vehicle_ids.add(row["id"])
+        existing_vehicle_owners[row["id"]] = user.id
         vehicles_imported += 1
     db.commit()
 
     providers_imported = providers_skipped = 0
     for row in _read_csv(zf.read("providers.csv")):
-        if row["id"] in existing_provider_ids:
+        if row["id"] in existing_provider_owners:
             providers_skipped += 1
             continue
         db.add(
             models.Provider(
                 id=row["id"],
+                user_id=user.id,
                 name=row["name"],
                 last_price_ac_per_kwh=_parse_float(row.get("last_price_ac_per_kwh")),
                 last_price_dc_per_kwh=_parse_float(row.get("last_price_dc_per_kwh")),
@@ -275,21 +308,22 @@ async def import_backup(file: UploadFile = File(...), db: Session = Depends(get_
                 created_at=_parse_dt(row.get("created_at")),
             )
         )
-        existing_provider_ids.add(row["id"])
+        existing_provider_owners[row["id"]] = user.id
         providers_imported += 1
     db.commit()
 
     locations_imported = locations_skipped = 0
     for row in _read_csv(zf.read("locations.csv")):
-        if row["id"] in existing_location_ids:
+        if row["id"] in existing_location_owners:
             locations_skipped += 1
             continue
         default_provider_id = _parse_str(row.get("default_provider_id"))
-        if default_provider_id and default_provider_id not in existing_provider_ids:
+        if default_provider_id and existing_provider_owners.get(default_provider_id) != user.id:
             default_provider_id = None
         db.add(
             models.ChargingLocation(
                 id=row["id"],
+                user_id=user.id,
                 name=row["name"],
                 latitude=float(row["latitude"]),
                 longitude=float(row["longitude"]),
@@ -298,7 +332,7 @@ async def import_backup(file: UploadFile = File(...), db: Session = Depends(get_
                 created_at=_parse_dt(row.get("created_at")),
             )
         )
-        existing_location_ids.add(row["id"])
+        existing_location_owners[row["id"]] = user.id
         locations_imported += 1
     db.commit()
 
@@ -308,15 +342,15 @@ async def import_backup(file: UploadFile = File(...), db: Session = Depends(get_
             sessions_skipped += 1
             continue
         vehicle_id = _parse_str(row.get("vehicle_id"))
-        if not vehicle_id or vehicle_id not in existing_vehicle_ids:
+        if not vehicle_id or existing_vehicle_owners.get(vehicle_id) != user.id:
             sessions_skipped += 1
             continue
 
         provider_id = _parse_str(row.get("provider_id"))
-        if provider_id and provider_id not in existing_provider_ids:
+        if provider_id and existing_provider_owners.get(provider_id) != user.id:
             provider_id = None
         location_id = _parse_str(row.get("location_id"))
-        if location_id and location_id not in existing_location_ids:
+        if location_id and existing_location_owners.get(location_id) != user.id:
             location_id = None
 
         charging_type_raw = _parse_str(row.get("charging_type"))
@@ -326,6 +360,7 @@ async def import_backup(file: UploadFile = File(...), db: Session = Depends(get_
         db.add(
             models.ChargingSession(
                 id=row["id"],
+                user_id=user.id,
                 vehicle_id=vehicle_id,
                 provider_id=provider_id,
                 location_id=location_id,

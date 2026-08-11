@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Registrieren – Charging Tracker</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <style>
+    .auth-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    .auth-card { width: 100%; max-width: 360px; }
+    .auth-card h1 { margin-bottom: 16px; }
+    .auth-card .field { margin-bottom: 14px; }
+    .auth-card button { width: 100%; margin-top: 8px; }
+    .auth-error { color: var(--danger); font-size: 13px; margin-top: 10px; min-height: 1em; }
+    .auth-switch { margin-top: 16px; font-size: 13px; color: var(--muted); text-align: center; }
+    .auth-switch a { color: var(--accent2); }
+    .auth-hint { font-size: 12px; color: var(--muted); margin-top: -8px; margin-bottom: 14px; }
+  </style>
+</head>
+<body>
+  <div class="auth-wrap">
+    <div class="card auth-card">
+      <h1>⚡ Konto erstellen</h1>
+      <form id="register-form">
+        <div class="field"><label>Nutzername</label><input id="r-username" required minlength="3" autofocus></div>
+        <div class="field"><label>Passwort</label><input type="password" id="r-password" required minlength="8"></div>
+        <div class="auth-hint">Mindestens 8 Zeichen</div>
+        <div class="field"><label>Passwort wiederholen</label><input type="password" id="r-password-confirm" required minlength="8"></div>
+        <button type="submit">Registrieren</button>
+        <div class="auth-error" id="register-error"></div>
+      </form>
+      <div class="auth-switch">Schon ein Konto? <a href="/login">Anmelden</a></div>
+    </div>
+  </div>
+  <script>
+    document.getElementById('register-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errorEl = document.getElementById('register-error');
+      errorEl.textContent = '';
+      const password = document.getElementById('r-password').value;
+      const confirm = document.getElementById('r-password-confirm').value;
+      if (password !== confirm) {
+        errorEl.textContent = 'Passwörter stimmen nicht überein.';
+        return;
+      }
+      const res = await fetch('/api/auth/register', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: document.getElementById('r-username').value,
+          password,
+        })
+      });
+      if (res.ok) {
+        window.location = '/';
+      } else {
+        const data = await res.json().catch(() => ({}));
+        errorEl.textContent = data.detail || 'Registrierung fehlgeschlagen.';
+      }
+    });
+  </script>
+</body>
+</html>

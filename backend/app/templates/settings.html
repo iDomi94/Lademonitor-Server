@@ -76,6 +76,17 @@
 </form>
 <div id="backup-import-result" style="display:none; margin-top:8px; font-size:0.9em"></div>
 
+{% if user.is_admin %}
+<h2>Benutzerverwaltung</h2>
+<p style="color:var(--muted); font-size:0.9em">
+  Alle registrierten Konten. Registrierung ist offen - jeder mit der URL
+  kann sich selbst ein Konto anlegen, hier siehst du wer das getan hat und
+  kannst Konten bei Bedarf entfernen.
+</p>
+<table><thead><tr><th>Nutzername</th><th>Rolle</th><th>Angelegt am</th><th></th></tr></thead>
+<tbody id="user-rows"></tbody></table>
+{% endif %}
+
 <script>
 let providers = [];
 let vehicles = [];
@@ -377,10 +388,33 @@ document.getElementById('backup-import-form').addEventListener('submit', async (
   }
 });
 
+// ---------- Benutzerverwaltung (nur fuer Admins gerendert) ----------
+
+async function loadUsers() {
+  const rows = document.getElementById('user-rows');
+  if (!rows) return; // Nicht-Admins sehen die Sektion gar nicht
+  const users = await (await fetch('/api/auth/users')).json();
+  rows.innerHTML = users.map(u => `
+    <tr>
+      <td>${u.username}</td>
+      <td>${u.is_admin ? 'Admin' : 'Nutzer'}</td>
+      <td>${new Date(u.created_at).toLocaleDateString('de-DE')}</td>
+      <td><button type="button" onclick="deleteUser('${u.id}')" style="background:var(--danger)">Löschen</button></td>
+    </tr>`).join('');
+}
+
+async function deleteUser(id) {
+  if (!confirm('Konto wirklich löschen?')) return;
+  const res = await fetch(`/api/auth/users/${id}`, { method: 'DELETE' });
+  if (!res.ok) { alert('Fehler: ' + await res.text()); return; }
+  loadUsers();
+}
+
 (async () => {
   await loadVehicles();
   await loadProviders();
   await loadLocations();
+  await loadUsers();
 })();
 </script>
 {% endblock %}

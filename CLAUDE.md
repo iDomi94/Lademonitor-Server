@@ -32,7 +32,8 @@ backend/app/
   schemas.py          - Pydantic Request/Response-Schemas
   routers/
     vehicles.py, providers.py, locations.py, sessions.py, stats.py, importer.py,
-    geocoding.py, backup.py
+    geocoding.py, backup.py, auth.py
+  auth.py            - Passwort-Hashing, Token-Handling, Auth-Dependencies
   templates/          - Jinja2 Web-UI (index=Dashboard, sessions, import, settings)
   static/style.css
 ios/Lademonitor/
@@ -75,7 +76,104 @@ ios/Lademonitor/
   ersten Treffer blind zu übernehmen (Koordinatenfelder bleiben danach
   weiter manuell editierbar).
 
+## Authentifizierung (`auth.py`, `routers/auth.py`)
+
+Ein Mechanismus fuer alle drei Clients (Web-UI, iOS-App, Home-Assistant-
+`rest_command`): opake, zufaellige Tokens (`secrets.token_urlsafe(32)`) in
+der DB-Tabelle `auth_tokens` (Modell `AuthToken`) statt JWT - einfacher zu
+widerrufen (Logout = Zeile loeschen), keine Signatur-/Ablauf-Logik noetig.
+Werden ausschliesslich als `Authorization: Bearer <token>`-Header ODER als
+httponly-Cookie (`session_token`) akzeptiert (`auth.get_current_user`, per
+`dependencies=[Depends(get_current_user)]` auf jeden bestehenden Router in
+`main.py` angewendet - nicht einzeln pro Endpunkt, um die Routen selbst
+unangetastet zu lassen). Tokens laufen **bewusst nicht ab** - Home Assistant
+kann nicht interaktiv neu einloggen, ein ablaufendes Token wuerde die
+Automation regelmaessig kaputt machen. Widerruf nur ueber Logout oder
+Loeschen des Nutzers durch einen Admin (kaskadiert auf dessen Tokens).
+
+Registrierung ist bewusst offen (jeder mit der URL kann sich ein Konto
+anlegen) - der **erste jemals registrierte Nutzer wird automatisch Admin**
+(`routers/auth.py::register`, prueft `User`-Tabelle auf Leerheit). Admins
+sehen in den Einstellungen eine Nutzerverwaltung (`GET/DELETE
+/api/auth/users`) und koennen Konten loeschen, aber sich nicht selbst
+loeschen (Sperre gegen versehentliches Aussperren).
+
+Passwoerter mit `bcrypt` gehasht (kein passlib, direkte Nutzung des
+`bcrypt`-Pakets reicht). HTML-Seiten (`main.py::_page`) leiten bei
+fehlendem/ungueltigem Cookie zu `/login` um (303), JSON-API-Endpunkte
+antworten mit 401 (`auth.get_current_user` wirft `HTTPException`).
+
+Cookie hat `secure=True` (seit die App ueber Nginx per HTTPS oeffentlich
+erreichbar ist) - direkter Zugriff per `http://<lan-ip>:8111` funktioniert
+fuers Web-UI-Login seitdem NICHT mehr (Browser sendet ein secure-Cookie nur
+ueber HTTPS), nur noch ueber die echte Domain. Betrifft nur die
+Browser-Cookie-Session, NICHT den Bearer-Token-Weg (iOS-App, Home-Assistant-
+`rest_command`) - der funktioniert unabhaengig vom Schema weiter.
+
+**iOS-App wurde bewusst NICHT angepasst** (siehe Hinweis unten zu
+abweichenden iOS-Dateien) - fuer eine spaetere Anpassung: Login-Screen,
+Token in Keychain speichern, `Authorization: Bearer <token>`-Header auf
+allen Requests (`APIClient.swift`).
+
+### Pro-Nutzer-Datentrennung
+
+Bewusste Entscheidung (nicht der erste Entwurf!): **jeder Nutzer hat seinen
+eigenen, komplett isolierten Datensatz** - keine geteilten Fahrzeuge/Ladeorte/
+Anbieter/Sessions zwischen Konten, trotz offener Registrierung. Grund: Ohne
+das koennte sich theoretisch jeder mit der URL registrieren und saehe sofort
+die echten Ladeorte (inkl. GPS-Koordinaten von z.B. Zuhause) und das
+Fahrverhalten des Admins - ein echtes Datenschutz-Thema, seit die App
+oeffentlich per Nginx erreichbar ist.
+
+Umsetzung: `user_id`-FK (nullable) auf `Vehicle`, `Provider`,
+`ChargingLocation` UND `ChargingSession` (bei Sessions denormalisiert statt
+nur ueber `vehicle.user_id` ableitbar, fuer einfache WHERE-Filter ohne Joins
+in jedem Router). Jeder Router filtert Listen/Get/Update/Delete nach
+`user_id == current_user.id` (404 statt 403 bei Fremdzugriff, um nicht zu
+verraten dass eine ID existiert). `match_location()` (`routers/locations.py`)
+und `resolve_location()`/`attach_consumption()` (`routers/sessions.py`)
+bekommen dafuer explizit die `user_id` mitgegeben statt global zu suchen.
+
+`Vehicle.external_id` und `Provider.name` waren vorher GLOBAL eindeutig
+(`unique=True`) - jetzt zusammengesetzter Unique-Constraint `(user_id, *)`,
+damit zwei Nutzer beide ein Fahrzeug "enyaq" nennen koennen. Die Migration
+dafuer in `database.py::run_light_migrations()` ist nicht trivial (Postgres
+kennt kein `ADD CONSTRAINT IF NOT EXISTS`, und der alte
+`Vehicle.external_id`-Constraint ist ein UNIQUE INDEX (`ix_vehicles_...`),
+der alte `Provider.name`-Constraint dagegen ein table-level UNIQUE CONSTRAINT
+(`providers_name_key`) - unterschiedliche DROP-Befehle noetig, empirisch mit
+echtem Postgres verifiziert statt geraten.
+
+**Backfill bestehender Daten:** Alle Zeilen ohne `user_id` (aus der Zeit vor
+Multi-User) werden beim Migrationslauf automatisch dem **ersten jemals
+registrierten Nutzer** zugeordnet (`SELECT id FROM users ORDER BY created_at
+LIMIT 1`) - das ist zuverlaessig der Admin, der die "alten" Daten ohnehin
+als seine eigenen ansieht. Auf einer komplett neuen Installation (noch kein
+Nutzer registriert) ist das UPDATE ein No-Op.
+
+**Wichtige Konsequenz fuer Home Assistant:** Der `rest_command`-Token muss
+zu dem Nutzer gehoeren, der das jeweilige Fahrzeug besitzt - bei einer
+bestehenden Installation ist das der **Admin** (der die Bestandsdaten geerbt
+hat), NICHT ein separates, leeres HA-Konto. Ein dediziertes HA-Konto haette
+kein eigenes Fahrzeug und `POST /api/sessions/auto` wuerde 404 liefern.
+
+**Bekannte Einschraenkung:** `Provider`/`ChargingLocation` sind jetzt
+vollstaendig pro Nutzer getrennt, nicht "haushaltsweit geteilt" - falls
+mehrere Personen dasselbe Auto/denselben Ladeort nutzen sollen, muesste
+jede Person ihre eigenen Ladeorte/Anbieter anlegen (kein Teilen-Mechanismus
+vorhanden).
+
 ## Home-Assistant-Anbindung (aktiv, Nutzer betreibt eigene Automation)
+
+**Seit Einfuehrung der Authentifizierung braucht `rest_command` einen
+`Authorization: Bearer <token>`-Header**, sonst antwortet der Endpunkt mit
+401. Wegen der Pro-Nutzer-Datentrennung (siehe Abschnitt "Authentifizierung"
+oben) MUSS das der Token des Nutzers sein, dem das Fahrzeug gehoert -
+praktisch also der Admin-Account, nicht ein separates HA-Konto (fruehere,
+inzwischen ueberholte Empfehlung - ein leeres HA-Konto haette kein Fahrzeug
+und der Push wuerde 404 liefern). Einmalig per `POST /api/auth/login`
+einloggen und das zurueckgegebene `token` statisch in den
+`rest_command`-Header eintragen (Tokens laufen nicht ab).
 
 Endpunkt `POST /api/sessions/auto` nimmt Pushes entgegen (Schema
 `schemas.AutoSessionPush`: vehicle_external_id, external_session_id
@@ -161,9 +259,11 @@ Icon/Tooltip-Logik in der SessionsList-View.
 
 ## Bekannte offene Punkte / TODOs
 
-- **Keine Authentifizierung** im Backend - für Heimnetz okay, muss vor
-  Zugriff von außerhalb (auch via VPN grundsätzlich vertretbar, aber
-  idealerweise zusätzlich absichern) nachgerüstet werden
+- **Kein Rate-Limiting auf `/api/auth/login`/`/register`** - seit die App
+  oeffentlich per Nginx erreichbar ist, kein Schutz gegen automatisiertes
+  Passwort-Raten oder Spam-Registrierungen. Bewusst zurueckgestellt (starkes
+  Passwort des Nutzers als aktuelle Absicherung), waere ein separater,
+  ueberschaubarer Zusatz (z.B. `slowapi` oder Nginx-seitig).
 - **AC/DC fehlt bei Spritmonitor-Importen** - Spritmonitor-CSV-Export hat
   keine AC/DC-Spalte. Noch nicht umgesetzt: Muster-Erkennung anhand
   Ladeort-Name (z.B. "HPC"/"Ionity" → DC vorschlagen)
@@ -219,11 +319,43 @@ flexibles Datenaustauschformat - unterscheidet sich vom Spritmonitor-Importer
   im-/exportiert werden sollen, braeuchte es echte Spaltenerkennung wie beim
   Spritmonitor-Importer.
 
-## Deployment-Hinweise
+## Deployment-Varianten
 
-- Nach Datei-Änderungen im Backend: kompletten Ordner ersetzen, nicht nur
-  einzelne Dateien (führte in der Vergangenheit zu Versions-Mismatches
-  zwischen Templates und Router-Code)
-- Bei hartnäckigen Docker-Cache-Problemen: `docker compose build --no-cache backend`
-- `docker-compose.yml` hat bewusst kein `version:`-Feld mehr (obsolet in
-  neueren Compose-Versionen, erzeugt sonst eine Warnung)
+Es gibt jetzt ZWEI parallele Deployment-Wege - beide bleiben bestehen, keiner
+ersetzt den anderen:
+
+1. **docker-compose.yml (Stack, 2 Container)** - bisheriger Weg fuer lokale
+   Entwicklung/Tests: `backend/Dockerfile` (nur FastAPI) + separater
+   `postgres:16-alpine`-Container. Nach Datei-Aenderungen im Backend:
+   kompletten Ordner ersetzen, nicht nur einzelne Dateien (fuehrte in der
+   Vergangenheit zu Versions-Mismatches zwischen Templates und Router-Code).
+   Bei hartnaeckigen Cache-Problemen: `docker compose build --no-cache backend`.
+   Hat bewusst kein `version:`-Feld mehr (obsolet in neueren
+   Compose-Versionen, erzeugt sonst eine Warnung).
+2. **Dockerfile (Root, Einzelcontainer)** - fuer Unraid gedacht, EIN
+   Container statt Stack: Basis-Image `postgres:16` (nicht `python:3.12-slim`
+   wie beim Compose-Weg!), Python wird per `apt-get` nachgeruestet, App laeuft
+   in einem venv unter `/venv`. `entrypoint.sh` startet Postgres (delegiert an
+   das offizielle `docker-entrypoint.sh`, laeuft im Hintergrund) und danach
+   uvicorn im Vordergrund; `wait -n` sorgt dafuer, dass der GANZE Container
+   stoppt, sobald einer der beiden Prozesse stirbt - Unraids Restart-Policy
+   startet dann beides sauber neu, statt dass die App weiterlaeuft ohne
+   funktionierende DB. Bewusst KEIN s6-overlay/Supervisor (Ein-Nutzer-
+   Heimnetz-App, das waere unnoetige Komplexitaet). Postgres ist NUR via
+   localhost im Container erreichbar, kein zweiter Port noetig - nur EIN
+   Port-Mapping (App) + EIN Pfad-Mapping (`/config` = komplettes
+   Postgres-Datenverzeichnis unter `/config/postgres`) fuer den Unraid-Nutzer.
+   DB-Zugangsdaten sind fest im Dockerfile verdrahtet (nicht von aussen
+   erreichbar, daher unkritisch).
+   - `unraid-template.xml`: Community-Applications-Template. `<Repository>`
+     zeigt aktuell auf einen lokalen Image-Tag (`lademonitor:latest`) - Nutzer
+     muss vor der Nutzung selbst `docker build -t lademonitor:latest .` auf
+     dem Unraid-Host ausfuehren. Sobald das Projekt auf GitHub/einer Registry
+     veroeffentlicht ist (naechstes geplantes Thema), `<Repository>` auf das
+     veroeffentlichte Image umstellen, dann entfaellt der manuelle Build-Schritt.
+   - **Noch nicht auf echter Hardware getestet** (kein Docker in der
+     Umgebung verfuegbar, in der das erstellt wurde) - beim ersten Test auf
+     Unraid besonders pruefen: `reverse_geocoder`/`scipy`-Installation
+     (`build-essential` ist als Sicherheitsnetz mit drin, falls kein
+     vorgebautes Wheel fuer die Ziel-Architektur existiert), und ob `initdb`
+     beim allerersten Start sauber durchlaeuft.

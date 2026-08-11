@@ -7,9 +7,21 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from .. import models
+from ..auth import get_current_user
 from ..database import get_db
 
 router = APIRouter(prefix="/api/import", tags=["import"])
+
+
+def _get_owned_vehicle(db: Session, user: models.User, vehicle_id: str) -> models.Vehicle:
+    vehicle = (
+        db.query(models.Vehicle)
+        .filter(models.Vehicle.id == vehicle_id, models.Vehicle.user_id == user.id)
+        .first()
+    )
+    if not vehicle:
+        raise HTTPException(404, "Vehicle nicht gefunden")
+    return vehicle
 
 
 # Spritmonitor-Exportspalten variieren leicht je nach Sprache/Fahrzeugtyp-Einstellung.
@@ -67,11 +79,12 @@ def _parse_csv(content: bytes) -> tuple[list[str], list[dict]]:
 
 @router.post("/spritmonitor/preview", response_model=ImportPreviewResponse)
 async def preview_import(
-    vehicle_id: str, file: UploadFile = File(...), db: Session = Depends(get_db)
+    vehicle_id: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
 ):
-    vehicle = db.get(models.Vehicle, vehicle_id)
-    if not vehicle:
-        raise HTTPException(404, "Vehicle nicht gefunden")
+    _get_owned_vehicle(db, user, vehicle_id)
 
     content = await file.read()
     header, raw_rows = _parse_csv(content)
@@ -128,11 +141,12 @@ async def preview_import(
 
 @router.post("/spritmonitor/commit", response_model=ImportCommitResponse)
 async def commit_import(
-    vehicle_id: str, file: UploadFile = File(...), db: Session = Depends(get_db)
+    vehicle_id: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
 ):
-    vehicle = db.get(models.Vehicle, vehicle_id)
-    if not vehicle:
-        raise HTTPException(404, "Vehicle nicht gefunden")
+    _get_owned_vehicle(db, user, vehicle_id)
 
     content = await file.read()
     header, raw_rows = _parse_csv(content)
@@ -180,6 +194,7 @@ async def commit_import(
 
         session = models.ChargingSession(
             vehicle_id=vehicle_id,
+            user_id=user.id,
             start_time=parsed_date,
             odometer_km=odometer,
             energy_kwh=energy_kwh,

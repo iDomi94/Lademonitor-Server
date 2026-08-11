@@ -11,6 +11,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -32,12 +33,53 @@ class SessionSource(str, enum.Enum):
     IMPORT = "import"
 
 
-class Vehicle(Base):
-    __tablename__ = "vehicles"
+class User(Base):
+    __tablename__ = "users"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_uuid)
-    # Kurzer, stabiler Schluessel z.B. fuer HA-Automations ("enyaq"), getrennt von der DB-ID
-    external_id: Mapped[str] = mapped_column(String, unique=True, index=True)
+    username: Mapped[str] = mapped_column(String, unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String)
+    # Erster jemals registrierter Nutzer wird automatisch Admin (siehe routers/auth.py)
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    tokens: Mapped[list["AuthToken"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+
+
+class AuthToken(Base):
+    """Opake, server-seitig gespeicherte Tokens statt JWT - einfacher zu
+    widerrufen (Logout = Zeile loeschen) und ohne Signatur-/Clock-Skew-Themen.
+    Laufen bewusst NICHT ab: werden fuer Browser-Cookie-Sessions genauso wie
+    fuer die iOS-App und den Home-Assistant-rest_command-Header verwendet -
+    letzterer kann nicht interaktiv neu einloggen, ein staendig ablaufendes
+    Token wuerde die Automation regelmaessig kaputt machen. Widerruf laeuft
+    ausschliesslich ueber Logout bzw. Loeschen des Nutzers durch einen Admin."""
+    __tablename__ = "auth_tokens"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    token: Mapped[str] = mapped_column(String, unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    user: Mapped["User"] = relationship(back_populates="tokens")
+
+
+class Vehicle(Base):
+    __tablename__ = "vehicles"
+    __table_args__ = (
+        UniqueConstraint("user_id", "external_id", name="uq_vehicles_user_external_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_uuid)
+    # Nullable, da bestehende Zeilen aus der Zeit vor Multi-User per Migration
+    # nachtraeglich dem ersten Nutzer zugeordnet werden (siehe database.py)
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    # Kurzer, stabiler Schluessel z.B. fuer HA-Automations ("enyaq"), getrennt von der DB-ID.
+    # Eindeutig PRO NUTZER (siehe __table_args__), nicht global - zwei Nutzer
+    # koennen also beide ein Fahrzeug "enyaq" haben.
+    external_id: Mapped[str] = mapped_column(String, index=True)
     name: Mapped[str] = mapped_column(String)
     brand: Mapped[str | None] = mapped_column(String, nullable=True)
     model: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -52,9 +94,12 @@ class Vehicle(Base):
 
 class Provider(Base):
     __tablename__ = "providers"
+    __table_args__ = (UniqueConstraint("user_id", "name", name="uq_providers_user_name"),)
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_uuid)
-    name: Mapped[str] = mapped_column(String, unique=True)
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    # Eindeutig PRO NUTZER (siehe __table_args__), nicht global
+    name: Mapped[str] = mapped_column(String)
     last_price_ac_per_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
     last_price_dc_per_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -68,6 +113,7 @@ class ChargingLocation(Base):
     __tablename__ = "charging_locations"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_uuid)
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String)
     latitude: Mapped[float] = mapped_column(Float)
     longitude: Mapped[float] = mapped_column(Float)
@@ -85,6 +131,9 @@ class ChargingSession(Base):
     __tablename__ = "charging_sessions"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_uuid)
+    # Denormalisiert (waere ueber vehicle.user_id ableitbar) fuer einfache
+    # WHERE-Filter in jedem Router, ohne ueberall zu joinen
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     vehicle_id: Mapped[str] = mapped_column(ForeignKey("vehicles.id"))
     provider_id: Mapped[str | None] = mapped_column(ForeignKey("providers.id"), nullable=True)
     location_id: Mapped[str | None] = mapped_column(

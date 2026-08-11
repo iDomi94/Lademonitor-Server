@@ -5,6 +5,31 @@ from pydantic import BaseModel, ConfigDict
 from .models import ChargingType, SessionSource
 
 
+# ---------- Auth ----------
+
+class RegisterRequest(BaseModel):
+    username: str
+    password: str
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class UserOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    username: str
+    is_admin: bool
+    created_at: datetime
+
+
+class LoginResponse(BaseModel):
+    token: str
+    user: UserOut
+
+
 # ---------- Vehicle ----------
 
 class VehicleBase(BaseModel):

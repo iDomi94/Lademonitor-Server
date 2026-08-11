@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Anmelden – Charging Tracker</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <style>
+    .auth-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    .auth-card { width: 100%; max-width: 360px; }
+    .auth-card h1 { margin-bottom: 16px; }
+    .auth-card .field { margin-bottom: 14px; }
+    .auth-card button { width: 100%; margin-top: 8px; }
+    .auth-error { color: var(--danger); font-size: 13px; margin-top: 10px; min-height: 1em; }
+    .auth-switch { margin-top: 16px; font-size: 13px; color: var(--muted); text-align: center; }
+    .auth-switch a { color: var(--accent2); }
+  </style>
+</head>
+<body>
+  <div class="auth-wrap">
+    <div class="card auth-card">
+      <h1>⚡ Anmelden</h1>
+      <form id="login-form">
+        <div class="field"><label>Nutzername</label><input id="l-username" required autofocus></div>
+        <div class="field"><label>Passwort</label><input type="password" id="l-password" required></div>
+        <button type="submit">Anmelden</button>
+        <div class="auth-error" id="login-error"></div>
+      </form>
+      <div class="auth-switch">Noch kein Konto? <a href="/register">Registrieren</a></div>
+    </div>
+  </div>
+  <script>
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errorEl = document.getElementById('login-error');
+      errorEl.textContent = '';
+      const res = await fetch('/api/auth/login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: document.getElementById('l-username').value,
+          password: document.getElementById('l-password').value,
+        })
+      });
+      if (res.ok) {
+        window.location = '/';
+      } else {
+        const data = await res.json().catch(() => ({}));
+        errorEl.textContent = data.detail || 'Anmeldung fehlgeschlagen.';
+      }
+    });
+  </script>
+</body>
+</html>

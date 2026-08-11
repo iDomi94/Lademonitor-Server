@@ -13,9 +13,21 @@
     <a href="/sessions">Ladevorgänge</a>
     <a href="/import">Import</a>
     <a href="/settings">Einstellungen</a>
+    {% if user %}
+    <span style="margin-left:auto; color:var(--muted); font-size:14px">
+      {{ user.username }}{% if user.is_admin %} (Admin){% endif %}
+      · <a href="#" onclick="logout(); return false;">Logout</a>
+    </span>
+    {% endif %}
   </nav>
   <main class="container">
     {% block content %}{% endblock %}
   </main>
+  <script>
+    async function logout() {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      window.location = '/login';
+    }
+  </script>
 </body>
 </html>

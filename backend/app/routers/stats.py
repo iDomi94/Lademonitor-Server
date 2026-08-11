@@ -4,14 +4,19 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
+from ..auth import get_current_user
 from ..database import get_db
 
 router = APIRouter(prefix="/api/stats", tags=["stats"])
 
 
 @router.get("/summary", response_model=schemas.StatsSummary)
-def stats_summary(vehicle_id: str | None = None, db: Session = Depends(get_db)):
-    q = db.query(models.ChargingSession)
+def stats_summary(
+    vehicle_id: str | None = None,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    q = db.query(models.ChargingSession).filter(models.ChargingSession.user_id == user.id)
     if vehicle_id:
         q = q.filter(models.ChargingSession.vehicle_id == vehicle_id)
     sessions = q.order_by(models.ChargingSession.start_time).all()
