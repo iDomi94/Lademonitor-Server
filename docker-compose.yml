@@ -3,13 +3,13 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: charging
-      POSTGRES_PASSWORD: charging
-      POSTGRES_DB: charging
+      POSTGRES_USER: ${POSTGRES_USER:-charging}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-charging}
+      POSTGRES_DB: ${POSTGRES_DB:-charging}
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U charging"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-charging}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -21,6 +21,6 @@ services:
       db:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql+psycopg://charging:charging@db:5432/charging
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-charging}:${POSTGRES_PASSWORD:-charging}@db:5432/${POSTGRES_DB:-charging}
     ports:
       - "8111:8000"
