@@ -31,7 +31,8 @@ backend/app/
   models.py          - SQLAlchemy: Vehicle, Provider, ChargingLocation, ChargingSession
   schemas.py          - Pydantic Request/Response-Schemas
   routers/
-    vehicles.py, providers.py, locations.py, sessions.py, stats.py, importer.py
+    vehicles.py, providers.py, locations.py, sessions.py, stats.py, importer.py,
+    geocoding.py, backup.py
   templates/          - Jinja2 Web-UI (index=Dashboard, sessions, import, settings)
   static/style.css
 ios/Lademonitor/
@@ -193,6 +194,30 @@ Icon/Tooltip-Logik in der SessionsList-View.
   allen Sessions einzeln aufsummiert, um Messfehler zu glätten)
 - `monthly` Liste ist **absteigend sortiert** (neuester Monat zuerst)
 - `total_km_driven` = Differenz erster/letzter bekannter Kilometerstand
+
+## Backup-Export/-Import (`routers/backup.py`)
+
+Reiner Backup/Restore-Mechanismus (z.B. Server-Neuaufsetzung), bewusst KEIN
+flexibles Datenaustauschformat - unterscheidet sich vom Spritmonitor-Importer
+(`importer.py`, eigenes CSV-Format mit Spaltenerkennung).
+
+- `GET /api/backup/export`: liefert eine ZIP mit `README.txt` +
+  `vehicles.csv`/`providers.csv`/`locations.csv`/`sessions.csv` (feste
+  Dateinamen). Foreign Keys bleiben als Original-UUIDs erhalten (robust fuer
+  den Reimport); zusaetzlich gibt es rein lesbare Spalten wie `vehicle_name`,
+  `provider_name`, `location_name`, `default_provider_name` (werden beim
+  Import ignoriert, koennen veraltet sein).
+- `POST /api/backup/import`: erwartet exakt die vom Export erzeugte
+  ZIP-Struktur (alle vier CSVs muessen vorhanden sein). Import-Reihenfolge
+  wegen FKs: Vehicles → Providers → Locations → Sessions. Datensaetze werden
+  per Original-ID wiederhergestellt; bereits vorhandene IDs werden
+  uebersprungen (kein Ueberschreiben) - dadurch ist der Import idempotent
+  und gefahrlos mehrfach ausfuehrbar.
+- Web-UI: neue Sektion "Daten-Backup" unten in `settings.html`.
+- Kein flexibles Multi-File-Upload mit Datei-Erkennung (bewusste
+  Design-Entscheidung) - falls spaeter einzelne Tabellen unabhaengig
+  im-/exportiert werden sollen, braeuchte es echte Spaltenerkennung wie beim
+  Spritmonitor-Importer.
 
 ## Deployment-Hinweise
 

@@ -5,7 +5,7 @@ from fastapi.templating import Jinja2Templates
 
 from . import models
 from .database import Base, engine, run_light_migrations
-from .routers import geocoding, importer, locations, providers, sessions, stats, vehicles
+from .routers import backup, geocoding, importer, locations, providers, sessions, stats, vehicles
 
 Base.metadata.create_all(bind=engine)
 run_light_migrations()
@@ -19,6 +19,7 @@ app.include_router(sessions.router)
 app.include_router(stats.router)
 app.include_router(importer.router)
 app.include_router(geocoding.router)
+app.include_router(backup.router)
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")

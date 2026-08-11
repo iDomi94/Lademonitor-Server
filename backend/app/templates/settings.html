@@ -54,6 +54,28 @@
 <table><thead><tr><th>Name</th><th>Koordinaten</th><th>Radius</th><th>Standard-Anbieter</th><th></th></tr></thead>
 <tbody id="location-rows"></tbody></table>
 
+<h2>Daten-Backup</h2>
+<p style="color:var(--muted); font-size:0.9em">
+  Exportiert alle Fahrzeuge, Anbieter, Ladeorte und Ladevorgänge als ZIP mit
+  CSV-Dateien (inkl. README) - z.B. für eine Neuinstallation des Servers.
+  Der Import ist gefahrlos mehrfach ausführbar, bereits vorhandene Einträge
+  werden übersprungen statt überschrieben.
+</p>
+<div class="form-actions">
+  <a href="/api/backup/export"><button type="button">Backup exportieren</button></a>
+</div>
+
+<form class="inline-form" id="backup-import-form" style="margin-top:16px">
+  <div>
+    <label>Backup-ZIP importieren</label>
+    <input type="file" id="backup-file" accept=".zip" required>
+  </div>
+  <div class="form-actions">
+    <button type="submit">Importieren</button>
+  </div>
+</form>
+<div id="backup-import-result" style="display:none; margin-top:8px; font-size:0.9em"></div>
+
 <script>
 let providers = [];
 let vehicles = [];
@@ -319,6 +341,40 @@ document.getElementById('location-form').addEventListener('submit', async (e) =>
     clearGeocodeResults();
   }
   loadLocations();
+});
+
+// ---------- Daten-Backup ----------
+
+document.getElementById('backup-import-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const file = document.getElementById('backup-file').files[0];
+  if (!file) return;
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const resultDiv = document.getElementById('backup-import-result');
+  resultDiv.style.display = 'block';
+  resultDiv.textContent = 'Importiere…';
+
+  try {
+    const res = await fetch('/api/backup/import', { method: 'POST', body: formData });
+    if (!res.ok) {
+      resultDiv.textContent = 'Fehler: ' + await res.text();
+      return;
+    }
+    const r = await res.json();
+    resultDiv.textContent =
+      `Fahrzeuge: ${r.vehicles_imported} importiert, ${r.vehicles_skipped} übersprungen. ` +
+      `Anbieter: ${r.providers_imported} importiert, ${r.providers_skipped} übersprungen. ` +
+      `Ladeorte: ${r.locations_imported} importiert, ${r.locations_skipped} übersprungen. ` +
+      `Ladevorgänge: ${r.sessions_imported} importiert, ${r.sessions_skipped} übersprungen.`;
+    e.target.reset();
+    loadVehicles();
+    loadProviders();
+    loadLocations();
+  } catch (err) {
+    resultDiv.textContent = 'Fehler beim Import.';
+  }
 });
 
 (async () => {
