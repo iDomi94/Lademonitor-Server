@@ -1,0 +1,40 @@
+<?xml version="1.0"?>
+<!--
+  Unraid Community-Applications-Template fuer Lademonitor.
+
+  Vor der Nutzung:
+  1. Image lokal bauen (auf dem Unraid-Host, z.B. per SSH im Projektordner):
+       docker build -t lademonitor:latest .
+  2. Diese Datei unter /boot/config/plugins/dockerMan/templates-user/
+     ablegen, dann taucht "Lademonitor" unter Docker -> Add Container ->
+     Template auf.
+  3. Sobald das Projekt auf GitHub veroeffentlicht ist und Images ueber eine
+     Registry (z.B. GHCR) bereitgestellt werden, <Repository> entsprechend
+     anpassen (z.B. ghcr.io/<user>/lademonitor:latest) statt des lokalen Tags -
+     dann entfaellt Schritt 1.
+-->
+<Container version="2">
+  <Name>Lademonitor</Name>
+  <Repository>lademonitor:latest</Repository>
+  <Registry/>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>bash</Shell>
+  <Privileged>false</Privileged>
+  <Support/>
+  <Project/>
+  <Overview>Selbstgehostete Ladevorgang-Tracking-App fuer E-Autos (Skoda Enyaq via MySkoda/Home-Assistant-Integration), inspiriert von Spritmonitor. Backend, Web-UI und PostgreSQL laufen zusammen in diesem einen Container - kein separater DB-Container noetig.</Overview>
+  <Category>Productivity: Tools:</Category>
+  <WebUI>http://[IP]:[PORT:8000]/</WebUI>
+  <TemplateURL/>
+  <Icon/>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires/>
+  <Config Name="WebUI Port" Target="8000" Default="8111" Mode="tcp" Description="Port fuer Web-UI und REST-API (z.B. fuer die Home-Assistant-Automation oder die iOS-App)" Type="Port" Display="always" Required="true" Mask="false">8111</Config>
+  <Config Name="Daten" Target="/config" Default="/mnt/user/appdata/lademonitor" Mode="rw" Description="Enthaelt die komplette Postgres-Datenbank (alle Fahrzeuge/Ladevorgaenge) - unbedingt in den regulaeren Backup-Plan aufnehmen. Zusaetzlich gibt es einen eigenen Export/Import (Einstellungen -&gt; Daten-Backup) fuer portable CSV-Backups." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/lademonitor</Config>
+</Container>
