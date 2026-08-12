@@ -198,6 +198,16 @@ class MonthlyStat(BaseModel):
     total_cost: float
     total_kwh: float
     session_count: int
+    # Km-gewichteter Monatsdurchschnitt (gleiche Fallback-Kette wie pro
+    # Ladevorgang, siehe consumption.py) - None wenn in dem Monat kein
+    # Vorgang einen berechenbaren Wert hat
+    avg_consumption_kwh_per_100km: float | None = None
+
+
+class ProviderStat(BaseModel):
+    provider_name: str
+    total_kwh: float
+    total_cost: float
 
 
 class GeocodeResult(BaseModel):
@@ -213,7 +223,12 @@ class StatsSummary(BaseModel):
     avg_price_per_kwh: float | None
     avg_consumption_kwh_per_100km: float | None
     price_per_100km: float | None = None
+    # Ab jetzt kWh-gewichtet statt Anteil an der Vorgangs-ANZAHL (siehe
+    # CLAUDE.md) - ac_kwh/dc_kwh zusaetzlich fuer absolute Beschriftung
     ac_share_pct: float | None
     dc_share_pct: float | None
+    ac_kwh: float = 0
+    dc_kwh: float = 0
     total_km_driven: int | None = None
+    by_provider: list[ProviderStat] = []
     monthly: list[MonthlyStat]

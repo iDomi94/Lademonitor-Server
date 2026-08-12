@@ -16,6 +16,11 @@ from . import models
 class ConsumptionResult:
     value: float | None
     method: str | None
+    # Gefahrene km, die dem Wert zugrunde liegen - nicht fuer die Anzeige
+    # gedacht, sondern als Gewicht fuer km-gewichtete Aggregation (z.B.
+    # Monatsdurchschnitt in stats.py), damit nicht einfach ungewichtet
+    # gemittelt wird
+    km: float | None = None
 
 
 def _local_energy(
@@ -65,7 +70,7 @@ def _compute_single(
     else:
         method = "naive"
 
-    return ConsumptionResult(round(energy / km_driven * 100, 1), method)
+    return ConsumptionResult(round(energy / km_driven * 100, 1), method, km_driven)
 
 
 def _compute_interval(
@@ -112,11 +117,17 @@ def _compute_interval(
                     1,
                 ),
                 "full_charge_interval",
+                local_km[s.id],
             )
             for s in interval
         }
 
-    return {s.id: ConsumptionResult(flat_value, "full_charge_interval") for s in interval}
+    # Fallback: kein lokales km je Vorgang bekannt (Kette gebrochen) - km fuer
+    # die Gewichtung wird dann anteilig am Gesamt-km des Intervalls verteilt
+    km_share = km_diff / len(interval)
+    return {
+        s.id: ConsumptionResult(flat_value, "full_charge_interval", km_share) for s in interval
+    }
 
 
 def compute_vehicle_consumptions(

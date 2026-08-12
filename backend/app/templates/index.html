@@ -9,15 +9,32 @@
   <div class="card"><div class="stat-label">Ø Preis/kWh</div><div class="stat-value" id="s-price">–</div></div>
   <div class="card"><div class="stat-label">Ø Verbrauch/100km</div><div class="stat-value" id="s-consumption">–</div></div>
   <div class="card"><div class="stat-label">Preis pro 100km</div><div class="stat-value" id="s-price-100km">–</div></div>
-  <div class="card"><div class="stat-label">AC / DC Anteil</div><div class="stat-value" id="s-acdc">–</div></div>
   <div class="card"><div class="stat-label">Gefahrene Kilometer</div><div class="stat-value" id="s-km">–</div></div>
 </div>
+
+<h2>Anbieter-Verteilung</h2>
+<div style="display:flex; gap:24px; flex-wrap:wrap; margin-bottom:24px">
+  <div class="card" style="flex:1; min-width:260px">
+    <div class="stat-label" style="margin-bottom:12px">kWh pro Anbieter</div>
+    <div id="pie-kwh"></div>
+  </div>
+  <div class="card" style="flex:1; min-width:260px">
+    <div class="stat-label" style="margin-bottom:12px">Bezahlt pro Anbieter</div>
+    <div id="pie-cost"></div>
+  </div>
+</div>
+
+<h2>AC / DC Anteil (nach kWh)</h2>
+<div class="card" id="acdc-gauge" style="margin-bottom:24px"></div>
 
 <h2>Kosten pro Monat</h2>
 <div class="card" id="chart-cost"></div>
 
 <h2>kWh pro Monat</h2>
 <div class="card" id="chart-kwh"></div>
+
+<h2>Ø Verbrauch pro Monat</h2>
+<div class="card" id="chart-consumption"></div>
 
 <script>
 function setText(id, value) {
@@ -29,14 +46,21 @@ const MONTH_NAMES = [
   'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
   'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'
 ];
+const MONTH_NAMES_SHORT = [
+  'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'
+];
 
 // Wandelt "2026-08" in "August 2026" um
 function formatMonthLabel(monthKey) {
   const [year, month] = monthKey.split('-').map(Number);
   return `${MONTH_NAMES[month - 1]} ${year}`;
 }
+function formatMonthLabelShort(monthKey) {
+  const [, month] = monthKey.split('-').map(Number);
+  return MONTH_NAMES_SHORT[month - 1];
+}
 
-// Leichtgewichtiger SVG-Balkendiagramm ohne externe Abhaengigkeit (z.B. falls kein
+// Leichtgewichtige SVG-Diagramme ohne externe Abhaengigkeit (z.B. falls kein
 // Internetzugriff zu einem CDN besteht - laeuft komplett lokal im Server-HTML).
 function renderBarChart(containerId, labels, values, color, unit) {
   const container = document.getElementById(containerId);
@@ -62,6 +86,113 @@ function renderBarChart(containerId, labels, values, color, unit) {
   container.innerHTML = `<svg viewBox="0 0 ${chartWidth} ${height}" width="100%" height="${height}">${bars}</svg>`;
 }
 
+// Vertikales (Saeulen-)Diagramm, z.B. fuer den Monatstrend beim Verbrauch -
+// Werte mit null (kein berechenbarer Monat) werden als Luecke dargestellt.
+function renderVerticalBarChart(containerId, labels, values, color) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const known = values.filter(v => v != null);
+  const max = Math.max(...known, 0.0001);
+  const barWidth = 40;
+  const gap = 30;
+  const chartHeight = 200;
+  const topPad = 24;
+  const bottomPad = 30;
+  const width = labels.length * (barWidth + gap);
+  const height = topPad + chartHeight + bottomPad;
+
+  let bars = '';
+  labels.forEach((label, i) => {
+    const value = values[i];
+    const x = gap / 2 + i * (barWidth + gap);
+    if (value != null) {
+      const h = Math.max((value / max) * chartHeight, 2);
+      const y = topPad + (chartHeight - h);
+      bars += `
+        <rect x="${x}" y="${y}" width="${barWidth}" height="${h}" rx="4" fill="${color}"></rect>
+        <text x="${x + barWidth / 2}" y="${y - 8}" fill="#e6e9f0" font-size="11" text-anchor="middle">${value.toFixed(1)}</text>
+      `;
+    }
+    bars += `<text x="${x + barWidth / 2}" y="${topPad + chartHeight + 20}" fill="#8b95ab" font-size="12" text-anchor="middle">${label}</text>`;
+  });
+
+  container.innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}">${bars}</svg>`;
+}
+
+// Farben in fester Reihenfolge - immer dieselbe Farbe fuer denselben Anbieter,
+// egal ob im kWh- oder Bezahlt-Kuchendiagramm (Farbe folgt der Entitaet)
+const PIE_COLORS = ['#4fd1a5', '#5b8def', '#f2b84b', '#ef6461', '#9b7bde'];
+const OTHER_COLOR = '#8b95ab';
+function colorForIndex(i) {
+  return PIE_COLORS[i] ?? OTHER_COLOR;
+}
+
+// Fasst alles ab dem 6. Anbieter zu "Andere" zusammen, damit die
+// Kuchendiagramme lesbar bleiben - dieselbe Aufteilung wird fuer kWh- UND
+// Bezahlt-Diagramm verwendet, damit die Farbzuordnung konsistent bleibt
+function buildProviderBuckets(byProvider) {
+  const top = byProvider.slice(0, 5);
+  const rest = byProvider.slice(5);
+  if (!rest.length) return top;
+  return [...top, {
+    provider_name: 'Andere',
+    total_kwh: rest.reduce((sum, p) => sum + p.total_kwh, 0),
+    total_cost: rest.reduce((sum, p) => sum + p.total_cost, 0),
+  }];
+}
+
+function renderPieChart(containerId, items, formatValue) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const total = items.reduce((sum, it) => sum + it.value, 0);
+  if (total <= 0) {
+    container.innerHTML = '<p style="color:var(--muted); font-size:13px">Keine Daten</p>';
+    return;
+  }
+
+  let cumulative = 0;
+  const stops = items.map((it, i) => {
+    const start = cumulative / total * 100;
+    cumulative += it.value;
+    const end = cumulative / total * 100;
+    return `${colorForIndex(i)} ${start.toFixed(2)}% ${end.toFixed(2)}%`;
+  }).join(', ');
+
+  const legend = items.map((it, i) => `
+    <div style="display:flex; align-items:center; gap:6px; font-size:12px; margin-bottom:4px">
+      <span style="width:9px; height:9px; border-radius:2px; background:${colorForIndex(i)}; flex-shrink:0"></span>
+      <span>${it.name} · ${formatValue(it.value)} · ${(it.value / total * 100).toFixed(0)}%</span>
+    </div>`).join('');
+
+  container.innerHTML = `
+    <div style="display:flex; align-items:center; gap:16px">
+      <div style="width:110px; height:110px; border-radius:50%; flex-shrink:0; background:conic-gradient(${stops})"></div>
+      <div>${legend}</div>
+    </div>`;
+}
+
+function renderGauge(containerId, acKwh, dcKwh) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const total = acKwh + dcKwh;
+  if (total <= 0) {
+    container.innerHTML = '<p style="color:var(--muted); font-size:13px">Keine Daten</p>';
+    return;
+  }
+  const acPct = acKwh / total * 100;
+  const dcPct = dcKwh / total * 100;
+  container.innerHTML = `
+    <div style="display:flex; height:22px; border-radius:6px; overflow:hidden">
+      <div style="width:${acPct}%; background:#5b8def"></div>
+      <div style="width:2px; background:var(--card)"></div>
+      <div style="width:${dcPct}%; background:#f2b84b"></div>
+    </div>
+    <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--muted); margin-top:6px">
+      <span>AC · ${acPct.toFixed(0)}% · ${acKwh.toFixed(1)} kWh</span>
+      <span>DC · ${dcPct.toFixed(0)}% · ${dcKwh.toFixed(1)} kWh</span>
+    </div>`;
+}
+
 async function loadStats() {
   try {
     const res = await fetch('/api/stats/summary');
@@ -77,8 +208,15 @@ async function loadStats() {
     setText('s-price', data.avg_price_per_kwh ? data.avg_price_per_kwh.toFixed(3) + ' €' : '–');
     setText('s-consumption', data.avg_consumption_kwh_per_100km ? data.avg_consumption_kwh_per_100km.toFixed(1) + ' kWh' : '–');
     setText('s-price-100km', data.price_per_100km != null ? data.price_per_100km.toFixed(2) + ' €' : '–');
-    setText('s-acdc', (data.ac_share_pct ?? '–') + '% / ' + (data.dc_share_pct ?? '–') + '%');
     setText('s-km', data.total_km_driven != null ? data.total_km_driven.toLocaleString('de-DE') + ' km' : '–');
+
+    renderGauge('acdc-gauge', data.ac_kwh || 0, data.dc_kwh || 0);
+
+    if (data.by_provider && data.by_provider.length) {
+      const buckets = buildProviderBuckets(data.by_provider);
+      renderPieChart('pie-kwh', buckets.map(b => ({ name: b.provider_name, value: b.total_kwh })), v => v.toFixed(1) + ' kWh');
+      renderPieChart('pie-cost', buckets.map(b => ({ name: b.provider_name, value: b.total_cost })), v => v.toFixed(2) + ' €');
+    }
 
     if (!data.monthly || data.monthly.length === 0) {
       console.warn('Keine monatlichen Daten vorhanden - Diagramme bleiben leer.');
@@ -91,6 +229,17 @@ async function loadStats() {
 
     renderBarChart('chart-cost', months, costs, '#5b8def', ' €');
     renderBarChart('chart-kwh', months, kwhs, '#4fd1a5', ' kWh');
+
+    // Chronologisch (aeltester zuerst), damit die Saeulen von links nach
+    // rechts einen Zeitverlauf ergeben - anders als die Balken oben, die
+    // bewusst neuester-zuerst zeigen
+    const chronological = data.monthly.slice().reverse();
+    renderVerticalBarChart(
+      'chart-consumption',
+      chronological.map(m => formatMonthLabelShort(m.month)),
+      chronological.map(m => m.avg_consumption_kwh_per_100km),
+      '#9b7bde'
+    );
   } catch (err) {
     console.error('Fehler beim Laden der Statistiken:', err);
   }

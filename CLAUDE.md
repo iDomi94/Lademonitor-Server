@@ -294,6 +294,28 @@ Icon/Tooltip-Logik in der SessionsList-View.
   allen Sessions einzeln aufsummiert, um Messfehler zu glätten)
 - `monthly` Liste ist **absteigend sortiert** (neuester Monat zuerst)
 - `total_km_driven` = Differenz erster/letzter bekannter Kilometerstand
+- `ac_share_pct`/`dc_share_pct` sind **kWh-gewichtet**, NICHT Anteil an der
+  Vorgangs-ANZAHL (war urspruenglich anders, bewusst umgestellt - ein langer
+  AC-Vorgang zaehlte sonst genauso viel wie eine kurze DC-Schnellladung).
+  `ac_kwh`/`dc_kwh` liefern zusaetzlich die absoluten Werte fuer die
+  Beschriftung des Web-UI-Balkens (kein reiner Prozent-Chart, sondern ein
+  zweigeteilter horizontaler Balken/"Linear Gauge")
+- `by_provider` (Liste `{provider_name, total_kwh, total_cost}`, absteigend
+  nach kWh sortiert): Sessions ohne `provider_id` landen unter
+  `"Ohne Anbieter"`, damit die Summen immer vollstaendig bleiben. Web-UI
+  gruppiert selbst auf max. 5 Anbieter + "Andere"-Sammelposten und nutzt
+  **dieselbe Farbzuordnung** in beiden Kuchendiagrammen (kWh/bezahlt), damit
+  ein Anbieter in beiden Charts sofort wiedererkennbar ist ("Farbe folgt der
+  Entitaet")
+- `monthly[].avg_consumption_kwh_per_100km`: nutzt dieselbe Fallback-Kette
+  wie einzelne Ladevorgaenge (`consumption.py`), aber **km-gewichtet** pro
+  Monat gemittelt statt naiv pro Session - dafuer wurde `ConsumptionResult`
+  um ein `km`-Feld erweitert (nur als Gewicht gedacht, nicht fuer die
+  Anzeige). `None` wenn im Monat kein Vorgang einen berechenbaren Wert hat.
+  Web-UI zeigt das als vertikales Saeulendiagramm, chronologisch (aeltester
+  zuerst) - bewusst anders als die uebrigen Monats-Balkendiagramme, die
+  neuester-zuerst zeigen, weil ein Zeitverlauf von links nach rechts gelesen
+  werden soll
 
 ## Backup-Export/-Import (`routers/backup.py`)
 
