@@ -127,12 +127,16 @@ function colorForIndex(i) {
   return PIE_COLORS[i] ?? OTHER_COLOR;
 }
 
-// Fasst alles ab dem 6. Anbieter zu "Andere" zusammen, damit die
-// Kuchendiagramme lesbar bleiben - dieselbe Aufteilung wird fuer kWh- UND
-// Bezahlt-Diagramm verwendet, damit die Farbzuordnung konsistent bleibt
+// Fasst alles ab dem 6. Anbieter UND "Ohne Anbieter" zu einem gemeinsamen
+// "Andere"-Posten zusammen, damit die Kuchendiagramme lesbar bleiben und
+// nicht zwei separate Sammel-Slices ("Andere" + "Ohne Anbieter") zeigen -
+// dieselbe Aufteilung wird fuer kWh- UND Bezahlt-Diagramm verwendet, damit
+// die Farbzuordnung konsistent bleibt
 function buildProviderBuckets(byProvider) {
-  const top = byProvider.slice(0, 5);
-  const rest = byProvider.slice(5);
+  const named = byProvider.filter(p => p.provider_name !== 'Ohne Anbieter');
+  const unnamed = byProvider.filter(p => p.provider_name === 'Ohne Anbieter');
+  const top = named.slice(0, 5);
+  const rest = named.slice(5).concat(unnamed);
   if (!rest.length) return top;
   return [...top, {
     provider_name: 'Andere',

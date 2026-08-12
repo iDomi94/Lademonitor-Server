@@ -12,7 +12,7 @@ from .routers import auth, backup, geocoding, importer, locations, providers, se
 Base.metadata.create_all(bind=engine)
 run_light_migrations()
 
-app = FastAPI(title="Charging Tracker")
+app = FastAPI(title="Lademonitor")
 
 app.include_router(auth.router)
 app.include_router(vehicles.router, dependencies=[Depends(get_current_user)])
