@@ -1,8 +1,13 @@
 # Lademonitor
 
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
+
 Selbstgehostete Ladevorgang-Tracking-App für ein E-Auto (Škoda Enyaq via
 MySkoda/Home-Assistant-Integration), inspiriert von Spritmonitor. Läuft
 komplett selbstgehostet, kein Cloud-Dienst.
+
+Zugehörige iOS-App (SwiftUI, reiner REST-Client gegen dieses Backend):
+[Lademonitor-App](https://github.com/iDomi94/Lademonitor-App)
 
 ## Features
 
@@ -19,7 +24,8 @@ komplett selbstgehostet, kein Cloud-Dienst.
 - Mehrbenutzerfähig: Registrierung, Login, jeder Nutzer hat einen eigenen,
   komplett isolierten Datensatz
 - Server-rendertes Web-UI (kein separates Frontend-Build nötig), reine
-  REST-API für Home Assistant und die (separat gepflegte) iOS-App
+  REST-API für Home Assistant und die
+  [iOS-App](https://github.com/iDomi94/Lademonitor-App) (separates Repo)
 
 ## Start
 
