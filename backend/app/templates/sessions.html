@@ -248,6 +248,9 @@ document.getElementById('session-form').addEventListener('submit', async (e) => 
   if (editingSessionId) {
     // vehicle_id lässt sich beim PATCH nicht ändern (Backend erlaubt es aktuell nicht) - daher entfernen
     const { vehicle_id, ...patchPayload } = payload;
+    // Öffnen + Speichern gilt als Review: automatisch erkannte Ladevorgänge
+    // verlieren dadurch ihr needs_review-Flag, ohne eigenes UI-Element dafür.
+    patchPayload.needs_review = false;
     res = await fetch(`/api/sessions/${editingSessionId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
