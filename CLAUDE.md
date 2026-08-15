@@ -177,8 +177,8 @@ einloggen und das zurueckgegebene `token` statisch in den
 
 Endpunkt `POST /api/sessions/auto` nimmt Pushes entgegen (Schema
 `schemas.AutoSessionPush`: vehicle_external_id, external_session_id
-[Duplikatschutz], start_time, end_time, soc_start, soc_end, odometer_km,
-latitude, longitude, energy_kwh optional).
+[Duplikatschutz], start_time, end_time, charging_type, soc_start, soc_end,
+odometer_km, latitude, longitude, energy_kwh optional).
 
 Datenquelle: MySkoda-Integration in Home Assistant liefert
 `sensor.skoda_enyaq_battery_percentage`, `sensor.skoda_enyaq_charging_state`
@@ -189,6 +189,12 @@ ready_for_charging, conserving, charging, charging_interrupted [alle vier
 der vier aktiven Werte, NICHT "wert außerhalb einer Liste" - das war ein
 falscher erster Ansatz, der nie ausgelöst hat, weil kein Wert je außerhalb
 der 5 `options` liegt), `sensor.skoda_enyaq_mileage`,
+`sensor.skoda_enyaq_charge_type` (liefert `ac`/`dc` kleingeschrieben -
+`schemas.AutoSessionPush._normalize_charging_type` uppercased das vor der
+Validierung gegen `models.ChargingType`; **war bis 2026-08-15 vergessen**,
+automatisch importierte Sessions hatten dadurch bislang immer
+`charging_type: null` und bekamen ueber `apply_provider_price()` faelschlich
+immer den AC-Preis des Anbieters vorgeschlagen statt des DC-Preises),
 `device_tracker.skoda_enyaq_position` (GPS als
 Attribute latitude/longitude, nur bei "Position teilen"-Einstellung im
 Škoda-Account). Energie-kWh wird bewusst NICHT vom Auto übernommen (MySkoda

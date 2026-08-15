@@ -251,6 +251,7 @@ def push_auto_session(
         user_id=user.id,
         start_time=payload.start_time,
         end_time=payload.end_time,
+        charging_type=payload.charging_type,
         soc_start=payload.soc_start,
         soc_end=payload.soc_end,
         odometer_km=payload.odometer_km,

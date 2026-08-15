@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from .models import ChargingType, SessionSource
 
@@ -183,12 +183,20 @@ class AutoSessionPush(BaseModel):
     external_session_id: str
     start_time: datetime
     end_time: datetime | None = None
+    charging_type: ChargingType | None = None
     soc_start: int | None = None
     soc_end: int | None = None
     odometer_km: int | None = None
     latitude: float | None = None
     longitude: float | None = None
     energy_kwh: float | None = None
+
+    @field_validator("charging_type", mode="before")
+    @classmethod
+    def _normalize_charging_type(cls, value: object) -> object:
+        """MySkoda-Sensor (sensor.skoda_enyaq_charge_type) liefert kleingeschrieben
+        ('ac'/'dc'), das ChargingType-Enum erwartet Großbuchstaben."""
+        return value.upper() if isinstance(value, str) else value
 
 
 # ---------- Statistik ----------
