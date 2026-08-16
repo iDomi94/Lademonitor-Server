@@ -194,7 +194,16 @@ der 5 `options` liegt), `sensor.skoda_enyaq_mileage`,
 Validierung gegen `models.ChargingType`; **war bis 2026-08-15 vergessen**,
 automatisch importierte Sessions hatten dadurch bislang immer
 `charging_type: null` und bekamen ueber `apply_provider_price()` faelschlich
-immer den AC-Preis des Anbieters vorgeschlagen statt des DC-Preises),
+immer den AC-Preis des Anbieters vorgeschlagen statt des DC-Preises).
+**Faellt bei Ladeende oft schon auf `unknown` zurueck, bevor die Automation
+feuert** (Timing-Problem, nicht Backend-seitig loesbar) - deshalb zwei
+Absicherungen: 1) die HA-Automation merkt sich den Wert per
+`input_text.enyaq_charge_type` beim Einstecken (wie SoC-Start/Startzeit)
+statt ihn beim Ladeende live zu lesen, 2) `_normalize_charging_type` wirft
+bei einem trotzdem ungueltigen Wert (z.B. `unknown`, falls der
+`input_text`-Helper leer ist) KEINEN 422-Fehler, sondern faellt still auf
+`None` zurueck - der Push soll nie komplett verworfen werden, nur weil die
+Lade-Art fehlt, das faengt `needs_review` beim manuellen Nachtragen ab.
 `device_tracker.skoda_enyaq_position` (GPS als
 Attribute latitude/longitude, nur bei "Position teilen"-Einstellung im
 Škoda-Account). Energie-kWh wird bewusst NICHT vom Auto übernommen (MySkoda
@@ -203,9 +212,12 @@ SoC-Delta × Akkukapazität.
 
 Umsetzung beim Nutzer: HA-Package (`packages/lademonitor.yaml`, NICHT in
 `configuration.yaml` direkt, um die Hauptdatei sauber zu halten) mit
-`input_text`/`input_number`-Helpern (SoC/Startzeit merken beim Einstecken),
-`rest_command` (direkter HTTP-POST an `/api/sessions/auto`, kein
-input_text-Umweg nötig, da eigener Server im selben Netz läuft) und einer
+`input_text`/`input_number`-Helpern (SoC/Startzeit/Lade-Art merken beim
+Einstecken - Werte, die beim Ladeende schon wieder unbekannt/zurueckgesetzt
+sein koennen, MUESSEN so zwischengespeichert werden statt live gelesen zu
+werden), `rest_command` (direkter HTTP-POST an `/api/sessions/auto`, kein
+input_text-Umweg fuer den REST-Call selbst noetig, da eigener Server im
+selben Netz läuft) und einer
 YAML-Automation mit `id:` (bleibt trotzdem nur YAML-editierbar, da nicht in
 `automations.yaml` - UI-Editor kann Packages nicht zurückschreiben). Noch
 offen: Blueprint-Version für Wiederverwendbarkeit mit anderen Fahrzeugen/

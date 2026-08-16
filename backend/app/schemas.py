@@ -195,8 +195,17 @@ class AutoSessionPush(BaseModel):
     @classmethod
     def _normalize_charging_type(cls, value: object) -> object:
         """MySkoda-Sensor (sensor.skoda_enyaq_charge_type) liefert kleingeschrieben
-        ('ac'/'dc'), das ChargingType-Enum erwartet Großbuchstaben."""
-        return value.upper() if isinstance(value, str) else value
+        ('ac'/'dc'), das ChargingType-Enum erwartet Großbuchstaben.
+
+        Der Sensor faellt bei Ladeende oft schon auf 'unknown' zurueck, bevor die
+        HA-Automation den Push abschickt (Timing, nicht loesbar ohne den Wert beim
+        Start zwischenzuspeichern - siehe CLAUDE.md). Ein ungueltiger Wert soll den
+        kompletten Push NICHT per 422 ablehnen: lieber ohne Lade-Art annehmen, statt
+        den automatischen Import ganz zu verlieren - needs_review faengt das ab."""
+        if not isinstance(value, str):
+            return value
+        upper = value.upper()
+        return upper if upper in (t.value for t in ChargingType) else None
 
 
 # ---------- Statistik ----------
