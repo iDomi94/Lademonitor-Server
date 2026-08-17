@@ -6,13 +6,23 @@ auf Unraid (Docker), kein Cloud-Dienst.
 
 ## Architektur-Entscheidung (wichtig für den Kontext)
 
-Es gab einen bewussten Architektur-Wechsel während der Planung: statt Daten
-lokal auf dem iPhone zu speichern, ist die **Datenbank zentral auf dem Server**
-(Unraid). Web-UI und iOS-App sind beides reine Clients gegen dieselbe REST-API.
-Grund: Nutzer hat bereits eine Selfhosting-Infrastruktur (Unraid + Home
-Assistant) und wollte Laptop-Zugriff parallel zur App, ohne eine Sync-Schicht
-zwischen App und Server bauen zu müssen. Die App ist deshalb **online-only**
-(funktioniert nicht ohne Verbindung zum Server) - das ist Absicht, kein Bug.
+Web-UI und iOS-App sind beide Clients gegen dieselbe REST-API, die
+**Datenbank liegt zentral auf dem Server** (Unraid) - das bleibt unveraendert.
+
+**Update 2026-08-16 (kippt einen Teil der urspruenglichen Entscheidung):**
+Urspruenglich war die iOS-App bewusst **online-only** (kein lokales Speichern,
+keine Sync-Schicht), weil der Nutzer ohnehin staendig mit Unraid+HA verbunden
+ist und eine Sync-Schicht als unnoetige Komplexitaet galt. Das wurde bewusst
+revidiert: die iOS-App bekommt jetzt einen **Local-Only-Modus** (SwiftData,
+komplett ohne Server nutzbar) als Alternative zum bisherigen Server-Modus, mit
+Moduswahl beim ersten Start statt erzwungenem Login. Grund: Nutzung auch ganz
+ohne eigene Server-Infrastruktur ermoeglichen. Details/Architektur siehe
+`ios/Lademonitor/CLAUDE.md` (falls vorhanden) bzw. die Local-Only-Implementierung
+in `ios/Lademonitor/Repositories/` und `ios/Lademonitor/Models/LocalModels.swift`.
+Der Server-Modus selbst bleibt online-only wie bisher; geplant (noch nicht
+umgesetzt) ist ein Sync-Service, der beim Wechsel Local-Only -> Server lokale
+Daten hochlaedt und im Server-Modus bei kurzzeitigem Verbindungsverlust
+puffert.
 
 ## Tech-Stack
 
