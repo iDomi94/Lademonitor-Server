@@ -1,3 +1,5 @@
+from datetime import date, datetime, time
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
@@ -117,6 +119,11 @@ def _get_owned_vehicle(db: Session, user: models.User, vehicle_id: str) -> model
 def list_sessions(
     vehicle_id: str | None = None,
     needs_review: bool | None = None,
+    # Datumsfilter (inklusive) fuer Web-UI/App - siehe attach_consumption(): die
+    # Verbrauchsberechnung selbst laedt unabhaengig davon immer die VOLLSTAENDIGE
+    # Fahrzeug-Historie, ist also von diesem Filter nicht betroffen.
+    start_date: date | None = None,
+    end_date: date | None = None,
     limit: int = Query(default=200, le=1000),
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
@@ -126,6 +133,10 @@ def list_sessions(
         q = q.filter(models.ChargingSession.vehicle_id == vehicle_id)
     if needs_review is not None:
         q = q.filter(models.ChargingSession.needs_review == needs_review)
+    if start_date:
+        q = q.filter(models.ChargingSession.start_time >= datetime.combine(start_date, time.min))
+    if end_date:
+        q = q.filter(models.ChargingSession.start_time <= datetime.combine(end_date, time.max))
     sessions = q.order_by(models.ChargingSession.start_time.desc()).limit(limit).all()
     attach_consumption(db, user.id, sessions)
     return sessions

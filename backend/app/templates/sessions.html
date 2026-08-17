@@ -2,6 +2,8 @@
 {% block content %}
 <h1>Ladevorgänge</h1>
 
+<div id="filter-bar"></div>
+
 <h2 id="form-heading" style="margin-top:0">Neuer Ladevorgang</h2>
 <form class="inline-form" id="session-form">
   <div>
@@ -144,7 +146,7 @@ function consumptionCell(kwhPer100km, method) {
 }
 
 async function loadSessions() {
-  allSessions = await (await fetch('/api/sessions')).json();
+  allSessions = await (await fetch('/api/sessions' + filterQueryString())).json();
   const tbody = document.getElementById('session-rows');
   tbody.innerHTML = allSessions.map(s => {
     const vehicle = vehicles.find(v => v.id === s.vehicle_id);
@@ -274,6 +276,7 @@ document.getElementById('session-form').addEventListener('submit', async (e) => 
 });
 
 (async () => {
+  renderFilterBar('filter-bar', loadSessions);
   await loadDropdowns();
   await loadSessions();
 })();

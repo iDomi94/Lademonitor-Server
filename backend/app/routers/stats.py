@@ -1,4 +1,5 @@
 from collections import defaultdict
+from datetime import date, datetime, time
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -14,12 +15,21 @@ router = APIRouter(prefix="/api/stats", tags=["stats"])
 @router.get("/summary", response_model=schemas.StatsSummary)
 def stats_summary(
     vehicle_id: str | None = None,
+    # Inklusiver Datumsfilter, wie bei GET /api/sessions - schraenkt hier zusaetzlich
+    # ein, worueber Verbrauch/km-Differenzen berechnet werden (dieselbe Logik wie beim
+    # bestehenden vehicle_id-Filter: der Filter wirkt VOR der Aggregation).
+    start_date: date | None = None,
+    end_date: date | None = None,
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
     q = db.query(models.ChargingSession).filter(models.ChargingSession.user_id == user.id)
     if vehicle_id:
         q = q.filter(models.ChargingSession.vehicle_id == vehicle_id)
+    if start_date:
+        q = q.filter(models.ChargingSession.start_time >= datetime.combine(start_date, time.min))
+    if end_date:
+        q = q.filter(models.ChargingSession.start_time <= datetime.combine(end_date, time.max))
     sessions = q.order_by(models.ChargingSession.start_time).all()
 
     total_sessions = len(sessions)

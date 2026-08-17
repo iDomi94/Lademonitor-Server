@@ -139,3 +139,28 @@ button:hover { opacity: 0.9; }
 
 h1 { font-size: 22px; margin-bottom: 20px; }
 h2 { font-size: 16px; color: var(--muted); margin: 24px 0 12px; }
+
+.filter-widget { margin-bottom: 24px; }
+.filter-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  font-weight: 500;
+  padding: 10px 14px;
+}
+.filter-toggle-btn.filter-toggle-active { border-color: var(--accent2); color: var(--accent2); }
+.filter-toggle-chevron { color: var(--muted); font-size: 10px; }
+.filter-panel { margin-top: 8px; }
+.filter-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.filter-row + .filter-row { margin-top: 10px; }
+.filter-row input[type="date"] { width: auto; }
+.filter-preset-btn, .filter-apply-btn {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  font-weight: 500;
+  padding: 8px 12px;
+}

@@ -2,6 +2,8 @@
 {% block content %}
 <h1>Dashboard</h1>
 
+<div id="filter-bar"></div>
+
 <div class="grid" id="stat-cards">
   <div class="card"><div class="stat-label">Ladevorgänge</div><div class="stat-value" id="s-count">–</div></div>
   <div class="card"><div class="stat-label">Gesamt kWh</div><div class="stat-value" id="s-kwh">–</div></div>
@@ -199,7 +201,7 @@ function renderGauge(containerId, acKwh, dcKwh) {
 
 async function loadStats() {
   try {
-    const res = await fetch('/api/stats/summary');
+    const res = await fetch('/api/stats/summary' + filterQueryString());
     if (!res.ok) {
       console.error('Stats-Request fehlgeschlagen:', res.status, await res.text());
       return;
@@ -248,6 +250,7 @@ async function loadStats() {
     console.error('Fehler beim Laden der Statistiken:', err);
   }
 }
+renderFilterBar('filter-bar', loadStats);
 loadStats();
 </script>
 {% endblock %}
