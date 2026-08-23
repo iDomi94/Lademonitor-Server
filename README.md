@@ -11,6 +11,13 @@ Zugehörige iOS-App (SwiftUI, reiner REST-Client gegen dieses Backend):
 
 ## Features
 
+- **Home Assistant**: [Lademonitor-HA](https://github.com/iDomi94/Lademonitor-HA)
+  (HACS-Integration) holt Statistik-Sensoren (Kosten/Verbrauch/km) in HA und
+  überträgt automatisch erkannte Ladevorgänge per Service statt manuellem
+  `rest_command`-Token-Handling – deutlich einfacher als der rohe API-Weg
+  unten. Für HA OS/Supervised gibt es zusätzlich
+  [Lademonitor-HA-Addon](https://github.com/iDomi94/Lademonitor-HA-Addon),
+  um den Server direkt als Add-on statt separat (z.B. auf Unraid) zu betreiben.
 - Ladevorgänge manuell erfassen oder automatisch per Home-Assistant-Automation
   pushen lassen (`POST /api/sessions/auto`)
 - Verbrauchsberechnung (kWh/100km) pro Ladevorgang über eine priorisierte
@@ -64,10 +71,20 @@ API-Dokumentation (Swagger) liegt unter `/docs`.
 
 ## Home-Assistant-Anbindung
 
+> **Empfehlung:** Statt der rohen API unten die
+> [Lademonitor-HA](https://github.com/iDomi94/Lademonitor-HA)-Integration
+> (über HACS) nutzen – Login läuft einmalig über einen Einrichtungsdialog,
+> das Token wird automatisch verwaltet/erneuert, und der Push passiert über
+> einen normalen HA-Service (`lademonitor.push_charging_session`) statt über
+> `rest_command` mit von Hand kopiertem Bearer-Token. Eine vollständige
+> Beispiel-Automation (inkl. der nötigen `input_text`/`input_number`-Helfer
+> für MySkoda) steht in deren README.
+
 `POST /api/sessions/auto` nimmt automatisch erkannte Ladevorgänge entgegen
 (erwartet einen `Authorization: Bearer <token>`-Header – Token per
 `POST /api/auth/login` holen, siehe `CLAUDE.md` für ein Beispiel-Package
-mit `rest_command`-Automation). Erwartetes JSON:
+mit `rest_command`-Automation). Direkter API-Zugriff bleibt für andere
+Integrationen/Skripte natürlich weiterhin möglich. Erwartetes JSON:
 
 ```json
 {

@@ -175,6 +175,22 @@ vorhanden).
 
 ## Home-Assistant-Anbindung (aktiv, Nutzer betreibt eigene Automation)
 
+**Update 2026-08-23:** Die weiter unten beschriebene rest_command/Token-per-
+Hand-Loesung ist die urspruengliche, weiterhin funktionierende Variante -
+empfohlen wird inzwischen aber die neue HACS-Integration
+[Lademonitor-HA](https://github.com/iDomi94/Lademonitor-HA) (separates Repo):
+Config Flow fragt Zugangsdaten einmalig ab, Token-Handling (inkl. Re-Login
+bei Invalidierung) laeuft intern, Push passiert ueber den HA-Service
+`lademonitor.push_charging_session` statt `rest_command`. Ausserdem bringt
+sie Statistik-Sensoren (Kosten/Verbrauch/km) als Pull-Richtung mit, die es
+vorher gar nicht gab. Ergaenzend dazu
+[Lademonitor-HA-Addon](https://github.com/iDomi94/Lademonitor-HA-Addon) fuer
+den Betrieb des Servers selbst als HA-Supervisor-Add-on (bundled Postgres,
+Submodule auf dieses Repo, `/data` statt `/config`). Damit ist das weiter
+unten erwaehnte "Phase 2 des HA-Themas" (Blueprint-Version) obsolet - die
+Integration loest dasselbe Problem allgemeiner (funktioniert nicht nur mit
+YAML-Blueprints, sondern mit jeder normalen Automation).
+
 **Seit Einfuehrung der Authentifizierung braucht `rest_command` einen
 `Authorization: Bearer <token>`-Header**, sonst antwortet der Endpunkt mit
 401. Wegen der Pro-Nutzer-Datentrennung (siehe Abschnitt "Authentifizierung"
@@ -229,9 +245,12 @@ werden), `rest_command` (direkter HTTP-POST an `/api/sessions/auto`, kein
 input_text-Umweg fuer den REST-Call selbst noetig, da eigener Server im
 selben Netz läuft) und einer
 YAML-Automation mit `id:` (bleibt trotzdem nur YAML-editierbar, da nicht in
-`automations.yaml` - UI-Editor kann Packages nicht zurückschreiben). Noch
-offen: Blueprint-Version für Wiederverwendbarkeit mit anderen Fahrzeugen/
-Integrationen (Phase 2 des HA-Themas).
+`automations.yaml` - UI-Editor kann Packages nicht zurückschreiben). Die
+urspruenglich hier als "Phase 2" geplante Blueprint-Version fuer
+Wiederverwendbarkeit ist erledigt, nur anders geloest als angedacht: siehe
+Update 2026-08-23 oben - der `lademonitor.push_charging_session`-Service aus
+Lademonitor-HA ersetzt den `rest_command`-Aufruf, die restliche Automation
+(Trigger + Helfer) bleibt konzeptionell gleich.
 
 ## Verbrauchsberechnung pro Ladevorgang (`consumption.py`)
 
