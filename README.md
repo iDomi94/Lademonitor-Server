@@ -73,12 +73,9 @@ API-Dokumentation (Swagger) liegt unter `/docs`.
 
 > **Empfehlung:** Statt der rohen API unten die
 > [Lademonitor-HA](https://github.com/iDomi94/Lademonitor-HA)-Integration
-> (über HACS) nutzen – Login läuft einmalig über einen Einrichtungsdialog,
-> das Token wird automatisch verwaltet/erneuert, und der Push passiert über
-> einen normalen HA-Service (`lademonitor.push_charging_session`) statt über
-> `rest_command` mit von Hand kopiertem Bearer-Token. Eine vollständige
-> Beispiel-Automation (inkl. der nötigen `input_text`/`input_number`-Helfer
-> für MySkoda) steht in deren README.
+> (über HACS) nutzen – übernimmt Login/Token-Handling und bringt fertige
+> Services für den automatischen Push mit, inkl. einer vollständigen
+> Beispiel-Automation in deren README.
 
 `POST /api/sessions/auto` nimmt automatisch erkannte Ladevorgänge entgegen
 (erwartet einen `Authorization: Bearer <token>`-Header – Token per
