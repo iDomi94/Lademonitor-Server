@@ -34,11 +34,45 @@ Zugehörige iOS-App (SwiftUI, reiner REST-Client gegen dieses Backend):
   REST-API für Home Assistant und die
   [iOS-App](https://github.com/iDomi94/Lademonitor-App) (separates Repo)
 
-## Start
+## Start / Installation
 
-Zwei Deployment-Wege, je nach Bedarf:
+Vier Deployment-Wege – je nachdem, wo/wie der Server laufen soll. Backend,
+Web-UI und Postgres stecken in allen vier Varianten im selben Container
+(außer Docker Compose, siehe unten) – kein separater DB-Container nötig.
 
-**Docker Compose** (lokale Entwicklung/Tests, zwei Container):
+### Unraid (Community Applications)
+
+Am einfachsten für Unraid-Nutzer: in **Apps** nach "Lademonitor" suchen und
+installieren. Das Template (`templates/lademonitor-server.xml`) ist
+vorkonfiguriert (Port, `/config`-Pfad für die Daten) und zeigt auf das
+öffentliche GHCR-Image, das per GitHub Actions automatisch gebaut wird
+(siehe `.github/workflows/docker-publish.yml`). Über den Tag-Selector im
+Container-Edit lässt sich statt `latest` (stabil) auch `beta` (jeweils
+aktuellster `main`-Stand) wählen.
+
+### Home Assistant Add-on
+
+Für HA OS/Supervised, um den Server direkt in Home Assistant statt separat
+zu betreiben: **Einstellungen → Add-ons → Add-on-Store → ⋮ → Repositories**,
+dort `https://github.com/iDomi94/Lademonitor-HA-Addon` eintragen, dann
+"Lademonitor" installieren und starten. Daten liegen im Supervisor-`/data`-
+Pfad und sind damit Teil regulärer HA-Backups. Details im
+[Add-on-Repo](https://github.com/iDomi94/Lademonitor-HA-Addon).
+
+### Docker (Einzelcontainer)
+
+Für jeden anderen Docker-Host (Synology, VPS, Unraid ohne CA, …), ein
+Container statt Stack:
+```bash
+docker run -d -p 8111:8000 -v /pfad/zu/daten:/config ghcr.io/idomi94/lademonitor-server:latest
+```
+`/config` enthält die komplette Postgres-Datenbank – unbedingt in den
+Backup-Plan aufnehmen.
+
+### Docker Compose (lokale Entwicklung/Tests)
+
+Einziger Weg mit zwei getrennten Containern (Backend + Postgres), gedacht
+für Entwicklung/Tests statt Produktivbetrieb:
 ```bash
 docker compose up -d --build
 ```
@@ -47,15 +81,7 @@ Postgres-Instanz lassen sich optional per `.env` überschreiben (siehe
 `.env.example`) – der Compose-interne Standard ist unkritisch, da Postgres
 nicht nach außen exponiert wird.
 
-**Einzelcontainer** (z.B. für Unraid, ein Container statt Stack) – am
-einfachsten über die Unraid **Community Applications**: nach "Lademonitor"
-suchen und installieren. Manuell geht es auch:
-```bash
-docker run -d -p 8111:8000 -v /pfad/zu/daten:/config ghcr.io/idomi94/lademonitor-server:latest
-```
-Das fertige CA-Template liegt unter `templates/lademonitor-server.xml`, das
-Image wird automatisch per GitHub Actions nach GHCR gebaut und veröffentlicht
-(siehe `.github/workflows/docker-publish.yml`).
+---
 
 API-Dokumentation (Swagger) liegt unter `/docs`.
 

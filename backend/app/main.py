@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from . import models
 from .auth import get_current_user, get_user_from_request
+from .changelog import CHANGELOG, VERSION
 from .database import Base, engine, get_db, run_light_migrations
 from .routers import auth, backup, geocoding, importer, locations, providers, sessions, stats, vehicles
 
@@ -35,7 +36,10 @@ def _page(request: Request, db: Session, template_name: str):
     user = get_user_from_request(request, db)
     if not user:
         return RedirectResponse("/login", status_code=303)
-    return templates.TemplateResponse(template_name, {"request": request, "user": user})
+    return templates.TemplateResponse(
+        template_name,
+        {"request": request, "user": user, "version": VERSION, "changelog": CHANGELOG},
+    )
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -74,4 +78,4 @@ def register_page(request: Request, db: Session = Depends(get_db)):
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {"status": "ok", "version": VERSION}

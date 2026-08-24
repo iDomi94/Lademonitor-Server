@@ -10,6 +10,9 @@
 <body>
   <nav class="topnav">
     <div class="brand">⚡ Lademonitor</div>
+    {% if version %}
+    <button class="ver" type="button" onclick="openChangelog()" title="Was ist neu">v{{ version }}</button>
+    {% endif %}
     <a href="/">Dashboard</a>
     <a href="/sessions">Ladevorgänge</a>
     <a href="/import">Import</a>
@@ -24,10 +27,43 @@
   <main class="container">
     {% block content %}{% endblock %}
   </main>
+
+  {% if changelog %}
+  <div class="modal" id="changelog-modal" onclick="event.target === this && closeChangelog()">
+    <div class="box">
+      <div class="mtop">
+        <h3>Was ist neu</h3>
+        <button class="close" type="button" onclick="closeChangelog()">✕</button>
+      </div>
+      <div class="mbody">
+        {% for r in changelog %}
+        <div class="clog">
+          <div class="cloghead">
+            <span class="clogver">v{{ r.version }}</span>
+            {% if r.version == version %}<span class="clognow">Deine Version</span>{% endif %}
+            <span class="clogdate">{{ r.date }}</span>
+          </div>
+          {% if r.title %}<p class="clogtitle">{{ r.title }}</p>{% endif %}
+          <ul class="cloglist">
+            {% for c in r.changes %}<li>{{ c }}</li>{% endfor %}
+          </ul>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
   <script>
     async function logout() {
       await fetch('/api/auth/logout', { method: 'POST' });
       window.location = '/login';
+    }
+    function openChangelog() {
+      document.getElementById('changelog-modal')?.classList.add('open');
+    }
+    function closeChangelog() {
+      document.getElementById('changelog-modal')?.classList.remove('open');
     }
   </script>
 </body>

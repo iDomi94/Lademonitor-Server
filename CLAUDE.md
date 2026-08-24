@@ -113,10 +113,18 @@ Passwoerter mit `bcrypt` gehasht (kein passlib, direkte Nutzung des
 fehlendem/ungueltigem Cookie zu `/login` um (303), JSON-API-Endpunkte
 antworten mit 401 (`auth.get_current_user` wirft `HTTPException`).
 
-Cookie hat `secure=True` (seit die App ueber Nginx per HTTPS oeffentlich
-erreichbar ist) - direkter Zugriff per `http://<lan-ip>:8111` funktioniert
-fuers Web-UI-Login seitdem NICHT mehr (Browser sendet ein secure-Cookie nur
-ueber HTTPS), nur noch ueber die echte Domain. Betrifft nur die
+**Update 2026-08-24 (Bugfix, gefunden beim ersten echten CA-Test):** Cookie
+hatte `secure=True` fest verdrahtet (urspruenglich fuer den eigenen
+Nginx-HTTPS-Reverse-Proxy des Nutzers gesetzt) - das brach den Login fuer
+JEDEN direkten HTTP-Zugriff (Unraid-CA-Standardfall `http://<ip>:8111`,
+Docker, HA-Add-on): der Login-POST antwortete 200 OK, aber der Browser
+verwirft ein Secure-Cookie ueber reines HTTP still, also kam nie ein Cookie
+an - sah aus wie ein Redirect-Loop zurueck zu `/login` nach augenscheinlich
+erfolgreichem Login. Jetzt dynamisch in `routers/auth.py::_is_https()`:
+`secure=True` nur wenn `request.url.scheme == "https"` ODER ein
+vorgeschalteter Reverse-Proxy `X-Forwarded-Proto: https` sendet (uebliches
+Nginx-Verhalten) - damit funktioniert sowohl der direkte HTTP-Zugriff als
+auch das eigene HTTPS-Setup des Nutzers weiter. Betrifft nur die
 Browser-Cookie-Session, NICHT den Bearer-Token-Weg (iOS-App, Home-Assistant-
 `rest_command`) - der funktioniert unabhaengig vom Schema weiter.
 
@@ -387,6 +395,29 @@ flexibles Datenaustauschformat - unterscheidet sich vom Spritmonitor-Importer
   Design-Entscheidung) - falls spaeter einzelne Tabellen unabhaengig
   im-/exportiert werden sollen, braeuchte es echte Spaltenerkennung wie beim
   Spritmonitor-Importer.
+
+## In-App-Versionierung (`backend/app/changelog.py`)
+
+Nach dem Vorbild von [media-vault](https://github.com/halvar20000/media-vault)
+(dortige `frontend/src/changelog.ts` + `ChangelogModal.tsx`), an die
+server-rendered Jinja2-Architektur hier angepasst (keine separate
+Frontend-API/Fetch noetig): `CHANGELOG` ist eine simple, absteigend sortierte
+Python-Liste (`version`, `date`, `title`, `changes`), `VERSION` ist immer
+`CHANGELOG[0]["version"]`. `main.py::_page()` reicht beides in jeden
+Template-Kontext durch, `base.html` zeigt den Versions-Badge im Header (Klick
+oeffnet ein Modal mit der vollen Historie, aktuelle Version bekommt ein
+"Deine Version"-Badge, `<Config>`-freies reines Server-Rendering + minimales
+Vanilla-JS zum Oeffnen/Schliessen). `/health` liefert `version` zusaetzlich
+als JSON mit.
+
+**Release-Workflow:** Bei einem Release einen neuen Eintrag oben in
+`CHANGELOG` ergaenzen (+ denselben Text ins root `CHANGELOG.md`), dann
+`git tag vX.Y.Z && git push origin vX.Y.Z` - das triggert den
+GHCR-Publish-Workflow (siehe unten), der bei genau diesem Tag-Muster
+`latest`/`X.Y.Z`/`X.Y` aktualisiert. Die Versionsnummer hier und der
+Git-Tag sollten synchron bleiben (bewusst keine automatische Ableitung
+z.B. aus `git describe` - der Wert im Modal soll auch bei einem
+Dev-/Beta-Checkout ohne Git-Metadaten stabil und lesbar sein).
 
 ## Deployment-Varianten
 

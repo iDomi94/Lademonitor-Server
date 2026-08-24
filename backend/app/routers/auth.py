@@ -20,19 +20,30 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 COOKIE_MAX_AGE = 60 * 60 * 24 * 400
 
 
-def _set_session_cookie(response: Response, token: str) -> None:
+def _is_https(request: Request) -> bool:
+    """Direkter Unraid-/Docker-/HA-Add-on-Zugriff laeuft per HTTP (kein
+    Reverse-Proxy) - ein Secure-Cookie wuerde der Browser dann stillschweigend
+    verwerfen und der Login-Cookie wuerde nie ankommen (sah wie ein
+    401/Redirect-Loop nach erfolgreichem Login aus). Steht ein eigener
+    Reverse-Proxy mit TLS davor (z.B. Nginx), setzt der ueblicherweise
+    `X-Forwarded-Proto: https` - dann bleibt secure=True wie zuvor."""
+    forwarded_proto = request.headers.get("x-forwarded-proto", "").split(",")[0].strip().lower()
+    return forwarded_proto == "https" or request.url.scheme == "https"
+
+
+def _set_session_cookie(request: Request, response: Response, token: str) -> None:
     response.set_cookie(
         COOKIE_NAME,
         token,
         httponly=True,
         samesite="lax",
-        secure=True,
+        secure=_is_https(request),
         max_age=COOKIE_MAX_AGE,
     )
 
 
 @router.post("/register", response_model=schemas.LoginResponse, status_code=201)
-def register(payload: schemas.RegisterRequest, response: Response, db: Session = Depends(get_db)):
+def register(payload: schemas.RegisterRequest, request: Request, response: Response, db: Session = Depends(get_db)):
     username = payload.username.strip()
     if len(username) < 3:
         raise HTTPException(422, "Nutzername muss mindestens 3 Zeichen lang sein")
@@ -57,12 +68,12 @@ def register(payload: schemas.RegisterRequest, response: Response, db: Session =
     db.add(models.AuthToken(user_id=user.id, token=token))
     db.commit()
 
-    _set_session_cookie(response, token)
+    _set_session_cookie(request, response, token)
     return schemas.LoginResponse(token=token, user=user)
 
 
 @router.post("/login", response_model=schemas.LoginResponse)
-def login(payload: schemas.LoginRequest, response: Response, db: Session = Depends(get_db)):
+def login(payload: schemas.LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.username == payload.username.strip()).first()
     if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(401, "Nutzername oder Passwort falsch")
@@ -71,7 +82,7 @@ def login(payload: schemas.LoginRequest, response: Response, db: Session = Depen
     db.add(models.AuthToken(user_id=user.id, token=token))
     db.commit()
 
-    _set_session_cookie(response, token)
+    _set_session_cookie(request, response, token)
     return schemas.LoginResponse(token=token, user=user)
 
 
