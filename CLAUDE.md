@@ -420,8 +420,16 @@ ersetzt den anderen:
      (v2-Schema, `ca_profile.xml` im Repo-Root fuers Repository-Profil) -
      `<Repository>` zeigt auf `ghcr.io/idomi94/lademonitor-server:latest`.
      Image wird per `.github/workflows/docker-publish.yml` (GitHub Actions)
-     bei jedem Push auf `main` bzw. bei `v*.*.*`-Tags automatisch gebaut und
-     nach GHCR gepusht (kein manueller Build-Schritt mehr noetig). Struktur
+     automatisch gebaut und nach GHCR gepusht - **Tag-Strategie bewusst
+     getrennt**, damit Testen auf dem eigenen Server nicht versehentlich
+     den `latest`-Tag fuer alle CA-Nutzer aktualisiert: jeder Push auf
+     `main` baut nur `:beta` neu, `:latest` (+ `:X.Y.Z`/`:X.Y`) wird
+     ausschliesslich bei einem Git-Tag `vX.Y.Z` aktualisiert (bewusster
+     Release-Schritt, z.B. `git tag v0.1.0 && git push origin v0.1.0`).
+     Das Template hat dafuer einen `<Branch>`-Tag-Selector (CA-UI:
+     Stable/`latest` vs. Beta/`beta`), damit man in Unraid selbst ohne
+     manuelles Editieren des Repository-Felds auf Beta wechseln kann.
+     Struktur
      folgt dem offiziellen Unraid-CA-Starter-Repo (`ca_profile.xml` +
      `templates/*.xml`), damit die Einreichung ueber ca.unraid.net/submit
      durchlaeuft. **Einmalig nach dem ersten Workflow-Lauf noetig:** GHCR-Paket
