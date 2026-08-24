@@ -47,14 +47,15 @@ Postgres-Instanz lassen sich optional per `.env` überschreiben (siehe
 `.env.example`) – der Compose-interne Standard ist unkritisch, da Postgres
 nicht nach außen exponiert wird.
 
-**Einzelcontainer** (z.B. für ein Unraid-Community-Applications-Template,
-ein Container statt Stack):
+**Einzelcontainer** (z.B. für Unraid, ein Container statt Stack) – am
+einfachsten über die Unraid **Community Applications**: nach "Lademonitor"
+suchen und installieren. Manuell geht es auch:
 ```bash
-docker build -t lademonitor:latest .
-docker run -d -p 8111:8000 -v /pfad/zu/daten:/config lademonitor:latest
+docker run -d -p 8111:8000 -v /pfad/zu/daten:/config ghcr.io/idomi94/lademonitor-server:latest
 ```
-Siehe `unraid-template.xml` für ein fertiges CA-Template (Repository-Feld
-zeigt aktuell auf den lokalen Image-Tag, siehe Kommentar in der Datei).
+Das fertige CA-Template liegt unter `templates/lademonitor-server.xml`, das
+Image wird automatisch per GitHub Actions nach GHCR gebaut und veröffentlicht
+(siehe `.github/workflows/docker-publish.yml`).
 
 API-Dokumentation (Swagger) liegt unter `/docs`.
 

@@ -1,0 +1,32 @@
+<Container version="2">
+  <Name>Lademonitor</Name>
+  <Repository>ghcr.io/idomi94/lademonitor-server:latest</Repository>
+  <Registry>https://ghcr.io/idomi94/lademonitor-server</Registry>
+  <Network>bridge</Network>
+  <Shell>bash</Shell>
+  <Privileged>false</Privileged>
+
+  <Icon>https://raw.githubusercontent.com/iDomi94/Lademonitor-Server/main/icon.png</Icon>
+
+  <WebUI>http://[IP]:[PORT:8000]/</WebUI>
+
+  <Overview>Selbstgehostete Ladevorgang-Tracking-App fuer E-Autos (z.B. Skoda Enyaq via MySkoda/Home-Assistant-Integration), inspiriert von Spritmonitor. Backend, Web-UI und PostgreSQL laufen zusammen in diesem einen Container - kein separater DB-Container noetig.</Overview>
+
+  <Project>https://github.com/iDomi94/Lademonitor-Server</Project>
+
+  <TemplateURL>https://raw.githubusercontent.com/iDomi94/Lademonitor-Server/main/templates/lademonitor-server.xml</TemplateURL>
+  <ReadMe>https://raw.githubusercontent.com/iDomi94/Lademonitor-Server/main/README.md</ReadMe>
+
+  <Category>Productivity: Tools:</Category>
+
+  <ExtraSearchTerms>ev charging elektroauto ladevorgang skoda enyaq myskoda spritmonitor</ExtraSearchTerms>
+
+  <Requires>Internet-Zugriff optional fuer Adresssuche (Nominatim) beim Anlegen von Ladeorten</Requires>
+
+  <Date>2026-08-24</Date>
+
+  <License>AGPL-3.0</License>
+
+  <Config Name="WebUI Port" Target="8000" Default="8111" Mode="tcp" Description="Port fuer Web-UI und REST-API (z.B. fuer die Home-Assistant-Automation oder die iOS-App)" Type="Port" Display="always" Required="true" Mask="false">8111</Config>
+  <Config Name="Daten" Target="/config" Default="/mnt/user/appdata/lademonitor" Mode="rw" Description="Enthaelt die komplette Postgres-Datenbank (alle Fahrzeuge/Ladevorgaenge) - unbedingt in den regulaeren Backup-Plan aufnehmen. Zusaetzlich gibt es einen eigenen Export/Import (Einstellungen -&gt; Daten-Backup) fuer portable CSV-Backups." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/lademonitor</Config>
+</Container>

@@ -416,12 +416,17 @@ ersetzt den anderen:
    Postgres-Datenverzeichnis unter `/config/postgres`) fuer den Unraid-Nutzer.
    DB-Zugangsdaten sind fest im Dockerfile verdrahtet (nicht von aussen
    erreichbar, daher unkritisch).
-   - `unraid-template.xml`: Community-Applications-Template. `<Repository>`
-     zeigt aktuell auf einen lokalen Image-Tag (`lademonitor:latest`) - Nutzer
-     muss vor der Nutzung selbst `docker build -t lademonitor:latest .` auf
-     dem Unraid-Host ausfuehren. Sobald das Projekt auf GitHub/einer Registry
-     veroeffentlicht ist (naechstes geplantes Thema), `<Repository>` auf das
-     veroeffentlichte Image umstellen, dann entfaellt der manuelle Build-Schritt.
+   - `templates/lademonitor-server.xml`: Community-Applications-Template
+     (v2-Schema, `ca_profile.xml` im Repo-Root fuers Repository-Profil) -
+     `<Repository>` zeigt auf `ghcr.io/idomi94/lademonitor-server:latest`.
+     Image wird per `.github/workflows/docker-publish.yml` (GitHub Actions)
+     bei jedem Push auf `main` bzw. bei `v*.*.*`-Tags automatisch gebaut und
+     nach GHCR gepusht (kein manueller Build-Schritt mehr noetig). Struktur
+     folgt dem offiziellen Unraid-CA-Starter-Repo (`ca_profile.xml` +
+     `templates/*.xml`), damit die Einreichung ueber ca.unraid.net/submit
+     durchlaeuft. **Einmalig nach dem ersten Workflow-Lauf noetig:** GHCR-Paket
+     `lademonitor-server` in den GitHub-Package-Settings auf "Public" stellen,
+     sonst kann Unraid das Image nicht pullen.
    - **Noch nicht auf echter Hardware getestet** (kein Docker in der
      Umgebung verfuegbar, in der das erstellt wurde) - beim ersten Test auf
      Unraid besonders pruefen: `reverse_geocoder`/`scipy`-Installation

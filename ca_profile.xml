@@ -1,0 +1,14 @@
+<CommunityApplications>
+  <!-- Required profile -->
+  <Profile>
+Lademonitor ist eine selbstgehostete Ladevorgang-Tracking-App fuer E-Autos
+(z.B. Skoda Enyaq via MySkoda/Home-Assistant-Integration), inspiriert von
+Spritmonitor. Backend, Web-UI und PostgreSQL laufen in einem einzigen
+Container - kein separater DB-Container noetig. Support/Fragen bitte ueber
+das GitHub-Repository (Issues).
+  </Profile>
+  <!-- Optional icon -->
+  <Icon>https://raw.githubusercontent.com/iDomi94/Lademonitor-Server/main/icon.png</Icon>
+  <!-- Optional web page -->
+  <WebPage>https://github.com/iDomi94/Lademonitor-Server</WebPage>
+</CommunityApplications>
