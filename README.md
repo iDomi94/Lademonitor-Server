@@ -59,6 +59,12 @@ dort `https://github.com/iDomi94/Lademonitor-HA-Addon` eintragen, dann
 Pfad und sind damit Teil regulärer HA-Backups. Details im
 [Add-on-Repo](https://github.com/iDomi94/Lademonitor-HA-Addon).
 
+Zugriff (Ingress-Sidebar-Button oder Direktport `8111`) funktioniert dabei
+nur lokal im Heimnetz – für externen Zugriff (z.B. die iOS-App unterwegs)
+brauchst du zusätzlich einen VPN-Zugang zu deinem Netz oder einen eigenen
+Reverse-Proxy/Nginx-Vhost auf Port 8111 (Details dazu im
+[Add-on-Repo](https://github.com/iDomi94/Lademonitor-HA-Addon#netzwerkzugriff-lokal-vs-extern)).
+
 ### Docker (Einzelcontainer)
 
 Für jeden anderen Docker-Host (Synology, VPS, Unraid ohne CA, …), ein
@@ -150,6 +156,30 @@ Auth ist eingebaut (Registrierung/Login, pro Nutzer isolierte Daten), aber
 es gibt bewusst noch **kein Rate-Limiting** auf Login/Registrierung – bei
 öffentlicher Erreichbarkeit über einen Reverse Proxy also auf ein starkes
 Passwort achten. Details und weitere bekannte Einschränkungen in `CLAUDE.md`.
+
+## Nach einem Update nicht erreichbar?
+
+Falls der Server nach einem Rebuild/Update über deinen eigenen Reverse
+Proxy (z.B. Nginx vor Unraid) kurzzeitig nicht erreichbar ist und erst
+nach Leeren des Browser-Caches wieder geht, sind typischerweise zwei
+Ursachen möglich:
+
+- **Browser-Cache**: Der Browser zeigt noch eine vor dem Update geladene
+  Seite (altes HTML/JS) an, die nicht mehr zum neuen Server passt. Seit
+  v0.9.1 senden die HTML-Seiten `Cache-Control: no-store`, damit Browser
+  sie grundsätzlich nicht mehr zwischenspeichern – ein Hard-Refresh
+  (Strg/Cmd+Shift+R) sollte das Problem seitdem nicht mehr auslösen.
+- **Reverse Proxy/Docker-Netzwerk**: Ein Container-Rebuild vergibt meist
+  eine neue interne Docker-IP. Falls dein Nginx den Zielserver einmalig
+  auflöst und die IP danach nicht neu ermittelt (üblich bei einem
+  statischen `upstream`-Eintrag ohne dynamische DNS-Auflösung), zeigt er
+  nach einem Rebuild auf die alte, nicht mehr existierende IP – hilft dann
+  ein Neuladen/Neustart des Reverse-Proxy-Containers, nicht das Leeren des
+  Browser-Caches, ist das die wahrscheinlichere Ursache.
+
+Ein `secure`-Cookie-Problem (siehe `CLAUDE.md`) ist es bei einem bereits
+laufenden HTTPS-Setup **nicht** – das betrifft nur den direkten
+HTTP-Zugriff ohne eigenen Reverse Proxy.
 
 ## Weiterführende Doku
 

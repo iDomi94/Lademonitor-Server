@@ -45,6 +45,21 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Lademonitor", lifespan=lifespan)
 
+
+@app.middleware("http")
+async def _no_cache_html(request: Request, call_next):
+    """Verhindert, dass Browser die serverseitig gerenderten, login-status-
+    abhaengigen HTML-Seiten cachen - sonst kann nach einem Update (neues
+    Image) oder einem Login/Logout eine veraltete Seite aus dem Browser-Cache
+    angezeigt werden, obwohl der Server laengst anders antworten wuerde
+    (aeusserte sich bei einem Nutzer nach einem Rebuild als "Seite erst nach
+    Cache-Leeren wieder erreichbar")."""
+    response = await call_next(request)
+    if response.headers.get("content-type", "").startswith("text/html"):
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 app.include_router(auth.router)
 app.include_router(vehicles.router, dependencies=[Depends(get_current_user)])
 app.include_router(providers.router, dependencies=[Depends(get_current_user)])

@@ -6,6 +6,23 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.9.1] — 2026-08-25
+
+### Fixed
+- Web-UI funktioniert jetzt auch über den Home-Assistant-Ingress-
+  Sidebar-Button: Templates/Redirects nutzen relative statt absolute
+  Pfade – vorher führte ein Login-Redirect außerhalb des Ingress-Bereichs
+  auf eine falsche URL (404).
+- HTML-Seiten senden `Cache-Control: no-store`, damit Browser sie nicht
+  mehr zwischenspeichern – verhindert, dass nach einem Update/Rebuild
+  eine veraltete Seite angezeigt wird, bis der Browser-Cache manuell
+  geleert wird.
+
+### Docs
+- README (Add-on- und Server-Repo): neuer Abschnitt zu Ingress vs.
+  Direktport, warum beides nur lokal funktioniert, und wie externer
+  Zugriff (VPN oder eigener Reverse-Proxy-Vhost) eingerichtet wird.
+
 ## [0.9.0] — 2026-08-25
 
 ### Added

@@ -133,6 +133,23 @@ abweichenden iOS-Dateien) - fuer eine spaetere Anpassung: Login-Screen,
 Token in Keychain speichern, `Authorization: Bearer <token>`-Header auf
 allen Requests (`APIClient.swift`).
 
+**Update 2026-08-25 (Web-UI ingress-faehig gemacht, v0.9.1):** Alle
+serverseitig gerenderten Seiten/Redirects/`fetch()`-Aufrufe in
+`templates/` und `main.py::_page()` nutzen jetzt relative statt absolute
+Pfade - noetig, damit die App auch unter dem Home-Assistant-Ingress-
+Unterpfad (`/api/hassio_ingress/<token>/...`) funktioniert, nicht nur am
+Domain-Root. Ein Redirect auf einen absoluten Pfad wie `/login` fuehrte
+dort auf die HA-Wurzel statt in den Add-on-Bereich (404). Da alle Seiten/
+Endpunkte genau eine Ebene unter der jeweiligen Basis liegen, loesen
+relative Pfade unter Ingress UND am bisherigen Domain-Root (Unraid+Nginx)
+gleichermassen korrekt auf. Zusaetzlich neue Middleware
+(`main.py::_no_cache_html`) setzt `Cache-Control: no-store` auf alle
+HTML-Antworten - ein Nutzer sah nach einem Rebuild ueber seinen eigenen
+Nginx-Reverse-Proxy die App erst nach manuellem Leeren des Browser-Caches
+wieder erreichbar, plausibelste Erklaerung war eine vom Browser
+zwischengespeicherte, veraltete Seite (kein Cache-Control-Header vorhanden
+gewesen).
+
 ### Pro-Nutzer-Datentrennung
 
 Bewusste Entscheidung (nicht der erste Entwurf!): **jeder Nutzer hat seinen

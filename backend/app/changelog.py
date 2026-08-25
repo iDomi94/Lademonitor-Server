@@ -5,6 +5,15 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.9.1",
+        "date": "2026-08-25",
+        "title": "Ingress-Kompatibilitaet und Cache-Fix",
+        "changes": [
+            "Web-UI funktioniert jetzt auch ueber den Home-Assistant-Ingress-Sidebar-Button (relative statt absolute Pfade in Templates/Redirects) - vorher fuehrte ein Login-Redirect dort auf eine falsche URL (404).",
+            "HTML-Seiten werden nicht mehr vom Browser gecacht (Cache-Control: no-store) - verhindert, dass nach einem Update/Rebuild eine veraltete Seite angezeigt wird, bis der Browser-Cache manuell geleert wird.",
+        ],
+    },
+    {
         "version": "0.9.0",
         "date": "2026-08-25",
         "title": "Automatisches WebDAV-Backup",
