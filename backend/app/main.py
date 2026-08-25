@@ -1,3 +1,7 @@
+import asyncio
+import logging
+from contextlib import asynccontextmanager
+
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -8,12 +12,38 @@ from . import models
 from .auth import get_current_user, get_user_from_request
 from .changelog import CHANGELOG, VERSION
 from .database import Base, engine, get_db, run_light_migrations
-from .routers import auth, backup, geocoding, importer, locations, providers, sessions, stats, vehicles
+from .routers import auth, backup, geocoding, importer, locations, providers, sessions, stats, vehicles, webdav_backup
+from .webdav_backup import run_due_backups
 
 Base.metadata.create_all(bind=engine)
 run_light_migrations()
 
-app = FastAPI(title="Lademonitor")
+logger = logging.getLogger(__name__)
+
+# Alle 15 Minuten pruefen statt fest verdrahtet auf die kleinste moegliche
+# Frequenz (taeglich) zu takten - Nutzer koennen die Haeufigkeit nachtraeglich
+# aendern, ein zu grobes Scheduler-Intervall wuerde das erst verspaetet greifen
+# lassen. 15 Minuten sind fuer ein Heimnetz-Backup mehr als praezise genug.
+WEBDAV_SCHEDULER_INTERVAL_SECONDS = 15 * 60
+
+
+async def _webdav_scheduler_loop() -> None:
+    while True:
+        try:
+            await asyncio.to_thread(run_due_backups)
+        except Exception:
+            logger.exception("WebDAV-Backup-Scheduler-Durchlauf fehlgeschlagen")
+        await asyncio.sleep(WEBDAV_SCHEDULER_INTERVAL_SECONDS)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    task = asyncio.create_task(_webdav_scheduler_loop())
+    yield
+    task.cancel()
+
+
+app = FastAPI(title="Lademonitor", lifespan=lifespan)
 
 app.include_router(auth.router)
 app.include_router(vehicles.router, dependencies=[Depends(get_current_user)])
@@ -24,6 +54,7 @@ app.include_router(stats.router, dependencies=[Depends(get_current_user)])
 app.include_router(importer.router, dependencies=[Depends(get_current_user)])
 app.include_router(geocoding.router, dependencies=[Depends(get_current_user)])
 app.include_router(backup.router, dependencies=[Depends(get_current_user)])
+app.include_router(webdav_backup.router, dependencies=[Depends(get_current_user)])
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")

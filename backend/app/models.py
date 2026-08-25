@@ -33,6 +33,12 @@ class SessionSource(str, enum.Enum):
     IMPORT = "import"
 
 
+class WebdavBackupFrequency(str, enum.Enum):
+    DAILY = "daily"
+    WEEKLY = "weekly"
+    MONTHLY = "monthly"
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -179,3 +185,42 @@ class ChargingSession(Base):
     vehicle: Mapped["Vehicle"] = relationship(back_populates="sessions")
     provider: Mapped["Provider"] = relationship(back_populates="sessions")
     location: Mapped["ChargingLocation"] = relationship(back_populates="sessions")
+
+
+class WebdavBackupConfig(Base):
+    """Ein Konfigurationssatz pro Nutzer (passend zur Pro-Nutzer-
+    Datentrennung im Rest der App - jeder Nutzer sichert nur seine eigenen
+    Daten auf sein eigenes WebDAV-Ziel). `password` liegt bewusst im Klartext
+    in der DB, genau wie die uebrigen Zugangsdaten dieser App (z.B.
+    Auth-Tokens) - kein Secrets-Vault vorhanden, Postgres ist ohnehin nur via
+    localhost im selben Container erreichbar."""
+    __tablename__ = "webdav_backup_configs"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), unique=True, index=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    url: Mapped[str] = mapped_column(String, default="")
+    username: Mapped[str | None] = mapped_column(String, nullable=True)
+    password: Mapped[str | None] = mapped_column(String, nullable=True)
+    frequency: Mapped[WebdavBackupFrequency] = mapped_column(
+        Enum(WebdavBackupFrequency), default=WebdavBackupFrequency.DAILY
+    )
+    retention_days: Mapped[int] = mapped_column(Integer, default=30)
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_status: Mapped[str | None] = mapped_column(String, nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class WebdavBackupFile(Base):
+    """Protokoll der selbst hochgeladenen Backup-Dateien pro Nutzer, damit
+    die Aufbewahrungsfrist durchgesetzt werden kann, ohne bei jedem Lauf ein
+    WebDAV-PROPFIND-Verzeichnislisting parsen zu muessen (Server-Antworten
+    dafuer unterscheiden sich stark) - wir kennen unsere eigenen Uploads
+    bereits aus der DB."""
+    __tablename__ = "webdav_backup_files"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    filename: Mapped[str] = mapped_column(String)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)

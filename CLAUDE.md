@@ -396,6 +396,51 @@ flexibles Datenaustauschformat - unterscheidet sich vom Spritmonitor-Importer
   im-/exportiert werden sollen, braeuchte es echte Spaltenerkennung wie beim
   Spritmonitor-Importer.
 
+## Automatisches WebDAV-Backup (`webdav_backup.py`, `routers/webdav_backup.py`)
+
+Laedt in konfigurierbarer Haeufigkeit dieselbe ZIP wie der manuelle Export
+(dafuer wurde `export_backup()` in `routers/backup.py` in eine wiederverwendbare
+`build_backup_zip(db, user)`-Funktion aufgeteilt) automatisch per WebDAV-PUT
+auf ein Nutzer-Ziel hoch (z.B. Nextcloud).
+
+- **Ein `WebdavBackupConfig` pro Nutzer** (nicht global) - konsistent mit der
+  Pro-Nutzer-Datentrennung im Rest der App: jeder sichert nur seine eigenen
+  Daten auf sein eigenes Ziel. `password` liegt im Klartext in der DB, wie
+  auch die Auth-Tokens - kein Secrets-Vault vorhanden, Postgres ist ohnehin
+  nur via localhost im Container erreichbar. GET/PUT `/api/backup/webdav`
+  geben das Passwort nie zurueck (nur `has_password: bool`) - ein leeres
+  Passwort-Feld beim Speichern laesst ein bereits gesetztes Passwort
+  unveraendert.
+- **Kein neuer Scheduler-Dienst/Cron** - ein einzelner `asyncio`-Task
+  (`main.py::_webdav_scheduler_loop`, per `lifespan`-Kontextmanager statt des
+  deprecateten `@app.on_event`) prueft alle 15 Minuten per
+  `asyncio.to_thread(run_due_backups)`, ob fuer irgendeinen Nutzer die
+  konfigurierte Haeufigkeit (taeglich/woechentlich/monatlich, feste Tage-Werte
+  1/7/30 statt echter Kalendermonate) abgelaufen ist. `to_thread` bewusst,
+  weil die eigentliche Backup-Logik komplett synchron ist (sync SQLAlchemy
+  `Session`, sync `httpx.Client`, wie der Rest der App) - ein Backup-Lauf soll
+  den Event-Loop fuer alle anderen Requests waehrenddessen nicht blockieren.
+- **Kein PROPFIND-Verzeichnislisting fuers Aufraeumen alter Backups** (WebDAV-
+  Server antworten darauf mit teils sehr unterschiedlichem XML) - stattdessen
+  fuehrt die neue Tabelle `WebdavBackupFile` selbst Buch ueber jede
+  hochgeladene Datei; die Retention-Logik loescht daraus einfach alles
+  aelter als `retention_days`, sowohl per WebDAV-DELETE als auch die DB-Zeile
+  (bei fehlgeschlagenem DELETE bleibt die DB-Zeile bewusst stehen, damit der
+  naechste Lauf es erneut versucht statt die Datei "zu vergessen").
+- **Dateiname mit Mikrosekunden-Praezision**
+  (`lademonitor-backup-%Y-%m-%dT%H-%M-%S-%f.zip`) statt nur Sekunden - bei
+  einer Namenskollision (z.B. zweimal schnell hintereinander auf "Jetzt
+  sichern" geklickt) wuerde die Retention-Logik sonst faelschlich die gerade
+  erst hochgeladene Datei fuer eine gleichnamige aeltere DB-Zeile loeschen.
+- Vor jedem Upload ein bestmoeglicher `MKCOL` auf den Zielordner (nicht
+  rekursiv, Elternordner muessen existieren) - schlaegt bei den meisten
+  Servern mit 405 fehl, wenn der Ordner schon da ist, das wird ignoriert.
+- `POST /api/backup/webdav/run` dient als manueller "Jetzt sichern"-Button
+  UND gleichzeitig als Verbindungstest (kein separater Test-Endpunkt) -
+  einfacher, weil beides praktisch derselbe Codepfad ist.
+- Web-UI: neue Sektion "Automatisches WebDAV-Backup" unten in
+  `settings.html`, direkt unter "Daten-Backup".
+
 ## In-App-Versionierung (`backend/app/changelog.py`)
 
 Nach dem Vorbild von [media-vault](https://github.com/halvar20000/media-vault)

@@ -76,6 +76,40 @@
 </form>
 <div id="backup-import-result" style="display:none; margin-top:8px; font-size:0.9em"></div>
 
+<h2>Automatisches WebDAV-Backup</h2>
+<p style="color:var(--muted); font-size:0.9em">
+  Lädt in der gewählten Häufigkeit automatisch dieselbe Backup-ZIP wie oben
+  auf einen WebDAV-Server hoch (z.B. Nextcloud unter
+  <code>https://deine-cloud/remote.php/dav/files/NUTZERNAME/Ordner</code> –
+  ein eigenes App-Passwort statt des Hauptpassworts wird empfohlen). Der
+  Zielordner sollte bereits existieren.
+</p>
+<form class="inline-form" id="webdav-form">
+  <div>
+    <label><input type="checkbox" id="wd-enabled" style="width:auto; display:inline-block; margin-right:6px">Aktiviert</label>
+  </div>
+  <div>
+    <label>WebDAV-Adresse (Zielordner)</label>
+    <input id="wd-url" placeholder="https://cloud.example.com/remote.php/dav/files/user/Backups">
+  </div>
+  <div><label>Benutzername</label><input id="wd-username"></div>
+  <div><label>Passwort</label><input type="password" id="wd-password" placeholder="Passwort"></div>
+  <div>
+    <label>Häufigkeit</label>
+    <select id="wd-frequency">
+      <option value="daily">Täglich</option>
+      <option value="weekly">Wöchentlich</option>
+      <option value="monthly">Monatlich</option>
+    </select>
+  </div>
+  <div><label>Aufbewahrung (Tage)</label><input type="number" id="wd-retention" value="30" min="1"></div>
+  <div class="form-actions">
+    <button type="button" id="wd-run-btn" style="background:var(--accent2)">Jetzt sichern</button>
+    <button type="submit">Speichern</button>
+  </div>
+</form>
+<div id="webdav-status" style="margin-top:8px; font-size:0.9em"></div>
+
 {% if user.is_admin %}
 <h2>Benutzerverwaltung</h2>
 <p style="color:var(--muted); font-size:0.9em">
@@ -388,6 +422,71 @@ document.getElementById('backup-import-form').addEventListener('submit', async (
   }
 });
 
+// ---------- WebDAV-Backup ----------
+
+function renderWebdavStatus(config) {
+  const el = document.getElementById('webdav-status');
+  if (!config.last_run_at) {
+    el.textContent = 'Noch kein automatisches Backup ausgeführt.';
+    el.style.color = 'var(--muted)';
+    return;
+  }
+  const when = new Date(config.last_run_at + 'Z').toLocaleString('de-DE');
+  if (config.last_status === 'success') {
+    el.textContent = `Letztes Backup erfolgreich: ${when}`;
+    el.style.color = 'var(--accent)';
+  } else {
+    el.textContent = `Letztes Backup fehlgeschlagen (${when}): ${config.last_error || 'unbekannter Fehler'}`;
+    el.style.color = 'var(--danger)';
+  }
+}
+
+async function loadWebdavConfig() {
+  const config = await (await fetch('/api/backup/webdav')).json();
+  document.getElementById('wd-enabled').checked = config.enabled;
+  document.getElementById('wd-url').value = config.url;
+  document.getElementById('wd-username').value = config.username || '';
+  document.getElementById('wd-password').placeholder = config.has_password ? 'Passwort gesetzt – leer lassen zum Beibehalten' : 'Passwort';
+  document.getElementById('wd-frequency').value = config.frequency;
+  document.getElementById('wd-retention').value = config.retention_days;
+  renderWebdavStatus(config);
+}
+
+document.getElementById('webdav-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const payload = {
+    enabled: document.getElementById('wd-enabled').checked,
+    url: document.getElementById('wd-url').value.trim(),
+    username: document.getElementById('wd-username').value || null,
+    password: document.getElementById('wd-password').value || null,
+    frequency: document.getElementById('wd-frequency').value,
+    retention_days: parseInt(document.getElementById('wd-retention').value || 30),
+  };
+  const res = await fetch('/api/backup/webdav', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) { alert('Fehler: ' + await res.text()); return; }
+  document.getElementById('wd-password').value = '';
+  const config = await res.json();
+  document.getElementById('wd-password').placeholder = config.has_password ? 'Passwort gesetzt – leer lassen zum Beibehalten' : 'Passwort';
+  renderWebdavStatus(config);
+});
+
+document.getElementById('wd-run-btn').addEventListener('click', async () => {
+  const btn = document.getElementById('wd-run-btn');
+  btn.disabled = true;
+  btn.textContent = 'Läuft…';
+  try {
+    const res = await fetch('/api/backup/webdav/run', { method: 'POST' });
+    if (!res.ok) { alert('Fehler: ' + await res.text()); return; }
+    renderWebdavStatus(await res.json());
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Jetzt sichern';
+  }
+});
+
 // ---------- Benutzerverwaltung (nur fuer Admins gerendert) ----------
 
 async function loadUsers() {
@@ -415,6 +514,7 @@ async function deleteUser(id) {
   await loadProviders();
   await loadLocations();
   await loadUsers();
+  await loadWebdavConfig();
 })();
 </script>
 {% endblock %}

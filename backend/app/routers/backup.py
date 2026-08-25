@@ -96,8 +96,10 @@ def _write_csv(fieldnames: list[str], rows: list[dict]) -> str:
     return buf.getvalue()
 
 
-@router.get("/export")
-def export_backup(db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+def build_backup_zip(db: Session, user: models.User) -> bytes:
+    """Baut dieselbe Backup-ZIP wie der manuelle Export - eigene Funktion,
+    damit sowohl GET /export als auch der WebDAV-Auto-Backup-Scheduler
+    (siehe ../webdav_backup.py) dieselbe Logik nutzen statt sie zu duplizieren."""
     vehicles = (
         db.query(models.Vehicle)
         .filter(models.Vehicle.user_id == user.id)
@@ -187,11 +189,15 @@ def export_backup(db: Session = Depends(get_db), user: models.User = Depends(get
         zf.writestr("providers.csv", _write_csv(PROVIDER_FIELDS, provider_rows))
         zf.writestr("locations.csv", _write_csv(LOCATION_FIELDS, location_rows))
         zf.writestr("sessions.csv", _write_csv(SESSION_FIELDS, session_rows))
-    buf.seek(0)
+    return buf.getvalue()
 
+
+@router.get("/export")
+def export_backup(db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+    content = build_backup_zip(db, user)
     filename = f"lademonitor-backup-{datetime.utcnow().strftime('%Y-%m-%d')}.zip"
     return Response(
-        content=buf.getvalue(),
+        content=content,
         media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

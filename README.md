@@ -131,9 +131,15 @@ Ladeort passen, automatisch mit Anbieter/Preis vorbefüllt.
 
 ## Backup
 
-Zwei Ebenen:
+Drei Ebenen:
 - **Eingebauter Export/Import** (Einstellungen → Daten-Backup): ZIP mit CSVs
   aller eigenen Daten, ideal für eine Server-Neuinstallation.
+- **Automatisches WebDAV-Backup** (Einstellungen → Automatisches
+  WebDAV-Backup): lädt genau diese ZIP in konfigurierbarer Häufigkeit
+  (täglich/wöchentlich/monatlich) automatisch auf einen WebDAV-Server hoch
+  (z.B. Nextcloud) und räumt dort selbst hochgeladene Backups nach der
+  eingestellten Aufbewahrungsfrist wieder auf. Pro Nutzer konfigurierbar,
+  läuft im Hintergrund ohne Cron/externen Scheduler.
 - **Rohes Volume-Backup**: Bei Compose liegt die DB unter `./data/postgres`,
   beim Einzelcontainer unter dem gemounteten `/config`-Pfad – für Unraid
   reicht ein regelmäßiger Ordner-Backup-Job (z.B. CA Backup/Restore Appdata).

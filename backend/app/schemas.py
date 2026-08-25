@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
-from .models import ChargingType, SessionSource
+from .models import ChargingType, SessionSource, WebdavBackupFrequency
 
 
 # ---------- Auth ----------
@@ -249,3 +249,28 @@ class StatsSummary(BaseModel):
     total_km_driven: int | None = None
     by_provider: list[ProviderStat] = []
     monthly: list[MonthlyStat]
+
+
+# ---------- WebDAV-Backup ----------
+
+class WebdavBackupConfigIn(BaseModel):
+    enabled: bool = False
+    url: str = ""
+    username: str | None = None
+    # None/leer = Passwort unveraendert lassen (Formular zeigt ein bereits
+    # gesetztes Passwort nie im Klartext an, siehe has_password unten)
+    password: str | None = None
+    frequency: WebdavBackupFrequency = WebdavBackupFrequency.DAILY
+    retention_days: int = 30
+
+
+class WebdavBackupConfigOut(BaseModel):
+    enabled: bool
+    url: str
+    username: str | None
+    has_password: bool
+    frequency: WebdavBackupFrequency
+    retention_days: int
+    last_run_at: datetime | None
+    last_status: str | None
+    last_error: str | None
