@@ -6,6 +6,19 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.9.0] — 2026-08-25
+
+### Added
+- Automatisches WebDAV-Backup: neue Sektion in den Einstellungen, lädt die
+  Backup-ZIP in konfigurierbarer Häufigkeit (täglich/wöchentlich/monatlich)
+  automatisch auf einen WebDAV-Server hoch (z.B. Nextcloud).
+- Aufbewahrungsfrist in Tagen konfigurierbar - selbst hochgeladene, ältere
+  Backups werden automatisch wieder entfernt.
+- "Jetzt sichern"-Button für einen sofortigen Lauf inkl. Erfolg/Fehler-Anzeige
+  - dient gleichzeitig als Verbindungstest.
+- Läuft im Hintergrund (alle 15 Minuten geprüft), kein Cron oder externer
+  Scheduler nötig.
+
 ## [0.8.2] — 2026-08-24
 
 ### Added

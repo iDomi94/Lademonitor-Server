@@ -5,6 +5,17 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.9.0",
+        "date": "2026-08-25",
+        "title": "Automatisches WebDAV-Backup",
+        "changes": [
+            "Neue Sektion in den Einstellungen: laedt die Backup-ZIP in konfigurierbarer Haeufigkeit (taeglich/woechentlich/monatlich) automatisch auf einen WebDAV-Server hoch (z.B. Nextcloud).",
+            "Aufbewahrungsfrist in Tagen konfigurierbar - selbst hochgeladene, aeltere Backups werden automatisch wieder entfernt.",
+            "\"Jetzt sichern\"-Button loest einen sofortigen Lauf aus und zeigt Erfolg/Fehler direkt an - dient gleichzeitig als Verbindungstest.",
+            "Laeuft im Hintergrund (alle 15 Minuten geprueft), kein Cron oder externer Scheduler noetig.",
+        ],
+    },
+    {
         "version": "0.8.2",
         "date": "2026-08-24",
         "title": "Erste Version",
