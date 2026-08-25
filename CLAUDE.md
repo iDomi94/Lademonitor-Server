@@ -411,13 +411,31 @@ Vanilla-JS zum Oeffnen/Schliessen). `/health` liefert `version` zusaetzlich
 als JSON mit.
 
 **Release-Workflow:** Bei einem Release einen neuen Eintrag oben in
-`CHANGELOG` ergaenzen (+ denselben Text ins root `CHANGELOG.md`), dann
-`git tag vX.Y.Z && git push origin vX.Y.Z` - das triggert den
+`CHANGELOG` ergaenzen (+ denselben Text ins root `CHANGELOG.md`), COMMITTEN,
+dann erst `git tag vX.Y.Z && git push origin vX.Y.Z` - das triggert den
 GHCR-Publish-Workflow (siehe unten), der bei genau diesem Tag-Muster
 `latest`/`X.Y.Z`/`X.Y` aktualisiert. Die Versionsnummer hier und der
 Git-Tag sollten synchron bleiben (bewusst keine automatische Ableitung
 z.B. aus `git describe` - der Wert im Modal soll auch bei einem
 Dev-/Beta-Checkout ohne Git-Metadaten stabil und lesbar sein).
+
+**Update 2026-08-24:** Der manuelle Sync ist genau beim allerersten Tag
+(`v0.8.1`) schon einmal auseinandergelaufen (Tag gepusht, `changelog.py`
+zeigte noch die vorherige Zwischenversion `1.0.0`) - dadurch zeigt das bereits
+gebaute `v0.8.1`-Image dauerhaft faelschlich "v1.0.0" im Header (bewusst NICHT
+per Tag-Neuvergabe korrigiert, siehe unten) - deshalb gibt es jetzt einen
+harten Schutz statt nur der Konvention oben: der Schritt "Verify tag matches
+in-app VERSION" in `.github/workflows/docker-publish.yml` laeuft bei jedem
+`v*.*.*`-Tag-Push, vergleicht den Tag-Namen (ohne `v`-Prefix) mit
+`backend.app.changelog.VERSION` per `python3 -c "from backend.app.changelog
+import VERSION; ..."` und bricht den Build mit Fehler ab, wenn beides nicht
+uebereinstimmt (Tag existiert dann zwar in Git, aber es wird kein Image
+gebaut/gepusht - im Zweifel den Tag loeschen und mit passendem Changelog neu
+setzen). Bewusst ein reiner String-Vergleich ohne SemVer-Parsing, da beide
+Werte ohnehin von Hand gepflegt werden. Die eigentliche Korrektur kam als
+neuer Tag `v0.8.2` (bewusst kein Force-Retag von `v0.8.1` - Nutzer hat sich
+fuer den konventionelleren Weg entschieden, `v0.8.1` bleibt im GHCR mit dem
+Anzeige-Bug stehen, aber nicht mehr `latest`).
 
 ## Deployment-Varianten
 
