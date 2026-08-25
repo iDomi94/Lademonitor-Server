@@ -86,9 +86,9 @@ let allSessions = [];
 let editingSessionId = null;
 
 async function loadDropdowns() {
-  vehicles = await (await fetch('/api/vehicles')).json();
-  providers = await (await fetch('/api/providers')).json();
-  locations = await (await fetch('/api/locations')).json();
+  vehicles = await (await fetch('api/vehicles')).json();
+  providers = await (await fetch('api/providers')).json();
+  locations = await (await fetch('api/locations')).json();
 
   const vSel = document.getElementById('f-vehicle');
   vSel.innerHTML = vehicles.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
@@ -146,7 +146,7 @@ function consumptionCell(kwhPer100km, method) {
 }
 
 async function loadSessions() {
-  allSessions = await (await fetch('/api/sessions' + filterQueryString())).json();
+  allSessions = await (await fetch('api/sessions' + filterQueryString())).json();
   const tbody = document.getElementById('session-rows');
   tbody.innerHTML = allSessions.map(s => {
     const vehicle = vehicles.find(v => v.id === s.vehicle_id);
@@ -224,7 +224,7 @@ document.getElementById('cancel-edit-btn').addEventListener('click', cancelEdit)
 
 async function deleteSession(id) {
   if (!confirm('Ladevorgang wirklich löschen?')) return;
-  await fetch(`/api/sessions/${id}`, { method: 'DELETE' });
+  await fetch(`api/sessions/${id}`, { method: 'DELETE' });
   if (editingSessionId === id) cancelEdit();
   loadSessions();
 }
@@ -253,13 +253,13 @@ document.getElementById('session-form').addEventListener('submit', async (e) => 
     // Öffnen + Speichern gilt als Review: automatisch erkannte Ladevorgänge
     // verlieren dadurch ihr needs_review-Flag, ohne eigenes UI-Element dafür.
     patchPayload.needs_review = false;
-    res = await fetch(`/api/sessions/${editingSessionId}`, {
+    res = await fetch(`api/sessions/${editingSessionId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patchPayload)
     });
   } else {
-    res = await fetch('/api/sessions', {
+    res = await fetch('api/sessions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)

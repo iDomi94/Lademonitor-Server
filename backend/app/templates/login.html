@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Anmelden – Lademonitor</title>
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="static/style.css">
   <style>
     .auth-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
     .auth-card { width: 100%; max-width: 360px; }
@@ -26,7 +26,7 @@
         <button type="submit">Anmelden</button>
         <div class="auth-error" id="login-error"></div>
       </form>
-      <div class="auth-switch">Noch kein Konto? <a href="/register">Registrieren</a></div>
+      <div class="auth-switch">Noch kein Konto? <a href="register">Registrieren</a></div>
     </div>
   </div>
   <script>
@@ -34,7 +34,7 @@
       e.preventDefault();
       const errorEl = document.getElementById('login-error');
       errorEl.textContent = '';
-      const res = await fetch('/api/auth/login', {
+      const res = await fetch('api/auth/login', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           username: document.getElementById('l-username').value,
@@ -42,7 +42,7 @@
         })
       });
       if (res.ok) {
-        window.location = '/';
+        window.location = '.';
       } else {
         const data = await res.json().catch(() => ({}));
         errorEl.textContent = data.detail || 'Anmeldung fehlgeschlagen.';

@@ -30,7 +30,7 @@
 
 <script>
 async function loadVehicles() {
-  const vehicles = await (await fetch('/api/vehicles')).json();
+  const vehicles = await (await fetch('api/vehicles')).json();
   document.getElementById('i-vehicle').innerHTML =
     vehicles.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
 }
@@ -43,7 +43,7 @@ document.getElementById('import-form').addEventListener('submit', async (e) => {
   const formData = new FormData();
   formData.append('file', file);
 
-  const res = await fetch(`/api/import/spritmonitor/preview?vehicle_id=${vehicleId}`, {
+  const res = await fetch(`api/import/spritmonitor/preview?vehicle_id=${vehicleId}`, {
     method: 'POST', body: formData
   });
   if (!res.ok) { alert('Fehler: ' + await res.text()); return; }
@@ -66,7 +66,7 @@ document.getElementById('import-form').addEventListener('submit', async (e) => {
   document.getElementById('preview-area').style.display = 'block';
 
   document.getElementById('commit-btn').onclick = async () => {
-    const commitRes = await fetch(`/api/import/spritmonitor/commit?vehicle_id=${vehicleId}`, {
+    const commitRes = await fetch(`api/import/spritmonitor/commit?vehicle_id=${vehicleId}`, {
       method: 'POST', body: formData
     });
     const result = await commitRes.json();

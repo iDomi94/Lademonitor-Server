@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Registrieren – Lademonitor</title>
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="static/style.css">
   <style>
     .auth-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
     .auth-card { width: 100%; max-width: 360px; }
@@ -29,7 +29,7 @@
         <button type="submit">Registrieren</button>
         <div class="auth-error" id="register-error"></div>
       </form>
-      <div class="auth-switch">Schon ein Konto? <a href="/login">Anmelden</a></div>
+      <div class="auth-switch">Schon ein Konto? <a href="login">Anmelden</a></div>
     </div>
   </div>
   <script>
@@ -43,7 +43,7 @@
         errorEl.textContent = 'Passwörter stimmen nicht überein.';
         return;
       }
-      const res = await fetch('/api/auth/register', {
+      const res = await fetch('api/auth/register', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           username: document.getElementById('r-username').value,
@@ -51,7 +51,7 @@
         })
       });
       if (res.ok) {
-        window.location = '/';
+        window.location = '.';
       } else {
         const data = await res.json().catch(() => ({}));
         errorEl.textContent = data.detail || 'Registrierung fehlgeschlagen.';

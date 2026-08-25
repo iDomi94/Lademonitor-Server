@@ -62,7 +62,7 @@
   werden übersprungen statt überschrieben.
 </p>
 <div class="form-actions">
-  <a href="/api/backup/export"><button type="button">Backup exportieren</button></a>
+  <a href="api/backup/export"><button type="button">Backup exportieren</button></a>
 </div>
 
 <form class="inline-form" id="backup-import-form" style="margin-top:16px">
@@ -137,7 +137,7 @@ function actionButtons(kind, id) {
 // ---------- Fahrzeuge ----------
 
 async function loadVehicles() {
-  vehicles = await (await fetch('/api/vehicles')).json();
+  vehicles = await (await fetch('api/vehicles')).json();
   document.getElementById('vehicle-rows').innerHTML = vehicles.map(v => `
     <tr><td>${v.name}</td><td>${v.external_id}</td><td>${[v.brand, v.model].filter(Boolean).join(' ') || '–'}</td>
     <td>${v.battery_capacity_kwh ?? '–'}</td>
@@ -172,7 +172,7 @@ document.getElementById('vehicle-cancel-btn').addEventListener('click', cancelEd
 
 async function deleteItemVehicle(id) {
   if (!confirm('Fahrzeug wirklich löschen? Alle zugehörigen Ladevorgänge werden dabei mitgelöscht.')) return;
-  await fetch(`/api/vehicles/${id}`, { method: 'DELETE' });
+  await fetch(`api/vehicles/${id}`, { method: 'DELETE' });
   if (editingVehicleId === id) cancelEditVehicle();
   loadVehicles();
 }
@@ -180,7 +180,7 @@ async function deleteItemVehicle(id) {
 document.getElementById('vehicle-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   if (editingVehicleId) {
-    await fetch(`/api/vehicles/${editingVehicleId}`, {
+    await fetch(`api/vehicles/${editingVehicleId}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: document.getElementById('v-name').value,
@@ -191,7 +191,7 @@ document.getElementById('vehicle-form').addEventListener('submit', async (e) => 
     });
     cancelEditVehicle();
   } else {
-    await fetch('/api/vehicles', {
+    await fetch('api/vehicles', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: document.getElementById('v-name').value,
@@ -209,7 +209,7 @@ document.getElementById('vehicle-form').addEventListener('submit', async (e) => 
 // ---------- Ladeanbieter ----------
 
 async function loadProviders() {
-  providers = await (await fetch('/api/providers')).json();
+  providers = await (await fetch('api/providers')).json();
   document.getElementById('provider-rows').innerHTML = providers.map(p => `
     <tr><td>${p.name}</td><td>${p.last_price_ac_per_kwh ?? '–'}</td><td>${p.last_price_dc_per_kwh ?? '–'}</td>
     <td style="white-space:nowrap">${actionButtons('Provider', p.id)}</td></tr>`).join('');
@@ -241,7 +241,7 @@ document.getElementById('provider-cancel-btn').addEventListener('click', cancelE
 
 async function deleteItemProvider(id) {
   if (!confirm('Anbieter wirklich löschen?')) return;
-  await fetch(`/api/providers/${id}`, { method: 'DELETE' });
+  await fetch(`api/providers/${id}`, { method: 'DELETE' });
   if (editingProviderId === id) cancelEditProvider();
   loadProviders();
 }
@@ -254,13 +254,13 @@ document.getElementById('provider-form').addEventListener('submit', async (e) =>
     last_price_dc_per_kwh: document.getElementById('p-dc').value || null,
   };
   if (editingProviderId) {
-    await fetch(`/api/providers/${editingProviderId}`, {
+    await fetch(`api/providers/${editingProviderId}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
     cancelEditProvider();
   } else {
-    await fetch('/api/providers', {
+    await fetch('api/providers', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
@@ -272,7 +272,7 @@ document.getElementById('provider-form').addEventListener('submit', async (e) =>
 // ---------- Ladeorte ----------
 
 async function loadLocations() {
-  locations = await (await fetch('/api/locations')).json();
+  locations = await (await fetch('api/locations')).json();
   document.getElementById('location-rows').innerHTML = locations.map(l => {
     const provider = providers.find(p => p.id === l.default_provider_id);
     return `<tr><td>${l.name}</td><td>${l.latitude.toFixed(4)}, ${l.longitude.toFixed(4)}</td>
@@ -324,7 +324,7 @@ document.getElementById('l-geocode-btn').addEventListener('click', async () => {
 
   let results = [];
   try {
-    const res = await fetch('/api/geocode/forward?query=' + encodeURIComponent(query));
+    const res = await fetch('api/geocode/forward?query=' + encodeURIComponent(query));
     if (res.ok) results = await res.json();
   } catch (err) {
     // wird unten als "keine Treffer" behandelt
@@ -356,7 +356,7 @@ document.getElementById('l-geocode-btn').addEventListener('click', async () => {
 
 async function deleteItemLocation(id) {
   if (!confirm('Ladeort wirklich löschen?')) return;
-  await fetch(`/api/locations/${id}`, { method: 'DELETE' });
+  await fetch(`api/locations/${id}`, { method: 'DELETE' });
   if (editingLocationId === id) cancelEditLocation();
   loadLocations();
 }
@@ -371,13 +371,13 @@ document.getElementById('location-form').addEventListener('submit', async (e) =>
     default_provider_id: document.getElementById('l-provider').value || null,
   };
   if (editingLocationId) {
-    await fetch(`/api/locations/${editingLocationId}`, {
+    await fetch(`api/locations/${editingLocationId}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
     cancelEditLocation();
   } else {
-    await fetch('/api/locations', {
+    await fetch('api/locations', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
@@ -402,7 +402,7 @@ document.getElementById('backup-import-form').addEventListener('submit', async (
   resultDiv.textContent = 'Importiere…';
 
   try {
-    const res = await fetch('/api/backup/import', { method: 'POST', body: formData });
+    const res = await fetch('api/backup/import', { method: 'POST', body: formData });
     if (!res.ok) {
       resultDiv.textContent = 'Fehler: ' + await res.text();
       return;
@@ -442,7 +442,7 @@ function renderWebdavStatus(config) {
 }
 
 async function loadWebdavConfig() {
-  const config = await (await fetch('/api/backup/webdav')).json();
+  const config = await (await fetch('api/backup/webdav')).json();
   document.getElementById('wd-enabled').checked = config.enabled;
   document.getElementById('wd-url').value = config.url;
   document.getElementById('wd-username').value = config.username || '';
@@ -462,7 +462,7 @@ document.getElementById('webdav-form').addEventListener('submit', async (e) => {
     frequency: document.getElementById('wd-frequency').value,
     retention_days: parseInt(document.getElementById('wd-retention').value || 30),
   };
-  const res = await fetch('/api/backup/webdav', {
+  const res = await fetch('api/backup/webdav', {
     method: 'PUT', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   });
@@ -478,7 +478,7 @@ document.getElementById('wd-run-btn').addEventListener('click', async () => {
   btn.disabled = true;
   btn.textContent = 'Läuft…';
   try {
-    const res = await fetch('/api/backup/webdav/run', { method: 'POST' });
+    const res = await fetch('api/backup/webdav/run', { method: 'POST' });
     if (!res.ok) { alert('Fehler: ' + await res.text()); return; }
     renderWebdavStatus(await res.json());
   } finally {
@@ -492,7 +492,7 @@ document.getElementById('wd-run-btn').addEventListener('click', async () => {
 async function loadUsers() {
   const rows = document.getElementById('user-rows');
   if (!rows) return; // Nicht-Admins sehen die Sektion gar nicht
-  const users = await (await fetch('/api/auth/users')).json();
+  const users = await (await fetch('api/auth/users')).json();
   rows.innerHTML = users.map(u => `
     <tr>
       <td>${u.username}</td>
@@ -504,7 +504,7 @@ async function loadUsers() {
 
 async function deleteUser(id) {
   if (!confirm('Konto wirklich löschen?')) return;
-  const res = await fetch(`/api/auth/users/${id}`, { method: 'DELETE' });
+  const res = await fetch(`api/auth/users/${id}`, { method: 'DELETE' });
   if (!res.ok) { alert('Fehler: ' + await res.text()); return; }
   loadUsers();
 }

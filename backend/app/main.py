@@ -66,7 +66,7 @@ def _page(request: Request, db: Session, template_name: str):
     da Seiten umleiten statt mit 401 antworten sollen."""
     user = get_user_from_request(request, db)
     if not user:
-        return RedirectResponse("/login", status_code=303)
+        return RedirectResponse("login", status_code=303)
     return templates.TemplateResponse(
         template_name,
         {"request": request, "user": user, "version": VERSION, "changelog": CHANGELOG},
@@ -96,14 +96,14 @@ def settings_page(request: Request, db: Session = Depends(get_db)):
 @app.get("/login", response_class=HTMLResponse)
 def login_page(request: Request, db: Session = Depends(get_db)):
     if get_user_from_request(request, db):
-        return RedirectResponse("/", status_code=303)
+        return RedirectResponse(".", status_code=303)
     return templates.TemplateResponse("login.html", {"request": request})
 
 
 @app.get("/register", response_class=HTMLResponse)
 def register_page(request: Request, db: Session = Depends(get_db)):
     if get_user_from_request(request, db):
-        return RedirectResponse("/", status_code=303)
+        return RedirectResponse(".", status_code=303)
     return templates.TemplateResponse("register.html", {"request": request})
 
 
