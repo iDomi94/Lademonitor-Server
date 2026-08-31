@@ -6,6 +6,24 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.10.1] — 2026-08-31
+
+### Fixed
+- **Backup-Import in ein zweites Konto derselben Instanz übersprang restlos
+  alles** (`0 importiert, 46 übersprungen`). Die Prüfung auf bereits
+  vorhandene Datensätze lief über alle Nutzer hinweg statt nur über die
+  eigenen – die UUIDs aus der ZIP existierten bereits, nur eben beim
+  exportierenden Konto. Der importierende Nutzer bekommt jetzt eigene Kopien
+  mit neu vergebenen IDs; die Fremdschlüssel werden dabei mitgezogen.
+- Der Restore auf einen frischen Server behält die Original-IDs unverändert
+  bei, und ein mehrfach ausgeführter Import legt weiterhin nichts doppelt an.
+- Bereits vorhandene Datensätze werden zusätzlich an ihren Fachdaten erkannt
+  (Fahrzeug an der External ID, Anbieter am Namen, Ladeort an Name +
+  Koordinaten, Ladevorgang an Fahrzeug + Startzeit). Dadurch führt eine ZIP
+  von einem *anderen* Server gleiche Einträge zusammen, statt sie zu
+  duplizieren – und bricht nicht mehr mit HTTP 500 ab, wenn dort ein Fahrzeug
+  mit derselben External ID existiert.
+
 ## [0.10.0] — 2026-08-31
 
 ### Added

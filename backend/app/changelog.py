@@ -5,6 +5,16 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.10.1",
+        "date": "2026-08-31",
+        "title": "Backup-Import in ein zweites Konto repariert",
+        "changes": [
+            "Backup-Import in ein anderes Nutzerkonto derselben Instanz uebersprang bisher restlos alles (\"0 importiert, 46 uebersprungen\"): die Pruefung auf bereits vorhandene Datensaetze lief ueber alle Nutzer hinweg statt nur ueber die eigenen. Der importierende Nutzer bekommt jetzt eigene Kopien.",
+            "Beim Restore auf einen frischen Server bleiben die Original-IDs weiterhin erhalten, und ein mehrfach ausgefuehrter Import legt nach wie vor nichts doppelt an.",
+            "Bereits vorhandene Datensaetze werden zusaetzlich an ihren Fachdaten erkannt (Fahrzeug an der External ID, Anbieter am Namen, Ladeort an Name und Koordinaten, Ladevorgang an Fahrzeug und Startzeit) - dadurch legt auch eine Backup-ZIP von einem anderen Server nichts doppelt an, statt wie bisher mit einem Serverfehler abzubrechen.",
+        ],
+    },
+    {
         "version": "0.10.0",
         "date": "2026-08-31",
         "title": "Automatische Ladeerkennung über die MyŠkoda Public API",

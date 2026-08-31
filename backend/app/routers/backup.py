@@ -2,10 +2,20 @@
 
 Gedacht als Backup/Restore-Mechanismus (z.B. Neuaufsetzen des Servers), nicht
 als flexibles Datenaustauschformat - Reimport erwartet exakt die vom Export
-erzeugte ZIP-Struktur mit den vier festen Dateinamen. IDs bleiben beim
-Reimport erhalten (Datensaetze mit bereits vorhandener ID werden
-uebersprungen, kein Ueberschreiben) - dadurch ist der Import gefahrlos
-mehrfach ausfuehrbar.
+erzeugte ZIP-Struktur mit den vier festen Dateinamen.
+
+Zwei Faelle, die der Import auseinanderhalten muss (siehe `_target_id`):
+
+- **Restore auf einen frischen Server**: die Original-IDs bleiben erhalten.
+- **Import in ein ANDERES Konto derselben Instanz**: die Primaerschluessel
+  sind global, die Daten aber pro Nutzer getrennt - hier bekommt der
+  importierende Nutzer eigene Kopien mit neu vergebenen IDs, und die
+  Fremdschluessel werden ueber `*_id_map` mitgezogen.
+
+In beiden Faellen ist der Import idempotent: schon vorhandene Datensaetze
+werden uebersprungen statt ueberschrieben, erkannt an der ID UND an den
+Fachdaten (`own_*`-Schluessel) - letzteres, damit auch eine ZIP von einem
+anderen Server mit voellig anderen UUIDs nichts doppelt anlegt.
 """
 
 import csv
@@ -67,9 +77,17 @@ Format:
 Reimport:
 - Ueber die Web-UI (Einstellungen -> Daten-Backup -> "Backup importieren")
   diese ZIP-Datei unveraendert wieder hochladen.
-- Datensaetze werden anhand ihrer Original-ID wiederhergestellt. Bereits
-  vorhandene IDs werden uebersprungen (kein Ueberschreiben) - der Import ist
-  daher gefahrlos mehrfach ausfuehrbar.
+- Auf einem frischen Server werden die Datensaetze mit ihren Original-IDs
+  wiederhergestellt.
+- Importiert ein ANDERER Nutzer diese ZIP (auch auf derselben Instanz),
+  bekommt er eigene Kopien mit neuen IDs - die Daten der beiden Konten
+  bleiben getrennt.
+- Bereits vorhandene Datensaetze werden uebersprungen statt ueberschrieben.
+  Erkannt werden sie an ihrer ID und zusaetzlich an den Fachdaten
+  (Fahrzeug: External ID, Anbieter: Name, Ladeort: Name + Koordinaten,
+  Ladevorgang: Fahrzeug + Startzeit) - der Import ist daher gefahrlos
+  mehrfach ausfuehrbar und legt auch dann nichts doppelt an, wenn die ZIP
+  von einem anderen Server stammt und alle IDs abweichen.
 - Die Reihenfolge (Fahrzeuge vor Anbietern vor Ladeorten vor Ladevorgaengen,
   wegen Fremdschluesseln) uebernimmt der Importer automatisch.
 
@@ -250,6 +268,37 @@ def _read_csv(content: bytes) -> list[dict]:
     return list(csv.DictReader(io.StringIO(text)))
 
 
+def _location_key(name: str, latitude: float, longitude: float) -> tuple:
+    """Fachlicher Schluessel eines Ladeorts. Der Name allein reicht nicht
+    (mehrere "Ionity"), die Koordinaten allein auch nicht - gerundet, weil
+    der Umweg ueber CSV die letzten Nachkommastellen veraendern kann."""
+    return (name, round(latitude, 5), round(longitude, 5))
+
+
+def _target_id(old_id: str, owner: str | None, user_id: str) -> str | None:
+    """Unter welcher ID ein Datensatz angelegt werden soll - oder None, wenn er
+    zu ueberspringen ist.
+
+    Drei Faelle, die frueher alle gleich behandelt wurden (immer ueberspringen)
+    und den Import in ein ZWEITES Konto derselben Instanz komplett leer
+    ausgehen liessen:
+
+    - ID noch gar nicht vergeben -> Original-ID behalten. Das ist der
+      urspruengliche Zweck (Restore auf einen frischen Server) und haelt den
+      Import idempotent.
+    - ID gehoert bereits DIESEM Nutzer -> echte Dublette, ueberspringen.
+    - ID gehoert einem ANDEREN Nutzer -> derselbe Datensatz soll trotzdem
+      importiert werden, aber unter einer neuen ID. Die Primaerschluessel sind
+      global, die Daten dagegen pro Nutzer getrennt - ohne Neuvergabe waere
+      ein Import in ein zweites Konto unmoeglich.
+    """
+    if owner is None:
+        return old_id
+    if owner == user_id:
+        return None
+    return models.gen_uuid()
+
+
 @router.post("/import", response_model=BackupImportResult)
 async def import_backup(
     file: UploadFile = File(...),
@@ -281,16 +330,76 @@ async def import_backup(
     existing_location_owners = {
         row[0]: row[1] for row in db.query(models.ChargingLocation.id, models.ChargingLocation.user_id).all()
     }
-    existing_session_ids = {row[0] for row in db.query(models.ChargingSession.id).all()}
+    existing_session_owners = {
+        row[0]: row[1] for row in db.query(models.ChargingSession.id, models.ChargingSession.user_id).all()
+    }
+
+    # Fachliche Schluessel der EIGENEN Datensaetze. Noetig, weil `external_id`
+    # bzw. `name` pro Nutzer eindeutig sein muessen (siehe models.py
+    # __table_args__): eine ZIP von einem ANDEREN Server kann dasselbe
+    # Fahrzeug mit anderer UUID enthalten - ohne diese Pruefung liefe der
+    # Insert in einen IntegrityError (HTTP 500) statt sauber zu ueberspringen.
+    own_vehicle_ids_by_external_id = {
+        row[0]: row[1]
+        for row in db.query(models.Vehicle.external_id, models.Vehicle.id)
+        .filter(models.Vehicle.user_id == user.id)
+        .all()
+    }
+    own_provider_ids_by_name = {
+        row[0]: row[1]
+        for row in db.query(models.Provider.name, models.Provider.id)
+        .filter(models.Provider.user_id == user.id)
+        .all()
+    }
+    # Ladeorte und Ladevorgaenge haben keinen DB-seitigen Eindeutigkeits-
+    # schluessel, brauchen aber trotzdem einen: sonst legt ein zweiter Import
+    # derselben ZIP sie erneut an, sobald die Original-IDs einem anderen Nutzer
+    # gehoeren und deshalb neu vergeben werden mussten.
+    own_location_ids_by_key = {
+        _location_key(row[0], row[1], row[2]): row[3]
+        for row in db.query(
+            models.ChargingLocation.name,
+            models.ChargingLocation.latitude,
+            models.ChargingLocation.longitude,
+            models.ChargingLocation.id,
+        )
+        .filter(models.ChargingLocation.user_id == user.id)
+        .all()
+    }
+    own_session_ids_by_key = {
+        (row[0], row[1]): row[2]
+        for row in db.query(
+            models.ChargingSession.vehicle_id,
+            models.ChargingSession.start_time,
+            models.ChargingSession.id,
+        )
+        .filter(models.ChargingSession.user_id == user.id)
+        .all()
+    }
+
+    # Alte ID -> ID unter DIESEM Nutzer. Normalerweise identisch (Original-IDs
+    # bleiben erhalten), weicht aber ab, sobald die ID schon einem anderen
+    # Nutzer gehoert und deshalb neu vergeben werden musste - dann muessen die
+    # Fremdschluessel in locations.csv/sessions.csv mitgezogen werden.
+    vehicle_id_map: dict[str, str] = {}
+    provider_id_map: dict[str, str] = {}
+    location_id_map: dict[str, str] = {}
 
     vehicles_imported = vehicles_skipped = 0
     for row in _read_csv(zf.read("vehicles.csv")):
-        if row["id"] in existing_vehicle_owners:
+        old_id = row["id"]
+        # Eigenes Fahrzeug mit derselben external_id, aber anderer UUID (ZIP von
+        # einem anderen Server): als dasselbe Fahrzeug behandeln, damit die
+        # Ladevorgaenge daran haengen statt verworfen zu werden.
+        duplicate_id = own_vehicle_ids_by_external_id.get(row["external_id"])
+        new_id = _target_id(old_id, existing_vehicle_owners.get(old_id), user.id)
+        if new_id is None or duplicate_id:
+            vehicle_id_map[old_id] = duplicate_id or old_id
             vehicles_skipped += 1
             continue
         db.add(
             models.Vehicle(
-                id=row["id"],
+                id=new_id,
                 user_id=user.id,
                 external_id=row["external_id"],
                 name=row["name"],
@@ -301,18 +410,26 @@ async def import_backup(
                 created_at=_parse_dt(row.get("created_at")),
             )
         )
-        existing_vehicle_owners[row["id"]] = user.id
+        existing_vehicle_owners[new_id] = user.id
+        own_vehicle_ids_by_external_id[row["external_id"]] = new_id
+        vehicle_id_map[old_id] = new_id
         vehicles_imported += 1
     db.commit()
 
     providers_imported = providers_skipped = 0
     for row in _read_csv(zf.read("providers.csv")):
-        if row["id"] in existing_provider_owners:
+        old_id = row["id"]
+        # Wie bei Fahrzeugen: eigener Anbieter gleichen Namens ist derselbe
+        # Anbieter, auch wenn die UUID abweicht (name ist pro Nutzer eindeutig).
+        duplicate_id = own_provider_ids_by_name.get(row["name"])
+        new_id = _target_id(old_id, existing_provider_owners.get(old_id), user.id)
+        if new_id is None or duplicate_id:
+            provider_id_map[old_id] = duplicate_id or old_id
             providers_skipped += 1
             continue
         db.add(
             models.Provider(
-                id=row["id"],
+                id=new_id,
                 user_id=user.id,
                 name=row["name"],
                 last_price_ac_per_kwh=_parse_float(row.get("last_price_ac_per_kwh")),
@@ -321,21 +438,31 @@ async def import_backup(
                 created_at=_parse_dt(row.get("created_at")),
             )
         )
-        existing_provider_owners[row["id"]] = user.id
+        existing_provider_owners[new_id] = user.id
+        own_provider_ids_by_name[row["name"]] = new_id
+        provider_id_map[old_id] = new_id
         providers_imported += 1
     db.commit()
 
     locations_imported = locations_skipped = 0
     for row in _read_csv(zf.read("locations.csv")):
-        if row["id"] in existing_location_owners:
+        old_id = row["id"]
+        duplicate_id = own_location_ids_by_key.get(
+            _location_key(row["name"], float(row["latitude"]), float(row["longitude"]))
+        )
+        new_id = _target_id(old_id, existing_location_owners.get(old_id), user.id)
+        if new_id is None or duplicate_id:
+            location_id_map[old_id] = duplicate_id or old_id
             locations_skipped += 1
             continue
         default_provider_id = _parse_str(row.get("default_provider_id"))
+        if default_provider_id:
+            default_provider_id = provider_id_map.get(default_provider_id, default_provider_id)
         if default_provider_id and existing_provider_owners.get(default_provider_id) != user.id:
             default_provider_id = None
         db.add(
             models.ChargingLocation(
-                id=row["id"],
+                id=new_id,
                 user_id=user.id,
                 name=row["name"],
                 latitude=float(row["latitude"]),
@@ -345,24 +472,44 @@ async def import_backup(
                 created_at=_parse_dt(row.get("created_at")),
             )
         )
-        existing_location_owners[row["id"]] = user.id
+        existing_location_owners[new_id] = user.id
+        own_location_ids_by_key[
+            _location_key(row["name"], float(row["latitude"]), float(row["longitude"]))
+        ] = new_id
+        location_id_map[old_id] = new_id
         locations_imported += 1
     db.commit()
 
     sessions_imported = sessions_skipped = 0
     for row in _read_csv(zf.read("sessions.csv")):
-        if row["id"] in existing_session_ids:
+        old_id = row["id"]
+        new_id = _target_id(old_id, existing_session_owners.get(old_id), user.id)
+        if new_id is None:
             sessions_skipped += 1
             continue
         vehicle_id = _parse_str(row.get("vehicle_id"))
+        if vehicle_id:
+            vehicle_id = vehicle_id_map.get(vehicle_id, vehicle_id)
         if not vehicle_id or existing_vehicle_owners.get(vehicle_id) != user.id:
             sessions_skipped += 1
             continue
 
+        # Fachlicher Schluessel: dasselbe Fahrzeug kann nicht zweimal zur selben
+        # Sekunde zu laden beginnen. Faengt den zweiten Import derselben ZIP ab,
+        # auch wenn die IDs inzwischen neu vergeben wurden.
+        start_time = _parse_dt(row.get("start_time"))
+        if (vehicle_id, start_time) in own_session_ids_by_key:
+            sessions_skipped += 1
+            continue
+
         provider_id = _parse_str(row.get("provider_id"))
+        if provider_id:
+            provider_id = provider_id_map.get(provider_id, provider_id)
         if provider_id and existing_provider_owners.get(provider_id) != user.id:
             provider_id = None
         location_id = _parse_str(row.get("location_id"))
+        if location_id:
+            location_id = location_id_map.get(location_id, location_id)
         if location_id and existing_location_owners.get(location_id) != user.id:
             location_id = None
 
@@ -372,12 +519,12 @@ async def import_backup(
 
         db.add(
             models.ChargingSession(
-                id=row["id"],
+                id=new_id,
                 user_id=user.id,
                 vehicle_id=vehicle_id,
                 provider_id=provider_id,
                 location_id=location_id,
-                start_time=_parse_dt(row.get("start_time")),
+                start_time=start_time,
                 end_time=_parse_dt(row.get("end_time")),
                 charging_type=charging_type,
                 soc_start=_parse_int(row.get("soc_start")),
@@ -398,7 +545,8 @@ async def import_backup(
                 updated_at=_parse_dt(row.get("updated_at")),
             )
         )
-        existing_session_ids.add(row["id"])
+        existing_session_owners[new_id] = user.id
+        own_session_ids_by_key[(vehicle_id, start_time)] = new_id
         sessions_imported += 1
     db.commit()
 

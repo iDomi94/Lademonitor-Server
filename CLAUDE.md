@@ -534,10 +534,32 @@ flexibles Datenaustauschformat - unterscheidet sich vom Spritmonitor-Importer
   Import ignoriert, koennen veraltet sein).
 - `POST /api/backup/import`: erwartet exakt die vom Export erzeugte
   ZIP-Struktur (alle vier CSVs muessen vorhanden sein). Import-Reihenfolge
-  wegen FKs: Vehicles → Providers → Locations → Sessions. Datensaetze werden
-  per Original-ID wiederhergestellt; bereits vorhandene IDs werden
-  uebersprungen (kein Ueberschreiben) - dadurch ist der Import idempotent
-  und gefahrlos mehrfach ausfuehrbar.
+  wegen FKs: Vehicles → Providers → Locations → Sessions.
+
+  **Fix 2026-08-31:** Die ID-Pruefung war GLOBAL statt pro Nutzer
+  (`if row["id"] in existing_vehicle_owners`). Folge: ein Export aus Konto A,
+  importiert in Konto B DERSELBEN Instanz, uebersprang restlos alles ("0
+  importiert, 46 uebersprungen") - die UUIDs existierten ja bereits, nur eben
+  bei A. Der Restore auf einen frischen Server hatte den Fehler nicht, weil
+  dort noch gar keine IDs vergeben sind. Jetzt entscheidet `_target_id()` nach
+  Besitzer: ID unbekannt → Original-ID behalten (Restore-Fall, IDs bleiben
+  stabil); ID gehoert dem importierenden Nutzer → echte Dublette,
+  ueberspringen; ID gehoert einem ANDEREN Nutzer → neue UUID vergeben, weil
+  die Primaerschluessel global sind, die Daten aber pro Nutzer getrennt.
+  Die Fremdschluessel in locations.csv/sessions.csv laufen dafuer ueber
+  `vehicle_id_map`/`provider_id_map`/`location_id_map`.
+- Dublettenerkennung zusaetzlich ueber **Fachdaten**, nicht nur ueber die ID -
+  sonst waere der Import nach obigem Fix nicht mehr idempotent (bei jedem
+  erneuten Lauf haetten Ladeorte/Ladevorgaenge wieder neue IDs bekommen und
+  waeren dupliziert worden; genau das hat der Test aufgedeckt). Schluessel:
+  Fahrzeug = `external_id`, Anbieter = `name` (beide ohnehin pro Nutzer
+  eindeutig, siehe `models.py __table_args__`), Ladeort = Name +
+  gerundete Koordinaten, Ladevorgang = Fahrzeug + `start_time` (dasselbe Auto
+  kann nicht zweimal zur selben Sekunde zu laden beginnen). Nebeneffekt: eine
+  ZIP von einem ANDEREN Server (gleiche Fachdaten, voellig andere UUIDs) wird
+  jetzt korrekt zusammengefuehrt statt dupliziert - und der Insert laeuft
+  nicht mehr in einen IntegrityError (HTTP 500) wegen
+  `uq_vehicles_user_external_id`.
 - Web-UI: neue Sektion "Daten-Backup" unten in `settings.html`.
 - Kein flexibles Multi-File-Upload mit Datei-Erkennung (bewusste
   Design-Entscheidung) - falls spaeter einzelne Tabellen unabhaengig
