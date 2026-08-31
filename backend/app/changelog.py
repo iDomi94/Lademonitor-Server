@@ -5,6 +5,15 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.10.2",
+        "date": "2026-08-31",
+        "title": "MyŠkoda: \"Verbindung testen\"/\"Jetzt abfragen\" vor dem Speichern repariert",
+        "changes": [
+            "\"Verbindung testen\" und \"Jetzt abfragen\" lasen bisher nur die zuletzt gespeicherte Konfiguration - wer API-Key und FIN eintrug und direkt auf einen der beiden Buttons klickte (sie stehen in der Reihenfolge vor \"Speichern\"), bekam \"Bitte zuerst API-Key und FIN eintragen und speichern\", obwohl beide Felder ausgefuellt waren.",
+            "Beide Buttons speichern die aktuell eingetragenen Werte jetzt automatisch mit, bevor sie den Abruf ausloesen.",
+        ],
+    },
+    {
         "version": "0.10.1",
         "date": "2026-08-31",
         "title": "Backup-Import in ein zweites Konto repariert",

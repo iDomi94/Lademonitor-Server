@@ -698,9 +698,8 @@ async function loadMyskodaLog() {
 
 document.getElementById('ms-vehicle').addEventListener('change', loadMyskodaConfig);
 
-document.getElementById('myskoda-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const payload = {
+function msBuildPayload() {
+  return {
     enabled: document.getElementById('ms-enabled').checked,
     api_key: document.getElementById('ms-apikey').value || null,
     vin: document.getElementById('ms-vin').value || null,
@@ -711,11 +710,27 @@ document.getElementById('myskoda-form').addEventListener('submit', async (e) => 
     log_enabled: document.getElementById('ms-log').checked,
     log_raw_payload: document.getElementById('ms-log-raw').checked,
   };
+}
+
+// Speichert die aktuell im Formular stehenden Werte - genutzt sowohl vom
+// Speichern-Button als auch VOR "Verbindung testen"/"Jetzt abfragen": beide
+// lesen serverseitig nur die bereits gespeicherte Konfiguration, nicht die
+// gerade getippten Formularfelder. Ohne dieses Auto-Speichern liefe man beim
+// erstmaligen Einrichten leicht in "Bitte zuerst API-Key und FIN eintragen
+// und speichern", weil Testen/Abfragen in der Button-Reihenfolge vor
+// Speichern stehen und naheliegend zuerst angeklickt werden.
+async function msSaveConfig() {
   const res = await fetch(`api/myskoda/configs/${msVehicleId()}`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
+    body: JSON.stringify(msBuildPayload())
   });
-  if (!res.ok) { alert('Fehler: ' + await res.text()); return; }
+  if (!res.ok) { alert('Fehler: ' + await res.text()); return null; }
+  return await res.json();
+}
+
+document.getElementById('myskoda-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!(await msSaveConfig())) return;
   await loadMyskodaConfig();
 });
 
@@ -735,6 +750,7 @@ async function msRunAction(btnId, url, label) {
 }
 
 document.getElementById('ms-test-btn').addEventListener('click', async () => {
+  if (!(await msSaveConfig())) return;
   const result = await msRunAction('ms-test-btn', `api/myskoda/configs/${msVehicleId()}/test`, 'Teste…');
   if (!result) return;
   const box = document.getElementById('myskoda-test-result');
@@ -748,6 +764,7 @@ document.getElementById('ms-test-btn').addEventListener('click', async () => {
 });
 
 document.getElementById('ms-poll-btn').addEventListener('click', async () => {
+  if (!(await msSaveConfig())) return;
   const config = await msRunAction('ms-poll-btn', `api/myskoda/configs/${msVehicleId()}/poll`, 'Frage ab…');
   if (!config) return;
   renderMyskodaStatus(config);

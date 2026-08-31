@@ -6,6 +6,17 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.10.2] — 2026-08-31
+
+### Fixed
+- MyŠkoda-Einstellungen: "Verbindung testen" und "Jetzt abfragen" lasen nur
+  die zuletzt gespeicherte Konfiguration aus der Datenbank, nicht die gerade
+  im Formular eingetragenen Werte. Da beide Buttons in der Reihenfolge vor
+  "Speichern" stehen, führte das beim erstmaligen Einrichten leicht zu
+  "Bitte zuerst API-Key und FIN eintragen und speichern", obwohl beide Felder
+  ausgefüllt waren. Beide Buttons speichern die aktuellen Werte jetzt
+  automatisch mit.
+
 ## [0.10.1] — 2026-08-31
 
 ### Fixed
