@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="{{ lang|default('de') }}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Anmelden – Lademonitor</title>
+  <title>{{ t('login.page_title') }}</title>
   <link rel="stylesheet" href="static/style.css">
   <style>
     .auth-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
@@ -19,17 +19,18 @@
 <body>
   <div class="auth-wrap">
     <div class="card auth-card">
-      <h1>⚡ Anmelden</h1>
+      <h1>{{ t('login.heading') }}</h1>
       <form id="login-form">
-        <div class="field"><label>Nutzername</label><input id="l-username" required autofocus></div>
-        <div class="field"><label>Passwort</label><input type="password" id="l-password" required></div>
-        <button type="submit">Anmelden</button>
+        <div class="field"><label>{{ t('login.username_label') }}</label><input id="l-username" required autofocus></div>
+        <div class="field"><label>{{ t('login.password_label') }}</label><input type="password" id="l-password" required></div>
+        <button type="submit">{{ t('login.submit') }}</button>
         <div class="auth-error" id="login-error"></div>
       </form>
-      <div class="auth-switch">Noch kein Konto? <a href="register">Registrieren</a></div>
+      <div class="auth-switch">{{ t('login.no_account') }} <a href="register">{{ t('login.register_link') }}</a></div>
     </div>
   </div>
   <script>
+    const LOGIN_ERROR_DEFAULT = {{ t('login.error_default')|tojson }};
     document.getElementById('login-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const errorEl = document.getElementById('login-error');
@@ -45,7 +46,7 @@
         window.location = '.';
       } else {
         const data = await res.json().catch(() => ({}));
-        errorEl.textContent = data.detail || 'Anmeldung fehlgeschlagen.';
+        errorEl.textContent = data.detail || LOGIN_ERROR_DEFAULT;
       }
     });
   </script>

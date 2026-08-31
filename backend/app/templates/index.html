@@ -1,41 +1,41 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>Dashboard</h1>
+<h1>{{ t('dashboard.heading') }}</h1>
 
 <div id="filter-bar"></div>
 
 <div class="grid" id="stat-cards">
-  <div class="card"><div class="stat-label">Ladevorgänge</div><div class="stat-value" id="s-count">–</div></div>
-  <div class="card"><div class="stat-label">Gesamt kWh</div><div class="stat-value" id="s-kwh">–</div></div>
-  <div class="card"><div class="stat-label">Gesamtkosten</div><div class="stat-value" id="s-cost">–</div></div>
-  <div class="card"><div class="stat-label">Ø Preis/kWh</div><div class="stat-value" id="s-price">–</div></div>
-  <div class="card"><div class="stat-label">Ø Verbrauch/100km</div><div class="stat-value" id="s-consumption">–</div></div>
-  <div class="card"><div class="stat-label">Preis pro 100km</div><div class="stat-value" id="s-price-100km">–</div></div>
-  <div class="card"><div class="stat-label">Gefahrene Kilometer</div><div class="stat-value" id="s-km">–</div></div>
+  <div class="card"><div class="stat-label">{{ t('dashboard.stat.count') }}</div><div class="stat-value" id="s-count">–</div></div>
+  <div class="card"><div class="stat-label">{{ t('dashboard.stat.kwh') }}</div><div class="stat-value" id="s-kwh">–</div></div>
+  <div class="card"><div class="stat-label">{{ t('dashboard.stat.cost') }}</div><div class="stat-value" id="s-cost">–</div></div>
+  <div class="card"><div class="stat-label">{{ t('dashboard.stat.price') }}</div><div class="stat-value" id="s-price">–</div></div>
+  <div class="card"><div class="stat-label">{{ t('dashboard.stat.consumption') }}</div><div class="stat-value" id="s-consumption">–</div></div>
+  <div class="card"><div class="stat-label">{{ t('dashboard.stat.price_100km') }}</div><div class="stat-value" id="s-price-100km">–</div></div>
+  <div class="card"><div class="stat-label">{{ t('dashboard.stat.km') }}</div><div class="stat-value" id="s-km">–</div></div>
 </div>
 
-<h2>Anbieter-Verteilung</h2>
+<h2>{{ t('dashboard.provider_distribution') }}</h2>
 <div style="display:flex; gap:24px; flex-wrap:wrap; margin-bottom:24px">
   <div class="card" style="flex:1; min-width:260px">
-    <div class="stat-label" style="margin-bottom:12px">kWh pro Anbieter</div>
+    <div class="stat-label" style="margin-bottom:12px">{{ t('dashboard.kwh_per_provider') }}</div>
     <div id="pie-kwh"></div>
   </div>
   <div class="card" style="flex:1; min-width:260px">
-    <div class="stat-label" style="margin-bottom:12px">Bezahlt pro Anbieter</div>
+    <div class="stat-label" style="margin-bottom:12px">{{ t('dashboard.paid_per_provider') }}</div>
     <div id="pie-cost"></div>
   </div>
 </div>
 
-<h2>AC / DC Anteil (nach kWh)</h2>
+<h2>{{ t('dashboard.ac_dc_share') }}</h2>
 <div class="card" id="acdc-gauge" style="margin-bottom:24px"></div>
 
-<h2>Kosten pro Monat</h2>
+<h2>{{ t('dashboard.cost_per_month') }}</h2>
 <div class="card" id="chart-cost"></div>
 
-<h2>kWh pro Monat</h2>
+<h2>{{ t('dashboard.kwh_per_month') }}</h2>
 <div class="card" id="chart-kwh"></div>
 
-<h2>Ø Verbrauch pro Monat</h2>
+<h2>{{ t('dashboard.consumption_per_month') }}</h2>
 <div class="card" id="chart-consumption"></div>
 
 <script>
@@ -44,13 +44,14 @@ function setText(id, value) {
   if (el) el.textContent = value;
 }
 
-const MONTH_NAMES = [
-  'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
-  'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'
-];
-const MONTH_NAMES_SHORT = [
-  'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'
-];
+// Locale fuer Zahlen-/Datumsformatierung an die aktive UI-Sprache gekoppelt
+// (z.B. Tausendertrennzeichen bei km) statt fest auf 'de-DE'.
+const LOCALE = {{ lang|default('de')|tojson }} === 'en' ? 'en-US' : 'de-DE';
+const NO_DATA_TEXT = {{ t('dashboard.js.no_data')|tojson }};
+const OTHER_PROVIDERS_LABEL = {{ t('dashboard.other_providers')|tojson }};
+
+const MONTH_NAMES = {{ t('dashboard.month_names')|tojson }}.split('|');
+const MONTH_NAMES_SHORT = {{ t('dashboard.month_names_short')|tojson }}.split('|');
 
 // Wandelt "2026-08" in "August 2026" um
 function formatMonthLabel(monthKey) {
@@ -135,13 +136,18 @@ function colorForIndex(i) {
 // dieselbe Aufteilung wird fuer kWh- UND Bezahlt-Diagramm verwendet, damit
 // die Farbzuordnung konsistent bleibt
 function buildProviderBuckets(byProvider) {
+  // 'Ohne Anbieter' ist hier bewusst NICHT uebersetzt - es ist kein
+  // Anzeigetext, sondern der feste, deutsche Wert, den /api/stats/summary
+  // fuer Sessions ohne provider_id liefert (siehe routers/stats.py). Wird
+  // durch buildProviderBuckets ohnehin immer in den uebersetzten
+  // "Andere"-Sammelposten gemischt, landet also nie unuebersetzt in der UI.
   const named = byProvider.filter(p => p.provider_name !== 'Ohne Anbieter');
   const unnamed = byProvider.filter(p => p.provider_name === 'Ohne Anbieter');
   const top = named.slice(0, 5);
   const rest = named.slice(5).concat(unnamed);
   if (!rest.length) return top;
   return [...top, {
-    provider_name: 'Andere',
+    provider_name: OTHER_PROVIDERS_LABEL,
     total_kwh: rest.reduce((sum, p) => sum + p.total_kwh, 0),
     total_cost: rest.reduce((sum, p) => sum + p.total_cost, 0),
   }];
@@ -152,7 +158,7 @@ function renderPieChart(containerId, items, formatValue) {
   if (!container) return;
   const total = items.reduce((sum, it) => sum + it.value, 0);
   if (total <= 0) {
-    container.innerHTML = '<p style="color:var(--muted); font-size:13px">Keine Daten</p>';
+    container.innerHTML = `<p style="color:var(--muted); font-size:13px">${NO_DATA_TEXT}</p>`;
     return;
   }
 
@@ -182,7 +188,7 @@ function renderGauge(containerId, acKwh, dcKwh) {
   if (!container) return;
   const total = acKwh + dcKwh;
   if (total <= 0) {
-    container.innerHTML = '<p style="color:var(--muted); font-size:13px">Keine Daten</p>';
+    container.innerHTML = `<p style="color:var(--muted); font-size:13px">${NO_DATA_TEXT}</p>`;
     return;
   }
   const acPct = acKwh / total * 100;
@@ -214,7 +220,7 @@ async function loadStats() {
     setText('s-price', data.avg_price_per_kwh ? data.avg_price_per_kwh.toFixed(3) + ' €' : '–');
     setText('s-consumption', data.avg_consumption_kwh_per_100km ? data.avg_consumption_kwh_per_100km.toFixed(1) + ' kWh' : '–');
     setText('s-price-100km', data.price_per_100km != null ? data.price_per_100km.toFixed(2) + ' €' : '–');
-    setText('s-km', data.total_km_driven != null ? data.total_km_driven.toLocaleString('de-DE') + ' km' : '–');
+    setText('s-km', data.total_km_driven != null ? data.total_km_driven.toLocaleString(LOCALE) + ' km' : '–');
 
     renderGauge('acdc-gauge', data.ac_kwh || 0, data.dc_kwh || 0);
 

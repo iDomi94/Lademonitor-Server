@@ -1,26 +1,34 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="{{ lang|default('de') }}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Lademonitor</title>
   <link rel="stylesheet" href="static/style.css">
+  <script>
+    // Kleine Uebersetzungstabelle fuer static/filter.js - die Datei ist ein
+    // normales statisches Asset (kein Jinja2-Template), bekommt Texte also
+    // nicht per {{ t('...') }}, sondern liest sie hier aus window.I18N_FILTER
+    // (siehe i18n/__init__.py::translations_for). Muss VOR filter.js stehen.
+    window.LADEMONITOR_LANG = {{ lang|default('de')|tojson }};
+    window.I18N_FILTER = {{ js_translations|default({})|tojson }};
+  </script>
   <script src="static/filter.js"></script>
 </head>
 <body>
   <nav class="topnav">
     <div class="brand">⚡ Lademonitor</div>
     {% if version %}
-    <button class="ver" type="button" onclick="openChangelog()" title="Was ist neu">v{{ version }}</button>
+    <button class="ver" type="button" onclick="openChangelog()" title="{{ t('nav.version_title') }}">v{{ version }}</button>
     {% endif %}
-    <a href=".">Dashboard</a>
-    <a href="sessions">Ladevorgänge</a>
-    <a href="import">Import</a>
-    <a href="settings">Einstellungen</a>
+    <a href=".">{{ t('nav.dashboard') }}</a>
+    <a href="sessions">{{ t('nav.sessions') }}</a>
+    <a href="import">{{ t('nav.import') }}</a>
+    <a href="settings">{{ t('nav.settings') }}</a>
     {% if user %}
     <span style="margin-left:auto; color:var(--muted); font-size:14px">
-      {{ user.username }}{% if user.is_admin %} (Admin){% endif %}
-      · <a href="#" onclick="logout(); return false;">Logout</a>
+      {{ user.username }}{% if user.is_admin %} {{ t('nav.admin_badge') }}{% endif %}
+      · <a href="#" onclick="logout(); return false;">{{ t('nav.logout') }}</a>
     </span>
     {% endif %}
   </nav>
@@ -32,7 +40,7 @@
   <div class="modal" id="changelog-modal" onclick="event.target === this && closeChangelog()">
     <div class="box">
       <div class="mtop">
-        <h3>Was ist neu</h3>
+        <h3>{{ t('changelog.title') }}</h3>
         <button class="close" type="button" onclick="closeChangelog()">✕</button>
       </div>
       <div class="mbody">
@@ -40,7 +48,7 @@
         <div class="clog">
           <div class="cloghead">
             <span class="clogver">v{{ r.version }}</span>
-            {% if r.version == version %}<span class="clognow">Deine Version</span>{% endif %}
+            {% if r.version == version %}<span class="clognow">{{ t('changelog.your_version') }}</span>{% endif %}
             <span class="clogdate">{{ r.date }}</span>
           </div>
           {% if r.title %}<p class="clogtitle">{{ r.title }}</p>{% endif %}

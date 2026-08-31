@@ -11,6 +11,7 @@ from ..auth import (
     verify_password,
 )
 from ..database import get_db
+from ..i18n import LANGUAGE_COOKIE_MAX_AGE, LANGUAGE_COOKIE_NAME
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -103,6 +104,32 @@ def logout(request: Request, response: Response, db: Session = Depends(get_db)):
 
 @router.get("/me", response_model=schemas.UserOut)
 def me(user: models.User = Depends(get_current_user)):
+    return user
+
+
+@router.put("/language", response_model=schemas.UserOut)
+def set_language(
+    payload: schemas.LanguageUpdate,
+    request: Request,
+    response: Response,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Persistiert die UI-Sprache auf dem Nutzer (Quelle der Wahrheit fuer
+    eingeloggte Seiten) UND spiegelt sie in ein Cookie - Login-/Registrieren-
+    Seite haben noch keinen Nutzer und lesen deshalb nur das Cookie (siehe
+    main.py::_resolve_language). Nicht httponly, im Gegensatz zum
+    Session-Cookie: enthaelt kein Geheimnis, es gibt also keinen Grund,
+    clientseitigem JS den Zugriff zu verwehren."""
+    user.language = payload.language
+    db.commit()
+    response.set_cookie(
+        LANGUAGE_COOKIE_NAME,
+        payload.language,
+        samesite="lax",
+        secure=_is_https(request),
+        max_age=LANGUAGE_COOKIE_MAX_AGE,
+    )
     return user
 
 

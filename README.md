@@ -1,5 +1,7 @@
 # Lademonitor
 
+**Sprache:** Deutsch | [English](README.en.md)
+
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
 
 Selbstgehostete Ladevorgang-Tracking-App für ein E-Auto (Škoda Enyaq via

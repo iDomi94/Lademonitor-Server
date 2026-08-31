@@ -1,194 +1,165 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>Einstellungen</h1>
+<h1>{{ t('settings.heading') }}</h1>
 
-<h2 id="vehicle-form-heading">Fahrzeuge</h2>
+<h2 id="vehicle-form-heading">{{ t('settings.vehicle.heading') }}</h2>
 <form class="inline-form" id="vehicle-form">
-  <div><label>Name</label><input id="v-name" required></div>
-  <div><label>External ID (für HA)</label><input id="v-external" required placeholder="z.B. enyaq"></div>
-  <div><label>Marke</label><input id="v-brand"></div>
-  <div><label>Modell</label><input id="v-model"></div>
-  <div><label>Akku-Kapazität (kWh)</label><input type="number" step="0.1" id="v-capacity"></div>
+  <div><label>{{ t('settings.vehicle.name') }}</label><input id="v-name" required></div>
+  <div><label>{{ t('settings.vehicle.external_id') }}</label><input id="v-external" required placeholder="{{ t('settings.vehicle.external_id_placeholder') }}"></div>
+  <div><label>{{ t('settings.vehicle.brand') }}</label><input id="v-brand"></div>
+  <div><label>{{ t('settings.vehicle.model') }}</label><input id="v-model"></div>
+  <div><label>{{ t('settings.vehicle.capacity') }}</label><input type="number" step="0.1" id="v-capacity"></div>
   <div class="form-actions">
-    <button type="button" id="vehicle-cancel-btn" style="background:var(--muted); display:none">Abbrechen</button>
-    <button type="submit" id="vehicle-submit-btn">Fahrzeug anlegen</button>
+    <button type="button" id="vehicle-cancel-btn" style="background:var(--muted); display:none">{{ t('settings.vehicle.cancel') }}</button>
+    <button type="submit" id="vehicle-submit-btn">{{ t('settings.vehicle.submit_new') }}</button>
   </div>
 </form>
-<table><thead><tr><th>Name</th><th>External ID</th><th>Marke/Modell</th><th>Akku</th><th></th></tr></thead>
+<table><thead><tr><th>{{ t('settings.vehicle.table.name') }}</th><th>{{ t('settings.vehicle.table.external_id') }}</th><th>{{ t('settings.vehicle.table.brand_model') }}</th><th>{{ t('settings.vehicle.table.battery') }}</th><th></th></tr></thead>
 <tbody id="vehicle-rows"></tbody></table>
 
-<h2 id="provider-form-heading">Ladeanbieter</h2>
+<h2 id="provider-form-heading">{{ t('settings.provider.heading') }}</h2>
 <form class="inline-form" id="provider-form">
-  <div><label>Name</label><input id="p-name" required></div>
-  <div><label>Letzter AC-Preis (€/kWh)</label><input type="number" step="0.0001" id="p-ac"></div>
-  <div><label>Letzter DC-Preis (€/kWh)</label><input type="number" step="0.0001" id="p-dc"></div>
+  <div><label>{{ t('settings.provider.name') }}</label><input id="p-name" required></div>
+  <div><label>{{ t('settings.provider.ac_price') }}</label><input type="number" step="0.0001" id="p-ac"></div>
+  <div><label>{{ t('settings.provider.dc_price') }}</label><input type="number" step="0.0001" id="p-dc"></div>
   <div class="form-actions">
-    <button type="button" id="provider-cancel-btn" style="background:var(--muted); display:none">Abbrechen</button>
-    <button type="submit" id="provider-submit-btn">Anbieter anlegen</button>
+    <button type="button" id="provider-cancel-btn" style="background:var(--muted); display:none">{{ t('settings.provider.cancel') }}</button>
+    <button type="submit" id="provider-submit-btn">{{ t('settings.provider.submit_new') }}</button>
   </div>
 </form>
-<table><thead><tr><th>Name</th><th>AC-Preis</th><th>DC-Preis</th><th></th></tr></thead>
+<table><thead><tr><th>{{ t('settings.provider.table.name') }}</th><th>{{ t('settings.provider.table.ac_price') }}</th><th>{{ t('settings.provider.table.dc_price') }}</th><th></th></tr></thead>
 <tbody id="provider-rows"></tbody></table>
 
-<h2 id="location-form-heading">Bekannte Ladeorte</h2>
+<h2 id="location-form-heading">{{ t('settings.location.heading') }}</h2>
 <form class="inline-form" id="location-form">
-  <div><label>Name</label><input id="l-name" required></div>
+  <div><label>{{ t('settings.location.name') }}</label><input id="l-name" required></div>
   <div>
-    <label>Adresse suchen (optional)</label>
-    <input id="l-address" placeholder="z.B. Marktstraße 5, Leonberg">
-    <button type="button" id="l-geocode-btn">Koordinaten suchen</button>
+    <label>{{ t('settings.location.address_search') }}</label>
+    <input id="l-address" placeholder="{{ t('settings.location.address_placeholder') }}">
+    <button type="button" id="l-geocode-btn">{{ t('settings.location.search_btn') }}</button>
     <div id="l-geocode-results" style="display:none; font-size:0.9em; margin-top:4px"></div>
   </div>
-  <div><label>Breitengrad</label><input type="number" step="any" id="l-lat" required></div>
-  <div><label>Längengrad</label><input type="number" step="any" id="l-lon" required></div>
-  <div><label>Radius (m)</label><input type="number" id="l-radius" value="100"></div>
+  <div><label>{{ t('settings.location.lat') }}</label><input type="number" step="any" id="l-lat" required></div>
+  <div><label>{{ t('settings.location.lon') }}</label><input type="number" step="any" id="l-lon" required></div>
+  <div><label>{{ t('settings.location.radius') }}</label><input type="number" id="l-radius" value="100"></div>
   <div>
-    <label>Standard-Anbieter</label>
-    <select id="l-provider"><option value="">– keiner –</option></select>
+    <label>{{ t('settings.location.default_provider') }}</label>
+    <select id="l-provider"><option value="">{{ t('common.none_option') }}</option></select>
   </div>
   <div class="form-actions">
-    <button type="button" id="location-cancel-btn" style="background:var(--muted); display:none">Abbrechen</button>
-    <button type="submit" id="location-submit-btn">Ladeort anlegen</button>
+    <button type="button" id="location-cancel-btn" style="background:var(--muted); display:none">{{ t('settings.location.cancel') }}</button>
+    <button type="submit" id="location-submit-btn">{{ t('settings.location.submit_new') }}</button>
   </div>
 </form>
-<table><thead><tr><th>Name</th><th>Koordinaten</th><th>Radius</th><th>Standard-Anbieter</th><th></th></tr></thead>
+<table><thead><tr><th>{{ t('settings.location.table.name') }}</th><th>{{ t('settings.location.table.coordinates') }}</th><th>{{ t('settings.location.table.radius') }}</th><th>{{ t('settings.location.table.default_provider') }}</th><th></th></tr></thead>
 <tbody id="location-rows"></tbody></table>
 
-<h2>Daten-Backup</h2>
-<p style="color:var(--muted); font-size:0.9em">
-  Exportiert alle Fahrzeuge, Anbieter, Ladeorte und Ladevorgänge als ZIP mit
-  CSV-Dateien (inkl. README) - z.B. für eine Neuinstallation des Servers.
-  Der Import ist gefahrlos mehrfach ausführbar, bereits vorhandene Einträge
-  werden übersprungen statt überschrieben.
-</p>
+<h2>{{ t('settings.backup.heading') }}</h2>
+<p style="color:var(--muted); font-size:0.9em">{{ t('settings.backup.description') }}</p>
 <div class="form-actions">
-  <a href="api/backup/export"><button type="button">Backup exportieren</button></a>
+  <a href="api/backup/export"><button type="button">{{ t('settings.backup.export_btn') }}</button></a>
 </div>
 
 <form class="inline-form" id="backup-import-form" style="margin-top:16px">
   <div>
-    <label>Backup-ZIP importieren</label>
+    <label>{{ t('settings.backup.import_label') }}</label>
     <input type="file" id="backup-file" accept=".zip" required>
   </div>
   <div class="form-actions">
-    <button type="submit">Importieren</button>
+    <button type="submit">{{ t('settings.backup.import_btn') }}</button>
   </div>
 </form>
 <div id="backup-import-result" style="display:none; margin-top:8px; font-size:0.9em"></div>
 
-<h2>Automatisches WebDAV-Backup</h2>
-<p style="color:var(--muted); font-size:0.9em">
-  Lädt in der gewählten Häufigkeit automatisch dieselbe Backup-ZIP wie oben
-  auf einen WebDAV-Server hoch (z.B. Nextcloud unter
-  <code>https://deine-cloud/remote.php/dav/files/NUTZERNAME/Ordner</code> –
-  ein eigenes App-Passwort statt des Hauptpassworts wird empfohlen). Der
-  Zielordner sollte bereits existieren.
-</p>
+<h2>{{ t('settings.webdav.heading') }}</h2>
+<p style="color:var(--muted); font-size:0.9em">{{ t('settings.webdav.description')|safe }}</p>
 <form class="inline-form" id="webdav-form">
   <div>
-    <label><input type="checkbox" id="wd-enabled" style="width:auto; display:inline-block; margin-right:6px">Aktiviert</label>
+    <label><input type="checkbox" id="wd-enabled" style="width:auto; display:inline-block; margin-right:6px">{{ t('settings.webdav.enabled_label') }}</label>
   </div>
   <div>
-    <label>WebDAV-Adresse (Zielordner)</label>
+    <label>{{ t('settings.webdav.url_label') }}</label>
     <input id="wd-url" placeholder="https://cloud.example.com/remote.php/dav/files/user/Backups">
   </div>
-  <div><label>Benutzername</label><input id="wd-username"></div>
-  <div><label>Passwort</label><input type="password" id="wd-password" placeholder="Passwort"></div>
+  <div><label>{{ t('settings.webdav.username') }}</label><input id="wd-username"></div>
+  <div><label>{{ t('settings.webdav.password') }}</label><input type="password" id="wd-password" placeholder="{{ t('settings.webdav.password') }}"></div>
   <div>
-    <label>Häufigkeit</label>
+    <label>{{ t('settings.webdav.frequency') }}</label>
     <select id="wd-frequency">
-      <option value="daily">Täglich</option>
-      <option value="weekly">Wöchentlich</option>
-      <option value="monthly">Monatlich</option>
+      <option value="daily">{{ t('settings.webdav.freq.daily') }}</option>
+      <option value="weekly">{{ t('settings.webdav.freq.weekly') }}</option>
+      <option value="monthly">{{ t('settings.webdav.freq.monthly') }}</option>
     </select>
   </div>
-  <div><label>Aufbewahrung (Tage)</label><input type="number" id="wd-retention" value="30" min="1"></div>
+  <div><label>{{ t('settings.webdav.retention') }}</label><input type="number" id="wd-retention" value="30" min="1"></div>
   <div class="form-actions">
-    <button type="button" id="wd-run-btn" style="background:var(--accent2)">Jetzt sichern</button>
-    <button type="submit">Speichern</button>
+    <button type="button" id="wd-run-btn" style="background:var(--accent2)">{{ t('settings.webdav.run_now') }}</button>
+    <button type="submit">{{ t('settings.webdav.save') }}</button>
   </div>
 </form>
 <div id="webdav-status" style="margin-top:8px; font-size:0.9em"></div>
 
-<h2>Automatische Ladeerkennung (MyŠkoda Public API)</h2>
-<p style="color:var(--muted); font-size:0.9em">
-  Zweite, von Home Assistant unabhängige Quelle für automatisch erfasste
-  Ladevorgänge: der Server fragt die offizielle
-  <a href="https://public.api.connect.skoda-auto.cz/docs" target="_blank" rel="noopener">MyŠkoda Public API</a>
-  selbst ab und legt erkannte Ladevorgänge an (immer mit "zu prüfen"-Markierung).
-  Der bestehende Home-Assistant-Push läuft unverändert parallel weiter – beide
-  Quellen erkennen sich gegenseitig nicht, doppelte Vorgänge müssen also
-  vermieden werden, indem pro Fahrzeug nur ein Weg aktiv ist.
-  <br><br>
-  API-Key erzeugen unter <a href="https://go.skoda.eu/api-keys" target="_blank" rel="noopener">go.skoda.eu/api-keys</a>
-  (Link auf dem Handy öffnen, die MyŠkoda-App verwaltet die Keys). Der Key ist an
-  die beim Erzeugen ausgewählten Fahrzeuge gebunden und läuft nach einiger Zeit ab –
-  der Ablauftermin wird unten angezeigt, sobald einmal abgefragt wurde.
-  <br><br>
-  <strong>Rate-Limit: 20 Anfragen pro Stunde und API-Key</strong>, geteilt über alle
-  Fahrzeuge und alle Clients. Läuft parallel die Home-Assistant-Integration mit
-  demselben Key, teilen sich beide dieses Kontingent – dann besser einen zweiten
-  Key erzeugen. Die Standardintervalle (20 min im Leerlauf, 5 min während eines
-  Ladevorgangs) bleiben mit Reserve darunter.
-  <br><br>
-  <strong>Genauigkeit:</strong> Der Ladebeginn wird erst beim nächsten Abruf bemerkt,
-  der Anfangs-SoC ist also eher zu hoch und die Energie eher zu niedrig – bei
-  AC-Laden vernachlässigbar, bei DC-Schnellladen nicht. Jeder erkannte Vorgang
-  bekommt eine Notiz mit den Werten davor und danach, damit sich der Fehler
-  nachvollziehen lässt.
-</p>
+<h2>{{ t('settings.myskoda.heading') }}</h2>
+<p style="color:var(--muted); font-size:0.9em">{{ t('settings.myskoda.description')|safe }}</p>
 <form class="inline-form" id="myskoda-form">
-  <div><label>Fahrzeug</label><select id="ms-vehicle"></select></div>
+  <div><label>{{ t('settings.myskoda.vehicle') }}</label><select id="ms-vehicle"></select></div>
   <div>
-    <label><input type="checkbox" id="ms-enabled" style="width:auto; display:inline-block; margin-right:6px">Automatisch abfragen</label>
+    <label><input type="checkbox" id="ms-enabled" style="width:auto; display:inline-block; margin-right:6px">{{ t('settings.myskoda.auto_query') }}</label>
   </div>
-  <div><label>API-Key</label><input type="password" id="ms-apikey" placeholder="API-Key" autocomplete="off"></div>
-  <div><label>FIN (17 Zeichen)</label><input id="ms-vin" placeholder="TMB..." maxlength="17" autocomplete="off"></div>
-  <div><label>Intervall im Leerlauf (min)</label><input type="number" id="ms-idle" min="3" max="1440" value="20"></div>
-  <div><label>Intervall beim Laden (min)</label><input type="number" id="ms-active" min="3" max="1440" value="5"></div>
+  <div><label>{{ t('settings.myskoda.apikey') }}</label><input type="password" id="ms-apikey" placeholder="{{ t('settings.myskoda.apikey') }}" autocomplete="off"></div>
+  <div><label>{{ t('settings.myskoda.vin') }}</label><input id="ms-vin" placeholder="TMB..." maxlength="17" autocomplete="off"></div>
+  <div><label>{{ t('settings.myskoda.idle_interval') }}</label><input type="number" id="ms-idle" min="3" max="1440" value="20"></div>
+  <div><label>{{ t('settings.myskoda.active_interval') }}</label><input type="number" id="ms-active" min="3" max="1440" value="5"></div>
   <div>
-    <label><input type="checkbox" id="ms-missed" style="width:auto; display:inline-block; margin-right:6px">Verpasste Vorgänge nacherkennen</label>
+    <label><input type="checkbox" id="ms-missed" style="width:auto; display:inline-block; margin-right:6px">{{ t('settings.myskoda.missed') }}</label>
   </div>
-  <div><label>Mindest-SoC-Sprung dafür (%)</label><input type="number" id="ms-missed-delta" min="1" max="100" value="5"></div>
+  <div><label>{{ t('settings.myskoda.missed_delta') }}</label><input type="number" id="ms-missed-delta" min="1" max="100" value="5"></div>
   <div>
-    <label><input type="checkbox" id="ms-log" style="width:auto; display:inline-block; margin-right:6px">Debug-Protokoll schreiben</label>
+    <label><input type="checkbox" id="ms-log" style="width:auto; display:inline-block; margin-right:6px">{{ t('settings.myskoda.log_checkbox') }}</label>
   </div>
   <div>
-    <label><input type="checkbox" id="ms-log-raw" style="width:auto; display:inline-block; margin-right:6px">Rohantworten mitspeichern</label>
+    <label><input type="checkbox" id="ms-log-raw" style="width:auto; display:inline-block; margin-right:6px">{{ t('settings.myskoda.log_raw') }}</label>
   </div>
   <div class="form-actions">
-    <button type="button" id="ms-delete-btn" style="background:var(--danger); display:none">Konfiguration löschen</button>
-    <button type="button" id="ms-test-btn" style="background:var(--accent2)">Verbindung testen</button>
-    <button type="button" id="ms-poll-btn" style="background:var(--accent2)">Jetzt abfragen</button>
-    <button type="submit">Speichern</button>
+    <button type="button" id="ms-delete-btn" style="background:var(--danger); display:none">{{ t('settings.myskoda.delete_config') }}</button>
+    <button type="button" id="ms-test-btn" style="background:var(--accent2)">{{ t('settings.myskoda.test_connection') }}</button>
+    <button type="button" id="ms-poll-btn" style="background:var(--accent2)">{{ t('settings.myskoda.poll_now') }}</button>
+    <button type="submit">{{ t('settings.myskoda.save') }}</button>
   </div>
 </form>
 <div id="myskoda-status" style="margin-top:8px; font-size:0.9em"></div>
 <pre id="myskoda-test-result" style="display:none; margin-top:12px; padding:12px; background:var(--card); border:1px solid var(--border); border-radius:12px; font-size:12px; overflow-x:auto"></pre>
 
-<h3 style="margin-top:24px">Debug-Protokoll</h3>
-<p style="color:var(--muted); font-size:0.9em">
-  Protokolliert jede Abfrage und jede Erkennungsentscheidung – gedacht, um nach
-  einem echten Ladevorgang nachzusehen, wie die API tatsächlich geantwortet hat.
-  Pro Fahrzeug werden die letzten 500 Einträge behalten. "Rohantwort" öffnet die
-  vollständige, unveränderte API-Antwort dieses Zeitpunkts.
-</p>
+<h3 style="margin-top:24px">{{ t('settings.myskoda.log_heading') }}</h3>
+<p style="color:var(--muted); font-size:0.9em">{{ t('settings.myskoda.log_description') }}</p>
 <div class="form-actions" style="margin-bottom:12px">
-  <button type="button" id="ms-log-refresh">Aktualisieren</button>
-  <button type="button" id="ms-log-export" style="background:var(--accent2)">Als JSON herunterladen</button>
-  <button type="button" id="ms-log-clear" style="background:var(--danger)">Protokoll leeren</button>
+  <button type="button" id="ms-log-refresh">{{ t('settings.myskoda.log_refresh') }}</button>
+  <button type="button" id="ms-log-export" style="background:var(--accent2)">{{ t('settings.myskoda.log_export') }}</button>
+  <button type="button" id="ms-log-clear" style="background:var(--danger)">{{ t('settings.myskoda.log_clear') }}</button>
 </div>
-<table><thead><tr><th>Zeit</th><th>Ereignis</th><th>Zustand</th><th>SoC</th><th>Leistung</th><th>Meldung</th><th></th></tr></thead>
+<table><thead><tr><th>{{ t('settings.myskoda.log.table.time') }}</th><th>{{ t('settings.myskoda.log.table.event') }}</th><th>{{ t('settings.myskoda.log.table.state') }}</th><th>{{ t('settings.myskoda.log.table.soc') }}</th><th>{{ t('settings.myskoda.log.table.power') }}</th><th>{{ t('settings.myskoda.log.table.message') }}</th><th></th></tr></thead>
 <tbody id="ms-log-rows"></tbody></table>
 
+<h2>{{ t('settings.language.heading') }}</h2>
+<p style="color:var(--muted); font-size:0.9em">{{ t('settings.language.description') }}</p>
+<form class="inline-form" id="language-form">
+  <div>
+    <label>{{ t('settings.language.label') }}</label>
+    <select id="lang-select">
+      <option value="de" {% if lang == 'de' %}selected{% endif %}>{{ t('settings.language.option_de') }}</option>
+      <option value="en" {% if lang == 'en' %}selected{% endif %}>{{ t('settings.language.option_en') }}</option>
+    </select>
+  </div>
+  <div class="form-actions">
+    <button type="submit">{{ t('settings.language.save') }}</button>
+  </div>
+</form>
+<div id="language-status" style="margin-top:8px; font-size:0.9em"></div>
+
 {% if user.is_admin %}
-<h2>Benutzerverwaltung</h2>
-<p style="color:var(--muted); font-size:0.9em">
-  Alle registrierten Konten. Registrierung ist offen - jeder mit der URL
-  kann sich selbst ein Konto anlegen, hier siehst du wer das getan hat und
-  kannst Konten bei Bedarf entfernen.
-</p>
-<table><thead><tr><th>Nutzername</th><th>Rolle</th><th>Angelegt am</th><th></th></tr></thead>
+<h2>{{ t('settings.users.heading') }}</h2>
+<p style="color:var(--muted); font-size:0.9em">{{ t('settings.users.description') }}</p>
+<table><thead><tr><th>{{ t('settings.users.table.username') }}</th><th>{{ t('settings.users.table.role') }}</th><th>{{ t('settings.users.table.created_at') }}</th><th></th></tr></thead>
 <tbody id="user-rows"></tbody></table>
 {% endif %}
 
@@ -200,9 +171,108 @@ let editingVehicleId = null;
 let editingProviderId = null;
 let editingLocationId = null;
 
+// Locale fuer Datumsformatierung an die aktive UI-Sprache gekoppelt statt
+// fest auf 'de-DE'.
+const LOCALE = {{ lang|default('de')|tojson }} === 'en' ? 'en-US' : 'de-DE';
+
+// Gesammelte Uebersetzungen fuer diese Seite - direkt bei Render per
+// {{ t('...') }} aus der aktiven Sprache befuellt (siehe i18n/__init__.py),
+// statt jede Stelle im JS unten einzeln mit Jinja zu durchsetzen.
+const T = {
+  edit: {{ t('common.edit')|tojson }},
+  del: {{ t('common.delete')|tojson }},
+  noneOption: {{ t('common.none_option')|tojson }},
+
+  vehicleEditHeading: {{ t('settings.vehicle.edit_heading')|tojson }},
+  vehicleHeading: {{ t('settings.vehicle.heading')|tojson }},
+  vehicleSubmitNew: {{ t('settings.vehicle.submit_new')|tojson }},
+  vehicleSubmitEdit: {{ t('settings.vehicle.submit_edit')|tojson }},
+  vehicleConfirmDelete: {{ t('settings.vehicle.confirm_delete')|tojson }},
+
+  providerEditHeading: {{ t('settings.provider.edit_heading')|tojson }},
+  providerHeading: {{ t('settings.provider.heading')|tojson }},
+  providerSubmitNew: {{ t('settings.provider.submit_new')|tojson }},
+  providerSubmitEdit: {{ t('settings.provider.submit_edit')|tojson }},
+  providerConfirmDelete: {{ t('settings.provider.confirm_delete')|tojson }},
+
+  locationEditHeading: {{ t('settings.location.edit_heading')|tojson }},
+  locationHeading: {{ t('settings.location.heading')|tojson }},
+  locationSubmitNew: {{ t('settings.location.submit_new')|tojson }},
+  locationSubmitEdit: {{ t('settings.location.submit_edit')|tojson }},
+  locationConfirmDelete: {{ t('settings.location.confirm_delete')|tojson }},
+  locationSearching: {{ t('settings.location.searching')|tojson }},
+  locationNoResults: {{ t('settings.location.no_results')|tojson }},
+  locationAppliedPrefix: {{ t('settings.location.applied_prefix')|tojson }},
+
+  backupImporting: {{ t('settings.backup.importing')|tojson }},
+  backupErrorPrefix: {{ t('settings.backup.error_prefix')|tojson }},
+  backupErrorGeneric: {{ t('settings.backup.error_generic')|tojson }},
+  backupResultVehicles: {{ t('settings.backup.result.vehicles')|tojson }},
+  backupResultProviders: {{ t('settings.backup.result.providers')|tojson }},
+  backupResultLocations: {{ t('settings.backup.result.locations')|tojson }},
+  backupResultSessions: {{ t('settings.backup.result.sessions')|tojson }},
+  backupResultImported: {{ t('settings.backup.result.imported')|tojson }},
+  backupResultSkipped: {{ t('settings.backup.result.skipped')|tojson }},
+
+  webdavNeverRun: {{ t('settings.webdav.status.never_run')|tojson }},
+  webdavSuccessPrefix: {{ t('settings.webdav.status.success_prefix')|tojson }},
+  webdavFailurePrefix: {{ t('settings.webdav.status.failure_prefix')|tojson }},
+  webdavUnknownError: {{ t('settings.webdav.status.unknown_error')|tojson }},
+  webdavPasswordSet: {{ t('settings.webdav.password_placeholder_set')|tojson }},
+  webdavPassword: {{ t('settings.webdav.password')|tojson }},
+  webdavErrorPrefix: {{ t('settings.webdav.error_prefix')|tojson }},
+  webdavRunNow: {{ t('settings.webdav.run_now')|tojson }},
+  webdavRunRunning: {{ t('settings.webdav.run_running')|tojson }},
+
+  msPleaseAddVehicle: {{ t('settings.myskoda.status.please_add_vehicle')|tojson }},
+  msStatusOk: {{ t('settings.myskoda.status.ok')|tojson }},
+  msStatusError: {{ t('settings.myskoda.status.error')|tojson }},
+  msStatusAuthError: {{ t('settings.myskoda.status.auth_error')|tojson }},
+  msStatusRateLimited: {{ t('settings.myskoda.status.rate_limited')|tojson }},
+  msStatusNever: {{ t('settings.myskoda.status.never')|tojson }},
+  msVehiclePrefix: {{ t('settings.myskoda.status.vehicle_prefix')|tojson }},
+  msCapturedPrefix: {{ t('settings.myskoda.status.captured_prefix')|tojson }},
+  msChargingRunning: {{ t('settings.myskoda.status.charging_running')|tojson }},
+  msSince: {{ t('settings.myskoda.status.since')|tojson }},
+  msChargeTypeUnknown: {{ t('settings.myskoda.status.charge_type_unknown')|tojson }},
+  msChargeTypePrefix: {{ t('settings.myskoda.status.charge_type_prefix')|tojson }},
+  msPollsSuffix: {{ t('settings.myskoda.status.polls_suffix')|tojson }},
+  msNextPollPrefix: {{ t('settings.myskoda.status.next_poll_prefix')|tojson }},
+  msNextPollSoon: {{ t('settings.myskoda.status.next_poll_soon')|tojson }},
+  msQuotaPrefix: {{ t('settings.myskoda.status.quota_prefix')|tojson }},
+  msQuotaOf: {{ t('settings.myskoda.status.quota_of')|tojson }},
+  msQuotaSuffix: {{ t('settings.myskoda.status.quota_suffix')|tojson }},
+  msQuotaReleasePrefix: {{ t('settings.myskoda.status.quota_release_prefix')|tojson }},
+  msExpiresPrefix: {{ t('settings.myskoda.status.expires_prefix')|tojson }},
+  msExpiresInDaysPrefix: {{ t('settings.myskoda.status.expires_in_days_prefix')|tojson }},
+  msExpiresInDaysSuffix: {{ t('settings.myskoda.status.expires_in_days_suffix')|tojson }},
+  msRelativeJustNow: {{ t('settings.myskoda.relative.just_now')|tojson }},
+  msRelativeMinutesPrefix: {{ t('settings.myskoda.relative.minutes_prefix')|tojson }},
+  msRelativeMinutesSuffix: {{ t('settings.myskoda.relative.minutes_suffix')|tojson }},
+  msRelativeHoursSuffix: {{ t('settings.myskoda.relative.hours_suffix')|tojson }},
+  msRelativeDaysSuffix: {{ t('settings.myskoda.relative.days_suffix')|tojson }},
+  msApikey: {{ t('settings.myskoda.apikey')|tojson }},
+  msApikeyPlaceholderSet: {{ t('settings.myskoda.apikey_placeholder_set')|tojson }},
+  msConfirmDelete: {{ t('settings.myskoda.confirm_delete')|tojson }},
+  msTestFailedPrefix: {{ t('settings.myskoda.test_failed_prefix')|tojson }},
+  msErrorPrefix: {{ t('settings.myskoda.error_prefix')|tojson }},
+  msTesting: {{ t('settings.myskoda.testing')|tojson }},
+  msPolling: {{ t('settings.myskoda.polling')|tojson }},
+  msLogNoEntries: {{ t('settings.myskoda.log.no_entries')|tojson }},
+  msLogRawLink: {{ t('settings.myskoda.log.raw_link')|tojson }},
+  msLogConfirmClear: {{ t('settings.myskoda.log_confirm_clear')|tojson }},
+
+  usersRoleAdmin: {{ t('settings.users.role_admin')|tojson }},
+  usersRoleUser: {{ t('settings.users.role_user')|tojson }},
+  usersConfirmDelete: {{ t('settings.users.confirm_delete')|tojson }},
+  usersErrorPrefix: {{ t('settings.users.error_prefix')|tojson }},
+
+  langError: {{ t('settings.language.error')|tojson }},
+};
+
 function actionButtons(kind, id) {
-  return `<button type="button" onclick="startEdit${kind}('${id}')" style="background:var(--accent2)">Bearbeiten</button>
-    <button type="button" onclick="deleteItem${kind}('${id}')" style="background:var(--danger)">Löschen</button>`;
+  return `<button type="button" onclick="startEdit${kind}('${id}')" style="background:var(--accent2)">${T.edit}</button>
+    <button type="button" onclick="deleteItem${kind}('${id}')" style="background:var(--danger)">${T.del}</button>`;
 }
 
 // ---------- Fahrzeuge ----------
@@ -228,8 +298,8 @@ function startEditVehicle(id) {
   document.getElementById('v-brand').value = v.brand || '';
   document.getElementById('v-model').value = v.model || '';
   document.getElementById('v-capacity').value = v.battery_capacity_kwh ?? '';
-  document.getElementById('vehicle-form-heading').textContent = 'Fahrzeug bearbeiten';
-  document.getElementById('vehicle-submit-btn').textContent = 'Änderungen speichern';
+  document.getElementById('vehicle-form-heading').textContent = T.vehicleEditHeading;
+  document.getElementById('vehicle-submit-btn').textContent = T.vehicleSubmitEdit;
   document.getElementById('vehicle-cancel-btn').style.display = 'inline-block';
   document.getElementById('vehicle-form').scrollIntoView({ behavior: 'smooth' });
 }
@@ -238,14 +308,14 @@ function cancelEditVehicle() {
   editingVehicleId = null;
   document.getElementById('vehicle-form').reset();
   document.getElementById('v-external').disabled = false;
-  document.getElementById('vehicle-form-heading').textContent = 'Fahrzeuge';
-  document.getElementById('vehicle-submit-btn').textContent = 'Fahrzeug anlegen';
+  document.getElementById('vehicle-form-heading').textContent = T.vehicleHeading;
+  document.getElementById('vehicle-submit-btn').textContent = T.vehicleSubmitNew;
   document.getElementById('vehicle-cancel-btn').style.display = 'none';
 }
 document.getElementById('vehicle-cancel-btn').addEventListener('click', cancelEditVehicle);
 
 async function deleteItemVehicle(id) {
-  if (!confirm('Fahrzeug wirklich löschen? Alle zugehörigen Ladevorgänge werden dabei mitgelöscht.')) return;
+  if (!confirm(T.vehicleConfirmDelete)) return;
   await fetch(`api/vehicles/${id}`, { method: 'DELETE' });
   if (editingVehicleId === id) cancelEditVehicle();
   loadVehicles();
@@ -287,7 +357,7 @@ async function loadProviders() {
   document.getElementById('provider-rows').innerHTML = providers.map(p => `
     <tr><td>${p.name}</td><td>${p.last_price_ac_per_kwh ?? '–'}</td><td>${p.last_price_dc_per_kwh ?? '–'}</td>
     <td style="white-space:nowrap">${actionButtons('Provider', p.id)}</td></tr>`).join('');
-  document.getElementById('l-provider').innerHTML = '<option value="">– keiner –</option>' +
+  document.getElementById('l-provider').innerHTML = `<option value="">${T.noneOption}</option>` +
     providers.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
 }
 
@@ -298,8 +368,8 @@ function startEditProvider(id) {
   document.getElementById('p-name').value = p.name;
   document.getElementById('p-ac').value = p.last_price_ac_per_kwh ?? '';
   document.getElementById('p-dc').value = p.last_price_dc_per_kwh ?? '';
-  document.getElementById('provider-form-heading').textContent = 'Ladeanbieter bearbeiten';
-  document.getElementById('provider-submit-btn').textContent = 'Änderungen speichern';
+  document.getElementById('provider-form-heading').textContent = T.providerEditHeading;
+  document.getElementById('provider-submit-btn').textContent = T.providerSubmitEdit;
   document.getElementById('provider-cancel-btn').style.display = 'inline-block';
   document.getElementById('provider-form').scrollIntoView({ behavior: 'smooth' });
 }
@@ -307,14 +377,14 @@ function startEditProvider(id) {
 function cancelEditProvider() {
   editingProviderId = null;
   document.getElementById('provider-form').reset();
-  document.getElementById('provider-form-heading').textContent = 'Ladeanbieter';
-  document.getElementById('provider-submit-btn').textContent = 'Anbieter anlegen';
+  document.getElementById('provider-form-heading').textContent = T.providerHeading;
+  document.getElementById('provider-submit-btn').textContent = T.providerSubmitNew;
   document.getElementById('provider-cancel-btn').style.display = 'none';
 }
 document.getElementById('provider-cancel-btn').addEventListener('click', cancelEditProvider);
 
 async function deleteItemProvider(id) {
-  if (!confirm('Anbieter wirklich löschen?')) return;
+  if (!confirm(T.providerConfirmDelete)) return;
   await fetch(`api/providers/${id}`, { method: 'DELETE' });
   if (editingProviderId === id) cancelEditProvider();
   loadProviders();
@@ -365,8 +435,8 @@ function startEditLocation(id) {
   document.getElementById('l-radius').value = l.radius_m;
   document.getElementById('l-provider').value = l.default_provider_id || '';
   clearGeocodeResults();
-  document.getElementById('location-form-heading').textContent = 'Ladeort bearbeiten';
-  document.getElementById('location-submit-btn').textContent = 'Änderungen speichern';
+  document.getElementById('location-form-heading').textContent = T.locationEditHeading;
+  document.getElementById('location-submit-btn').textContent = T.locationSubmitEdit;
   document.getElementById('location-cancel-btn').style.display = 'inline-block';
   document.getElementById('location-form').scrollIntoView({ behavior: 'smooth' });
 }
@@ -375,8 +445,8 @@ function cancelEditLocation() {
   editingLocationId = null;
   document.getElementById('location-form').reset();
   document.getElementById('l-radius').value = 100;
-  document.getElementById('location-form-heading').textContent = 'Bekannte Ladeorte';
-  document.getElementById('location-submit-btn').textContent = 'Ladeort anlegen';
+  document.getElementById('location-form-heading').textContent = T.locationHeading;
+  document.getElementById('location-submit-btn').textContent = T.locationSubmitNew;
   document.getElementById('location-cancel-btn').style.display = 'none';
   clearGeocodeResults();
 }
@@ -393,7 +463,7 @@ document.getElementById('l-geocode-btn').addEventListener('click', async () => {
   const resultsDiv = document.getElementById('l-geocode-results');
   if (!query) return;
 
-  resultsDiv.textContent = 'Suche…';
+  resultsDiv.textContent = T.locationSearching;
   resultsDiv.style.display = 'block';
 
   let results = [];
@@ -406,7 +476,7 @@ document.getElementById('l-geocode-btn').addEventListener('click', async () => {
 
   resultsDiv.textContent = '';
   if (!results.length) {
-    resultsDiv.textContent = 'Keine Treffer gefunden – bitte Koordinaten manuell eintragen.';
+    resultsDiv.textContent = T.locationNoResults;
     return;
   }
 
@@ -422,14 +492,14 @@ document.getElementById('l-geocode-btn').addEventListener('click', async () => {
     btn.addEventListener('click', () => {
       document.getElementById('l-lat').value = r.latitude;
       document.getElementById('l-lon').value = r.longitude;
-      resultsDiv.textContent = `Übernommen: ${r.display_name}`;
+      resultsDiv.textContent = `${T.locationAppliedPrefix}${r.display_name}`;
     });
     resultsDiv.appendChild(btn);
   });
 });
 
 async function deleteItemLocation(id) {
-  if (!confirm('Ladeort wirklich löschen?')) return;
+  if (!confirm(T.locationConfirmDelete)) return;
   await fetch(`api/locations/${id}`, { method: 'DELETE' });
   if (editingLocationId === id) cancelEditLocation();
   loadLocations();
@@ -473,26 +543,26 @@ document.getElementById('backup-import-form').addEventListener('submit', async (
 
   const resultDiv = document.getElementById('backup-import-result');
   resultDiv.style.display = 'block';
-  resultDiv.textContent = 'Importiere…';
+  resultDiv.textContent = T.backupImporting;
 
   try {
     const res = await fetch('api/backup/import', { method: 'POST', body: formData });
     if (!res.ok) {
-      resultDiv.textContent = 'Fehler: ' + await res.text();
+      resultDiv.textContent = T.backupErrorPrefix + await res.text();
       return;
     }
     const r = await res.json();
     resultDiv.textContent =
-      `Fahrzeuge: ${r.vehicles_imported} importiert, ${r.vehicles_skipped} übersprungen. ` +
-      `Anbieter: ${r.providers_imported} importiert, ${r.providers_skipped} übersprungen. ` +
-      `Ladeorte: ${r.locations_imported} importiert, ${r.locations_skipped} übersprungen. ` +
-      `Ladevorgänge: ${r.sessions_imported} importiert, ${r.sessions_skipped} übersprungen.`;
+      `${T.backupResultVehicles}: ${r.vehicles_imported} ${T.backupResultImported}, ${r.vehicles_skipped} ${T.backupResultSkipped}. ` +
+      `${T.backupResultProviders}: ${r.providers_imported} ${T.backupResultImported}, ${r.providers_skipped} ${T.backupResultSkipped}. ` +
+      `${T.backupResultLocations}: ${r.locations_imported} ${T.backupResultImported}, ${r.locations_skipped} ${T.backupResultSkipped}. ` +
+      `${T.backupResultSessions}: ${r.sessions_imported} ${T.backupResultImported}, ${r.sessions_skipped} ${T.backupResultSkipped}.`;
     e.target.reset();
     loadVehicles();
     loadProviders();
     loadLocations();
   } catch (err) {
-    resultDiv.textContent = 'Fehler beim Import.';
+    resultDiv.textContent = T.backupErrorGeneric;
   }
 });
 
@@ -501,16 +571,16 @@ document.getElementById('backup-import-form').addEventListener('submit', async (
 function renderWebdavStatus(config) {
   const el = document.getElementById('webdav-status');
   if (!config.last_run_at) {
-    el.textContent = 'Noch kein automatisches Backup ausgeführt.';
+    el.textContent = T.webdavNeverRun;
     el.style.color = 'var(--muted)';
     return;
   }
-  const when = new Date(config.last_run_at + 'Z').toLocaleString('de-DE');
+  const when = new Date(config.last_run_at + 'Z').toLocaleString(LOCALE);
   if (config.last_status === 'success') {
-    el.textContent = `Letztes Backup erfolgreich: ${when}`;
+    el.textContent = `${T.webdavSuccessPrefix}${when}`;
     el.style.color = 'var(--accent)';
   } else {
-    el.textContent = `Letztes Backup fehlgeschlagen (${when}): ${config.last_error || 'unbekannter Fehler'}`;
+    el.textContent = `${T.webdavFailurePrefix}${when}): ${config.last_error || T.webdavUnknownError}`;
     el.style.color = 'var(--danger)';
   }
 }
@@ -520,7 +590,7 @@ async function loadWebdavConfig() {
   document.getElementById('wd-enabled').checked = config.enabled;
   document.getElementById('wd-url').value = config.url;
   document.getElementById('wd-username').value = config.username || '';
-  document.getElementById('wd-password').placeholder = config.has_password ? 'Passwort gesetzt – leer lassen zum Beibehalten' : 'Passwort';
+  document.getElementById('wd-password').placeholder = config.has_password ? T.webdavPasswordSet : T.webdavPassword;
   document.getElementById('wd-frequency').value = config.frequency;
   document.getElementById('wd-retention').value = config.retention_days;
   renderWebdavStatus(config);
@@ -540,24 +610,24 @@ document.getElementById('webdav-form').addEventListener('submit', async (e) => {
     method: 'PUT', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   });
-  if (!res.ok) { alert('Fehler: ' + await res.text()); return; }
+  if (!res.ok) { alert(T.webdavErrorPrefix + await res.text()); return; }
   document.getElementById('wd-password').value = '';
   const config = await res.json();
-  document.getElementById('wd-password').placeholder = config.has_password ? 'Passwort gesetzt – leer lassen zum Beibehalten' : 'Passwort';
+  document.getElementById('wd-password').placeholder = config.has_password ? T.webdavPasswordSet : T.webdavPassword;
   renderWebdavStatus(config);
 });
 
 document.getElementById('wd-run-btn').addEventListener('click', async () => {
   const btn = document.getElementById('wd-run-btn');
   btn.disabled = true;
-  btn.textContent = 'Läuft…';
+  btn.textContent = T.webdavRunRunning;
   try {
     const res = await fetch('api/backup/webdav/run', { method: 'POST' });
-    if (!res.ok) { alert('Fehler: ' + await res.text()); return; }
+    if (!res.ok) { alert(T.webdavErrorPrefix + await res.text()); return; }
     renderWebdavStatus(await res.json());
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Jetzt sichern';
+    btn.textContent = T.webdavRunNow;
   }
 });
 
@@ -570,20 +640,24 @@ function msVehicleId() {
 // Der Server speichert naive UTC-Zeitstempel (wie ueberall in dieser App),
 // deshalb das angehaengte 'Z' vor der lokalen Formatierung.
 function msFmt(value) {
-  return value ? new Date(value + 'Z').toLocaleString('de-DE') : '–';
+  return value ? new Date(value + 'Z').toLocaleString(LOCALE) : '–';
 }
 
 function msFmtNum(value, digits = 1) {
-  return (value === null || value === undefined) ? '–' : value.toFixed(digits).replace('.', ',');
+  if (value === null || value === undefined) return '–';
+  const formatted = value.toFixed(digits);
+  return LOCALE === 'de-DE' ? formatted.replace('.', ',') : formatted;
 }
 
 function msRelative(value) {
   if (!value) return '';
   const minutes = Math.round((Date.now() - new Date(value + 'Z').getTime()) / 60000);
-  if (minutes < 1) return 'gerade eben';
-  if (minutes < 60) return `vor ${minutes} min`;
+  if (minutes < 1) return T.msRelativeJustNow;
+  if (minutes < 60) return `${T.msRelativeMinutesPrefix}${minutes}${T.msRelativeMinutesSuffix}`;
   const hours = Math.round(minutes / 60);
-  return hours < 48 ? `vor ${hours} h` : `vor ${Math.round(hours / 24)} Tagen`;
+  return hours < 48
+    ? `${T.msRelativeMinutesPrefix}${hours}${T.msRelativeHoursSuffix}`
+    : `${T.msRelativeMinutesPrefix}${Math.round(hours / 24)}${T.msRelativeDaysSuffix}`;
 }
 
 function renderMyskodaVehicleOptions() {
@@ -598,51 +672,51 @@ function renderMyskodaStatus(c) {
   document.getElementById('ms-delete-btn').style.display = (c.has_api_key || c.vin) ? '' : 'none';
 
   const labels = {
-    ok: 'Letzte Abfrage erfolgreich',
-    error: 'Letzte Abfrage fehlgeschlagen',
-    auth_error: 'API-Key wurde abgelehnt',
-    rate_limited: 'Rate-Limit erreicht',
+    ok: T.msStatusOk,
+    error: T.msStatusError,
+    auth_error: T.msStatusAuthError,
+    rate_limited: T.msStatusRateLimited,
   };
   const colors = {
     ok: 'var(--accent)', error: 'var(--danger)',
     auth_error: 'var(--danger)', rate_limited: 'var(--warn)',
   };
   const lines = [];
-  const status = labels[c.last_status] || 'Noch nie abgefragt';
+  const status = labels[c.last_status] || T.msStatusNever;
   lines.push(`<strong style="color:${colors[c.last_status] || 'var(--muted)'}">${status}</strong>`
     + (c.last_poll_at ? ` – ${msFmt(c.last_poll_at)} (${msRelative(c.last_poll_at)})` : ''));
 
   if (c.last_error) lines.push(`<span style="color:var(--danger)">${c.last_error}</span>`);
 
   if (c.last_charging_state) {
-    lines.push(`Fahrzeug: <code>${c.last_charging_state}</code>`
+    lines.push(`${T.msVehiclePrefix}<code>${c.last_charging_state}</code>`
       + ` · SoC ${c.last_soc ?? '–'} %`
-      + ` · Stand des Fahrzeugs vom ${msFmt(c.last_captured_at)} (${msRelative(c.last_captured_at)})`);
+      + `${T.msCapturedPrefix}${msFmt(c.last_captured_at)} (${msRelative(c.last_captured_at)})`);
   }
 
   if (c.open_start_time) {
-    lines.push(`<span style="color:var(--warn)">Ladevorgang läuft</span> seit ${msFmt(c.open_start_time)}`
+    lines.push(`<span style="color:var(--warn)">${T.msChargingRunning}</span>${T.msSince}${msFmt(c.open_start_time)}`
       + ` · SoC ${c.open_soc_start ?? '–'} % → ${c.open_soc_last ?? '–'} %`
       + ` · max. ${msFmtNum(c.open_max_power_kw)} kW`
-      + ` · Lade-Art ${c.open_charging_type || 'unbekannt'}`
-      + ` · ${c.open_poll_count} Abfragen`);
+      + `${T.msChargeTypePrefix}${c.open_charging_type || T.msChargeTypeUnknown}`
+      + ` · ${c.open_poll_count}${T.msPollsSuffix}`);
   }
 
-  if (c.enabled && c.next_poll_at) lines.push(`Nächste Abfrage: ${msFmt(c.next_poll_at)}`);
-  else if (c.enabled) lines.push('Nächste Abfrage: beim nächsten Durchlauf (max. 1 Minute)');
+  if (c.enabled && c.next_poll_at) lines.push(`${T.msNextPollPrefix}${msFmt(c.next_poll_at)}`);
+  else if (c.enabled) lines.push(T.msNextPollSoon);
 
   if (c.rate_limit_limit !== null || c.rate_limit_remaining !== null) {
     const low = c.rate_limit_remaining !== null && c.rate_limit_remaining <= 3;
-    lines.push(`<span style="color:${low ? 'var(--warn)' : 'inherit'}">Kontingent: `
-      + `${c.rate_limit_remaining ?? '?'} von ${c.rate_limit_limit ?? '?'} Anfragen übrig`
-      + (c.rate_limit_resets_at ? `, Freigabe ${msFmt(c.rate_limit_resets_at)}` : '') + '</span>');
+    lines.push(`<span style="color:${low ? 'var(--warn)' : 'inherit'}">${T.msQuotaPrefix}`
+      + `${c.rate_limit_remaining ?? '?'}${T.msQuotaOf}${c.rate_limit_limit ?? '?'}${T.msQuotaSuffix}`
+      + (c.rate_limit_resets_at ? `${T.msQuotaReleasePrefix}${msFmt(c.rate_limit_resets_at)}` : '') + '</span>');
   }
 
   if (c.api_key_expires_at) {
     const days = Math.round((new Date(c.api_key_expires_at + 'Z').getTime() - Date.now()) / 86400000);
     const color = days <= 14 ? 'var(--danger)' : (days <= 30 ? 'var(--warn)' : 'inherit');
-    lines.push(`<span style="color:${color}">API-Key läuft ab am ${msFmt(c.api_key_expires_at)}`
-      + ` (in ${days} Tagen)</span>`);
+    lines.push(`<span style="color:${color}">${T.msExpiresPrefix}${msFmt(c.api_key_expires_at)}`
+      + `${T.msExpiresInDaysPrefix}${days}${T.msExpiresInDaysSuffix}</span>`);
   }
 
   el.innerHTML = lines.join('<br>');
@@ -652,14 +726,14 @@ function renderMyskodaStatus(c) {
 async function loadMyskodaConfig() {
   const vehicleId = msVehicleId();
   if (!vehicleId) {
-    document.getElementById('myskoda-status').textContent = 'Bitte zuerst ein Fahrzeug anlegen.';
+    document.getElementById('myskoda-status').textContent = T.msPleaseAddVehicle;
     return;
   }
   const c = await (await fetch(`api/myskoda/configs/${vehicleId}`)).json();
   document.getElementById('ms-enabled').checked = c.enabled;
   document.getElementById('ms-apikey').value = '';
   document.getElementById('ms-apikey').placeholder = c.has_api_key
-    ? 'API-Key gesetzt – leer lassen zum Beibehalten' : 'API-Key';
+    ? T.msApikeyPlaceholderSet : T.msApikey;
   document.getElementById('ms-vin').value = c.vin || '';
   document.getElementById('ms-idle').value = c.poll_interval_idle_minutes;
   document.getElementById('ms-active').value = c.poll_interval_active_minutes;
@@ -678,7 +752,7 @@ async function loadMyskodaLog() {
   if (!vehicleId) { rows.innerHTML = ''; return; }
   const entries = await (await fetch(`api/myskoda/logs?vehicle_id=${vehicleId}&limit=200`)).json();
   if (!entries.length) {
-    rows.innerHTML = '<tr><td colspan="7" style="color:var(--muted)">Noch keine Einträge.</td></tr>';
+    rows.innerHTML = `<tr><td colspan="7" style="color:var(--muted)">${T.msLogNoEntries}</td></tr>`;
     return;
   }
   const levelColor = { error: 'var(--danger)', warning: 'var(--warn)' };
@@ -691,7 +765,7 @@ async function loadMyskodaLog() {
       <td>${e.charge_power_kw === null ? '–' : msFmtNum(e.charge_power_kw) + ' kW'}</td>
       <td style="color:${levelColor[e.level] || 'inherit'}">${e.message}</td>
       <td>${e.has_payload
-        ? `<a href="api/myskoda/logs/${e.id}/payload" target="_blank" rel="noopener">Rohantwort</a>`
+        ? `<a href="api/myskoda/logs/${e.id}/payload" target="_blank" rel="noopener">${T.msLogRawLink}</a>`
         : ''}</td>
     </tr>`).join('');
 }
@@ -724,7 +798,7 @@ async function msSaveConfig() {
     method: 'PUT', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(msBuildPayload())
   });
-  if (!res.ok) { alert('Fehler: ' + await res.text()); return null; }
+  if (!res.ok) { alert(T.msErrorPrefix + await res.text()); return null; }
   return await res.json();
 }
 
@@ -741,7 +815,7 @@ async function msRunAction(btnId, url, label) {
   btn.textContent = label;
   try {
     const res = await fetch(url, { method: 'POST' });
-    if (!res.ok) { alert('Fehler: ' + await res.text()); return null; }
+    if (!res.ok) { alert(T.msErrorPrefix + await res.text()); return null; }
     return await res.json();
   } finally {
     btn.disabled = false;
@@ -751,13 +825,13 @@ async function msRunAction(btnId, url, label) {
 
 document.getElementById('ms-test-btn').addEventListener('click', async () => {
   if (!(await msSaveConfig())) return;
-  const result = await msRunAction('ms-test-btn', `api/myskoda/configs/${msVehicleId()}/test`, 'Teste…');
+  const result = await msRunAction('ms-test-btn', `api/myskoda/configs/${msVehicleId()}/test`, T.msTesting);
   if (!result) return;
   const box = document.getElementById('myskoda-test-result');
   box.style.display = 'block';
   box.textContent = result.ok
     ? JSON.stringify(result.summary, null, 2)
-    : 'Fehlgeschlagen: ' + result.error;
+    : T.msTestFailedPrefix + result.error;
   box.style.color = result.ok ? 'var(--text)' : 'var(--danger)';
   renderMyskodaStatus(result.config);
   await loadMyskodaLog();
@@ -765,16 +839,16 @@ document.getElementById('ms-test-btn').addEventListener('click', async () => {
 
 document.getElementById('ms-poll-btn').addEventListener('click', async () => {
   if (!(await msSaveConfig())) return;
-  const config = await msRunAction('ms-poll-btn', `api/myskoda/configs/${msVehicleId()}/poll`, 'Frage ab…');
+  const config = await msRunAction('ms-poll-btn', `api/myskoda/configs/${msVehicleId()}/poll`, T.msPolling);
   if (!config) return;
   renderMyskodaStatus(config);
   await loadMyskodaLog();
 });
 
 document.getElementById('ms-delete-btn').addEventListener('click', async () => {
-  if (!confirm('Konfiguration inklusive API-Key und Protokoll löschen? Bereits erfasste Ladevorgänge bleiben erhalten.')) return;
+  if (!confirm(T.msConfirmDelete)) return;
   const res = await fetch(`api/myskoda/configs/${msVehicleId()}`, { method: 'DELETE' });
-  if (!res.ok) { alert('Fehler: ' + await res.text()); return; }
+  if (!res.ok) { alert(T.msErrorPrefix + await res.text()); return; }
   await loadMyskodaConfig();
 });
 
@@ -785,9 +859,9 @@ document.getElementById('ms-log-export').addEventListener('click', () => {
 });
 
 document.getElementById('ms-log-clear').addEventListener('click', async () => {
-  if (!confirm('Debug-Protokoll dieses Fahrzeugs löschen?')) return;
+  if (!confirm(T.msLogConfirmClear)) return;
   const res = await fetch(`api/myskoda/logs?vehicle_id=${msVehicleId()}`, { method: 'DELETE' });
-  if (!res.ok) { alert('Fehler: ' + await res.text()); return; }
+  if (!res.ok) { alert(T.msErrorPrefix + await res.text()); return; }
   await loadMyskodaLog();
 });
 
@@ -800,18 +874,39 @@ async function loadUsers() {
   rows.innerHTML = users.map(u => `
     <tr>
       <td>${u.username}</td>
-      <td>${u.is_admin ? 'Admin' : 'Nutzer'}</td>
-      <td>${new Date(u.created_at).toLocaleDateString('de-DE')}</td>
-      <td><button type="button" onclick="deleteUser('${u.id}')" style="background:var(--danger)">Löschen</button></td>
+      <td>${u.is_admin ? T.usersRoleAdmin : T.usersRoleUser}</td>
+      <td>${new Date(u.created_at).toLocaleDateString(LOCALE)}</td>
+      <td><button type="button" onclick="deleteUser('${u.id}')" style="background:var(--danger)">${T.del}</button></td>
     </tr>`).join('');
 }
 
 async function deleteUser(id) {
-  if (!confirm('Konto wirklich löschen?')) return;
+  if (!confirm(T.usersConfirmDelete)) return;
   const res = await fetch(`api/auth/users/${id}`, { method: 'DELETE' });
-  if (!res.ok) { alert('Fehler: ' + await res.text()); return; }
+  if (!res.ok) { alert(T.usersErrorPrefix + await res.text()); return; }
   loadUsers();
 }
+
+// ---------- Sprache ----------
+
+document.getElementById('language-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const language = document.getElementById('lang-select').value;
+  const res = await fetch('api/auth/language', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ language })
+  });
+  if (!res.ok) {
+    document.getElementById('language-status').textContent = T.langError;
+    document.getElementById('language-status').style.color = 'var(--danger)';
+    return;
+  }
+  // Neu laden, damit die komplette Seite (inkl. aller weiter oben bereits
+  // gerenderten deutschen/englischen Texte) in der neuen Sprache angezeigt
+  // wird - ein reines Nachziehen per JS waere angesichts der vielen
+  // serverseitig gerenderten Strings auf dieser Seite unpraktikabel.
+  window.location.reload();
+});
 
 (async () => {
   await loadVehicles();

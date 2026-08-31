@@ -47,6 +47,14 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String)
     # Erster jemals registrierter Nutzer wird automatisch Admin (siehe routers/auth.py)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+    # UI-Sprache ("de"/"en"), manuell in den Einstellungen gewaehlt (siehe
+    # routers/auth.py::set_language) - kein Auto-Erkennen ueber Accept-Language
+    # als primaerer Mechanismus. Liegt bewusst direkt am User statt in einer
+    # eigenen Settings-Tabelle (die es fuer sowas noch nicht gibt) und wird
+    # zusaetzlich in ein Cookie gespiegelt (main.py::_resolve_language), damit
+    # auch die noch nicht eingeloggten Login-/Registrieren-Seiten die zuletzt
+    # gewaehlte Sprache kennen.
+    language: Mapped[str] = mapped_column(String, default="de")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     tokens: Mapped[list["AuthToken"]] = relationship(

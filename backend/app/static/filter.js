@@ -7,6 +7,15 @@
 
 const FILTER_STORAGE_KEY = 'lademonitor_filter';
 
+// window.I18N_FILTER wird von base.html VOR dieser Datei gesetzt (siehe
+// i18n/__init__.py::translations_for) - diese Datei ist ein normales
+// statisches Asset, kein Jinja2-Template, bekommt Uebersetzungen also nicht
+// per {{ t('...') }}. Deutscher Fallback direkt hier, falls die Datei doch
+// mal ohne dieses Setup geladen wird (z.B. lokal isoliert getestet).
+function ft(key, fallback) {
+  return (window.I18N_FILTER && window.I18N_FILTER[key]) || fallback;
+}
+
 function loadFilter() {
   try {
     const raw = localStorage.getItem(FILTER_STORAGE_KEY);
@@ -43,13 +52,13 @@ function toISODate(d) {
 }
 
 const FILTER_PRESETS = [
-  ['last7Days', 'Letzte 7 Tage'],
-  ['last30Days', 'Letzte 30 Tage'],
-  ['last90Days', 'Letzte 90 Tage'],
-  ['lastMonth', 'Letzter Monat'],
-  ['monthToDate', 'Monat bis jetzt'],
-  ['yearToDate', 'Jahr bis jetzt'],
-  ['lastYear', 'Letztes Jahr'],
+  ['last7Days', ft('filter.presets.last7Days', 'Letzte 7 Tage')],
+  ['last30Days', ft('filter.presets.last30Days', 'Letzte 30 Tage')],
+  ['last90Days', ft('filter.presets.last90Days', 'Letzte 90 Tage')],
+  ['lastMonth', ft('filter.presets.lastMonth', 'Letzter Monat')],
+  ['monthToDate', ft('filter.presets.monthToDate', 'Monat bis jetzt')],
+  ['yearToDate', ft('filter.presets.yearToDate', 'Jahr bis jetzt')],
+  ['lastYear', ft('filter.presets.lastYear', 'Letztes Jahr')],
 ];
 
 function presetRange(id) {
@@ -125,7 +134,7 @@ function renderFilterBar(containerId, onChange) {
 
   const summary = current
     ? `${formatDateDE(current.start_date)} – ${formatDateDE(current.end_date)}`
-    : 'Alle Ladevorgänge';
+    : ft('filter.all_sessions', 'Alle Ladevorgänge');
 
   container.innerHTML = `
     <div class="filter-widget">
@@ -138,8 +147,8 @@ function renderFilterBar(containerId, onChange) {
         <div class="filter-row">
           <input type="date" id="${startId}" value="${current?.start_date || ''}">
           <input type="date" id="${endId}" value="${current?.end_date || ''}">
-          <button type="button" class="filter-apply-btn">Anwenden</button>
-          ${current ? '<button type="button" class="filter-clear-btn" style="background:var(--danger)">Filter löschen</button>' : ''}
+          <button type="button" class="filter-apply-btn">${ft('filter.apply', 'Anwenden')}</button>
+          ${current ? `<button type="button" class="filter-clear-btn" style="background:var(--danger)">${ft('filter.clear', 'Filter löschen')}</button>` : ''}
         </div>
       </div>
     </div>`;

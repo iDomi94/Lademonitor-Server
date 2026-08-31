@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="{{ lang|default('de') }}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Registrieren – Lademonitor</title>
+  <title>{{ t('register.page_title') }}</title>
   <link rel="stylesheet" href="static/style.css">
   <style>
     .auth-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
@@ -20,19 +20,21 @@
 <body>
   <div class="auth-wrap">
     <div class="card auth-card">
-      <h1>⚡ Konto erstellen</h1>
+      <h1>{{ t('register.heading') }}</h1>
       <form id="register-form">
-        <div class="field"><label>Nutzername</label><input id="r-username" required minlength="3" autofocus></div>
-        <div class="field"><label>Passwort</label><input type="password" id="r-password" required minlength="8"></div>
-        <div class="auth-hint">Mindestens 8 Zeichen</div>
-        <div class="field"><label>Passwort wiederholen</label><input type="password" id="r-password-confirm" required minlength="8"></div>
-        <button type="submit">Registrieren</button>
+        <div class="field"><label>{{ t('register.username_label') }}</label><input id="r-username" required minlength="3" autofocus></div>
+        <div class="field"><label>{{ t('register.password_label') }}</label><input type="password" id="r-password" required minlength="8"></div>
+        <div class="auth-hint">{{ t('register.password_hint') }}</div>
+        <div class="field"><label>{{ t('register.password_confirm_label') }}</label><input type="password" id="r-password-confirm" required minlength="8"></div>
+        <button type="submit">{{ t('register.submit') }}</button>
         <div class="auth-error" id="register-error"></div>
       </form>
-      <div class="auth-switch">Schon ein Konto? <a href="login">Anmelden</a></div>
+      <div class="auth-switch">{{ t('register.have_account') }} <a href="login">{{ t('register.login_link') }}</a></div>
     </div>
   </div>
   <script>
+    const REGISTER_PASSWORD_MISMATCH = {{ t('register.password_mismatch')|tojson }};
+    const REGISTER_ERROR_DEFAULT = {{ t('register.error_default')|tojson }};
     document.getElementById('register-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const errorEl = document.getElementById('register-error');
@@ -40,7 +42,7 @@
       const password = document.getElementById('r-password').value;
       const confirm = document.getElementById('r-password-confirm').value;
       if (password !== confirm) {
-        errorEl.textContent = 'Passwörter stimmen nicht überein.';
+        errorEl.textContent = REGISTER_PASSWORD_MISMATCH;
         return;
       }
       const res = await fetch('api/auth/register', {
@@ -54,7 +56,7 @@
         window.location = '.';
       } else {
         const data = await res.json().catch(() => ({}));
-        errorEl.textContent = data.detail || 'Registrierung fehlgeschlagen.';
+        errorEl.textContent = data.detail || REGISTER_ERROR_DEFAULT;
       }
     });
   </script>

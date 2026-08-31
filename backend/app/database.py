@@ -35,6 +35,17 @@ def run_light_migrations() -> None:
             )
         )
 
+        # i18n: UI-Sprache pro Nutzer (siehe models.User.language). DEFAULT 'de'
+        # deckt sowohl neue Zeilen als auch - via UPDATE - bereits bestehende
+        # Nutzer ab, die die Spalte noch nicht hatten (Postgres setzt den
+        # DEFAULT bei ADD COLUMN nicht rueckwirkend fuer Bestandszeilen).
+        conn.execute(
+            text(
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS language VARCHAR DEFAULT 'de'"
+            )
+        )
+        conn.execute(text("UPDATE users SET language = 'de' WHERE language IS NULL"))
+
         # Multi-User-Umstellung: user_id auf allen vier Kern-Tabellen ergaenzen.
         # Bestehende Zeilen (aus der Zeit vor Multi-User) werden dem ERSTEN
         # jemals registrierten Nutzer zugeordnet - das ist zuverlaessig der

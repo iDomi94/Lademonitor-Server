@@ -1,37 +1,37 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>Ladevorgänge</h1>
+<h1>{{ t('sessions.heading') }}</h1>
 
 <div id="filter-bar"></div>
 
-<h2 id="form-heading" style="margin-top:0">Neuer Ladevorgang</h2>
+<h2 id="form-heading" style="margin-top:0">{{ t('sessions.form.new_heading') }}</h2>
 <form class="inline-form" id="session-form">
   <div>
-    <label>Fahrzeug</label>
+    <label>{{ t('sessions.form.vehicle') }}</label>
     <select id="f-vehicle" required></select>
   </div>
   <div>
-    <label>Anbieter</label>
+    <label>{{ t('sessions.form.provider') }}</label>
     <select id="f-provider">
-      <option value="">– keiner –</option>
+      <option value="">{{ t('sessions.form.none_option') }}</option>
     </select>
   </div>
   <div>
-    <label>Ladeort (bekannt)</label>
+    <label>{{ t('sessions.form.location_known') }}</label>
     <select id="f-location">
-      <option value="">– keiner –</option>
+      <option value="">{{ t('sessions.form.none_option') }}</option>
     </select>
   </div>
   <div>
-    <label>Ladeort als Text (falls kein bekannter Ort passt)</label>
-    <input id="f-location-text" placeholder="z.B. Stuttgart Hbf">
+    <label>{{ t('sessions.form.location_text') }}</label>
+    <input id="f-location-text" placeholder="{{ t('sessions.form.location_text_placeholder') }}">
   </div>
   <div>
-    <label>Start</label>
+    <label>{{ t('sessions.form.start') }}</label>
     <input type="datetime-local" id="f-start" required>
   </div>
   <div>
-    <label>Lade-Typ</label>
+    <label>{{ t('sessions.form.type') }}</label>
     <select id="f-type">
       <option value="">–</option>
       <option value="AC">AC</option>
@@ -39,40 +39,40 @@
     </select>
   </div>
   <div>
-    <label>SoC Start (%)</label>
+    <label>{{ t('sessions.form.soc_start') }}</label>
     <input type="number" id="f-soc-start" min="0" max="100">
   </div>
   <div>
-    <label>SoC Ende (%)</label>
+    <label>{{ t('sessions.form.soc_end') }}</label>
     <input type="number" id="f-soc-end" min="0" max="100">
   </div>
   <div>
-    <label>kWh (leer = automatisch)</label>
+    <label>{{ t('sessions.form.kwh') }}</label>
     <input type="number" step="0.01" id="f-kwh">
   </div>
   <div>
-    <label>Preis/kWh (€)</label>
+    <label>{{ t('sessions.form.price_kwh') }}</label>
     <input type="number" step="0.0001" id="f-price-kwh">
   </div>
   <div>
-    <label>Gesamtpreis (€)</label>
+    <label>{{ t('sessions.form.price_total') }}</label>
     <input type="number" step="0.01" id="f-price-total">
   </div>
   <div>
-    <label>Kilometerstand</label>
+    <label>{{ t('sessions.form.odometer') }}</label>
     <input type="number" id="f-odo">
   </div>
   <div class="form-actions">
-    <button type="button" id="cancel-edit-btn" style="background:var(--muted); display:none">Abbrechen</button>
-    <button type="submit" id="submit-btn">Ladevorgang speichern</button>
+    <button type="button" id="cancel-edit-btn" style="background:var(--muted); display:none">{{ t('sessions.form.cancel') }}</button>
+    <button type="submit" id="submit-btn">{{ t('sessions.form.submit_new') }}</button>
   </div>
 </form>
 
 <table>
   <thead>
     <tr>
-      <th>Datum</th><th>Fahrzeug</th><th>Anbieter</th><th>Ort</th><th>Typ</th><th>SoC</th><th>kWh</th>
-      <th>Preis</th><th>km-Stand</th><th>Verbrauch</th><th>Quelle</th><th></th>
+      <th>{{ t('sessions.table.date') }}</th><th>{{ t('sessions.table.vehicle') }}</th><th>{{ t('sessions.table.provider') }}</th><th>{{ t('sessions.table.location') }}</th><th>{{ t('sessions.table.type') }}</th><th>{{ t('sessions.table.soc') }}</th><th>{{ t('sessions.table.kwh') }}</th>
+      <th>{{ t('sessions.table.price') }}</th><th>{{ t('sessions.table.odometer') }}</th><th>{{ t('sessions.table.consumption') }}</th><th>{{ t('sessions.table.source') }}</th><th></th>
     </tr>
   </thead>
   <tbody id="session-rows"></tbody>
@@ -85,6 +85,29 @@ let locations = [];
 let allSessions = [];
 let editingSessionId = null;
 
+// Locale fuer Datumsformatierung an die aktive UI-Sprache gekoppelt statt
+// fest auf 'de-DE'.
+const LOCALE = {{ lang|default('de')|tojson }} === 'en' ? 'en-US' : 'de-DE';
+const T = {
+  edit: {{ t('common.edit')|tojson }},
+  del: {{ t('common.delete')|tojson }},
+  noneOption: {{ t('common.none_option')|tojson }},
+  badgeManual: {{ t('sessions.badge.manual')|tojson }},
+  badgeAutomatic: {{ t('sessions.badge.automatic')|tojson }},
+  badgeImport: {{ t('sessions.badge.import')|tojson }},
+  tooltipFullChargeInterval: {{ t('sessions.consumption.tooltip.full_charge_interval')|tojson }},
+  tooltipSocCorrected: {{ t('sessions.consumption.tooltip.soc_corrected')|tojson }},
+  tooltipNaive: {{ t('sessions.consumption.tooltip.naive')|tojson }},
+  tooltipEstimatedEnergy: {{ t('sessions.consumption.tooltip.estimated_energy')|tojson }},
+  tooltipUnavailable: {{ t('sessions.consumption.tooltip.unavailable')|tojson }},
+  confirmDelete: {{ t('sessions.confirm.delete')|tojson }},
+  errorSavePrefix: {{ t('sessions.error.save_prefix')|tojson }},
+  newHeading: {{ t('sessions.form.new_heading')|tojson }},
+  editHeading: {{ t('sessions.form.edit_heading')|tojson }},
+  submitNew: {{ t('sessions.form.submit_new')|tojson }},
+  submitEdit: {{ t('sessions.form.submit_edit')|tojson }},
+};
+
 async function loadDropdowns() {
   vehicles = await (await fetch('api/vehicles')).json();
   providers = await (await fetch('api/providers')).json();
@@ -94,11 +117,11 @@ async function loadDropdowns() {
   vSel.innerHTML = vehicles.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
 
   const pSel = document.getElementById('f-provider');
-  pSel.innerHTML = '<option value="">– keiner –</option>' +
+  pSel.innerHTML = `<option value="">${T.noneOption}</option>` +
     providers.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
 
   const lSel = document.getElementById('f-location');
-  lSel.innerHTML = '<option value="">– keiner –</option>' +
+  lSel.innerHTML = `<option value="">${T.noneOption}</option>` +
     locations.map(l => `<option value="${l.id}">${l.name}</option>`).join('');
 }
 
@@ -118,7 +141,7 @@ document.getElementById('f-provider').addEventListener('change', suggestPrice);
 document.getElementById('f-type').addEventListener('change', suggestPrice);
 
 function badgeFor(source) {
-  const map = { manual: 'Manuell', automatic: 'Automatisch', import: 'Import' };
+  const map = { manual: T.badgeManual, automatic: T.badgeAutomatic, import: T.badgeImport };
   return `<span class="badge badge-${source}">${map[source] || source}</span>`;
 }
 
@@ -129,11 +152,11 @@ const CONSUMPTION_ICON = {
   estimated_energy: '~',
 };
 const CONSUMPTION_TOOLTIP = {
-  full_charge_interval: 'Exakt: aus Vollladungs-Intervall (SoC 100% → 100%) berechnet',
-  soc_corrected: 'SoC-korrigiert, auf Basis gemessener kWh',
-  naive: 'Einfache Rechnung ohne SoC-Korrektur (keine SoC-Werte verfügbar)',
-  estimated_energy: 'Basiert auf geschätzter Energiemenge (SoC-Delta × Akkukapazität) - Fehler können sich häufen',
-  unavailable: 'Keine Berechnung möglich (kein Vorgänger-Ladevorgang oder Kilometerstand fehlt/unplausibel)',
+  full_charge_interval: T.tooltipFullChargeInterval,
+  soc_corrected: T.tooltipSocCorrected,
+  naive: T.tooltipNaive,
+  estimated_energy: T.tooltipEstimatedEnergy,
+  unavailable: T.tooltipUnavailable,
 };
 
 function consumptionCell(kwhPer100km, method) {
@@ -152,7 +175,7 @@ async function loadSessions() {
     const vehicle = vehicles.find(v => v.id === s.vehicle_id);
     const provider = providers.find(p => p.id === s.provider_id);
     const location = locations.find(l => l.id === s.location_id);
-    const date = new Date(s.start_time).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' });
+    const date = new Date(s.start_time).toLocaleString(LOCALE, { dateStyle: 'medium', timeStyle: 'short' });
 
     let ortText = location ? location.name : (s.geocoded_place || '–');
     if (!location && !s.geocoded_place && s.notes) {
@@ -177,8 +200,8 @@ async function loadSessions() {
       <td>${consumptionCell(s.consumption_kwh_per_100km, s.consumption_method)}</td>
       <td>${badgeFor(s.source)}</td>
       <td style="white-space:nowrap">
-        <button onclick="startEdit('${s.id}')" style="background:var(--accent2)">Bearbeiten</button>
-        <button onclick="deleteSession('${s.id}')" style="background:var(--danger)">Löschen</button>
+        <button onclick="startEdit('${s.id}')" style="background:var(--accent2)">${T.edit}</button>
+        <button onclick="deleteSession('${s.id}')" style="background:var(--danger)">${T.del}</button>
       </td>
     </tr>`;
   }).join('');
@@ -207,8 +230,8 @@ function startEdit(id) {
   document.getElementById('f-price-total').value = s.price_total ?? '';
   document.getElementById('f-odo').value = s.odometer_km ?? '';
 
-  document.getElementById('form-heading').textContent = 'Ladevorgang bearbeiten';
-  document.getElementById('submit-btn').textContent = 'Änderungen speichern';
+  document.getElementById('form-heading').textContent = T.editHeading;
+  document.getElementById('submit-btn').textContent = T.submitEdit;
   document.getElementById('cancel-edit-btn').style.display = 'inline-block';
   document.getElementById('session-form').scrollIntoView({ behavior: 'smooth' });
 }
@@ -216,14 +239,14 @@ function startEdit(id) {
 function cancelEdit() {
   editingSessionId = null;
   document.getElementById('session-form').reset();
-  document.getElementById('form-heading').textContent = 'Neuer Ladevorgang';
-  document.getElementById('submit-btn').textContent = 'Ladevorgang speichern';
+  document.getElementById('form-heading').textContent = T.newHeading;
+  document.getElementById('submit-btn').textContent = T.submitNew;
   document.getElementById('cancel-edit-btn').style.display = 'none';
 }
 document.getElementById('cancel-edit-btn').addEventListener('click', cancelEdit);
 
 async function deleteSession(id) {
-  if (!confirm('Ladevorgang wirklich löschen?')) return;
+  if (!confirm(T.confirmDelete)) return;
   await fetch(`api/sessions/${id}`, { method: 'DELETE' });
   if (editingSessionId === id) cancelEdit();
   loadSessions();
@@ -271,7 +294,7 @@ document.getElementById('session-form').addEventListener('submit', async (e) => 
     loadSessions();
     loadDropdowns();
   } else {
-    alert('Fehler beim Speichern: ' + await res.text());
+    alert(T.errorSavePrefix + await res.text());
   }
 });
 

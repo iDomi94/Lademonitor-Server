@@ -1,34 +1,42 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>Spritmonitor-Import</h1>
+<h1>{{ t('import.heading') }}</h1>
 
 <form class="inline-form" id="import-form">
   <div>
-    <label>Fahrzeug</label>
+    <label>{{ t('import.form.vehicle') }}</label>
     <select id="i-vehicle" required></select>
   </div>
   <div>
-    <label>CSV-Datei</label>
+    <label>{{ t('import.form.file') }}</label>
     <input type="file" id="i-file" accept=".csv" required>
   </div>
   <div class="form-actions">
-    <button type="submit">Vorschau laden</button>
+    <button type="submit">{{ t('import.form.submit') }}</button>
   </div>
 </form>
 
 <div id="preview-area" style="display:none">
-  <h2>Vorschau</h2>
+  <h2>{{ t('import.preview.heading') }}</h2>
   <p id="preview-summary" style="color: var(--muted); font-size: 14px;"></p>
   <table>
-    <thead><tr><th>Datum</th><th>km-Stand</th><th>Menge</th><th>Preis gesamt</th><th>Preis/Einheit</th><th>Status</th></tr></thead>
+    <thead><tr><th>{{ t('import.preview.table.date') }}</th><th>{{ t('import.preview.table.odometer') }}</th><th>{{ t('import.preview.table.quantity') }}</th><th>{{ t('import.preview.table.price_total') }}</th><th>{{ t('import.preview.table.price_unit') }}</th><th>{{ t('import.preview.table.status') }}</th></tr></thead>
     <tbody id="preview-rows"></tbody>
   </table>
   <div class="form-actions" style="margin-top:16px">
-    <button id="commit-btn">Import bestätigen</button>
+    <button id="commit-btn">{{ t('import.commit') }}</button>
   </div>
 </div>
 
 <script>
+const T = {
+  errorPrefix: {{ t('import.js.error_prefix')|tojson }},
+  summary: {{ t('import.js.summary')|tojson }},
+  willImport: {{ t('import.js.will_import')|tojson }},
+  skippedDefault: {{ t('import.js.skipped_default')|tojson }},
+  commitDone: {{ t('import.js.commit_done')|tojson }},
+};
+
 async function loadVehicles() {
   const vehicles = await (await fetch('api/vehicles')).json();
   document.getElementById('i-vehicle').innerHTML =
@@ -46,12 +54,14 @@ document.getElementById('import-form').addEventListener('submit', async (e) => {
   const res = await fetch(`api/import/spritmonitor/preview?vehicle_id=${vehicleId}`, {
     method: 'POST', body: formData
   });
-  if (!res.ok) { alert('Fehler: ' + await res.text()); return; }
+  if (!res.ok) { alert(T.errorPrefix + await res.text()); return; }
   const data = await res.json();
 
   const toImport = data.rows.filter(r => r.will_import).length;
-  document.getElementById('preview-summary').textContent =
-    `${data.rows.length} Zeilen gefunden, ${toImport} werden importiert, ${data.rows.length - toImport} übersprungen (Duplikate/Fehler).`;
+  document.getElementById('preview-summary').textContent = T.summary
+    .replace('{count}', data.rows.length)
+    .replace('{toImport}', toImport)
+    .replace('{skipped}', data.rows.length - toImport);
 
   document.getElementById('preview-rows').innerHTML = data.rows.map(r => `
     <tr class="${r.will_import ? '' : 'needs-review'}">
@@ -60,7 +70,7 @@ document.getElementById('import-form').addEventListener('submit', async (e) => {
       <td>${r.quantity ?? '–'}</td>
       <td>${r.price_total ?? '–'}</td>
       <td>${r.price_per_unit ?? '–'}</td>
-      <td>${r.will_import ? '✅ wird importiert' : '⏭ ' + (r.reason || 'übersprungen')}</td>
+      <td>${r.will_import ? '✅ ' + T.willImport : '⏭ ' + (r.reason || T.skippedDefault)}</td>
     </tr>`).join('');
 
   document.getElementById('preview-area').style.display = 'block';
@@ -70,7 +80,7 @@ document.getElementById('import-form').addEventListener('submit', async (e) => {
       method: 'POST', body: formData
     });
     const result = await commitRes.json();
-    alert(`Import abgeschlossen: ${result.imported} importiert, ${result.skipped_duplicates} übersprungen.`);
+    alert(T.commitDone.replace('{imported}', result.imported).replace('{skipped}', result.skipped_duplicates));
     document.getElementById('preview-area').style.display = 'none';
     e.target.reset();
   };

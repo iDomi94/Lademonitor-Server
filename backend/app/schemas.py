@@ -22,12 +22,27 @@ class UserOut(BaseModel):
     id: str
     username: str
     is_admin: bool
+    language: str
     created_at: datetime
 
 
 class LoginResponse(BaseModel):
     token: str
     user: UserOut
+
+
+class LanguageUpdate(BaseModel):
+    language: str
+
+    @field_validator("language")
+    @classmethod
+    def _validate_language(cls, value: str) -> str:
+        # Bewusst nur hier statt gegen i18n.SUPPORTED_LANGUAGES validiert, um
+        # schemas.py nicht von app.i18n abhaengig zu machen - die Liste ist
+        # kurz und aendert sich selten.
+        if value not in ("de", "en"):
+            raise ValueError("Nicht unterstützte Sprache")
+        return value
 
 
 # ---------- Vehicle ----------

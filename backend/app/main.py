@@ -12,6 +12,14 @@ from . import models
 from .auth import get_current_user, get_user_from_request
 from .changelog import CHANGELOG, VERSION
 from .database import Base, engine, get_db, run_light_migrations
+from .i18n import (
+    DEFAULT_LANGUAGE,
+    LANGUAGE_COOKIE_NAME,
+    SUPPORTED_LANGUAGES,
+    set_current_language,
+    translate,
+    translations_for,
+)
 from .myskoda_poller import SCHEDULER_INTERVAL_SECONDS as MYSKODA_SCHEDULER_INTERVAL_SECONDS
 from .myskoda_poller import run_due_polls
 from .routers import auth, backup, geocoding, importer, locations, myskoda, providers, sessions, stats, vehicles, webdav_backup
@@ -96,6 +104,25 @@ app.include_router(myskoda.router, dependencies=[Depends(get_current_user)])
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
+# `t('key')` in jedem Template nutzbar, ohne sie einzeln in jeden Render-Kontext
+# aufzunehmen - liest die aktuell aktive Sprache aus einer ContextVar
+# (siehe i18n/__init__.py::set_current_language, wird unten pro Request gesetzt).
+templates.env.globals["t"] = translate
+
+
+def _resolve_language(request: Request, user: models.User | None) -> str:
+    """Eingeloggt ist die DB-Spalte User.language die Quelle der Wahrheit;
+    ausgeloggt (Login/Registrieren) gibt es noch keinen Nutzer, daher der
+    Cookie-Fallback (wird beim Sprachwechsel in den Einstellungen mitgesetzt,
+    siehe routers/auth.py::set_language) - ohne das wuerde die Login-Seite
+    nach einem Logout auf Deutsch zurueckspringen, obwohl der Nutzer zuvor
+    Englisch gewaehlt hatte. Zuletzt einfach Deutsch als Basis-/Default-Sprache."""
+    if user is not None and user.language in SUPPORTED_LANGUAGES:
+        return user.language
+    cookie_lang = request.cookies.get(LANGUAGE_COOKIE_NAME)
+    if cookie_lang in SUPPORTED_LANGUAGES:
+        return cookie_lang
+    return DEFAULT_LANGUAGE
 
 
 def _page(request: Request, db: Session, template_name: str):
@@ -105,9 +132,17 @@ def _page(request: Request, db: Session, template_name: str):
     user = get_user_from_request(request, db)
     if not user:
         return RedirectResponse("login", status_code=303)
+    lang = set_current_language(_resolve_language(request, user))
     return templates.TemplateResponse(
         template_name,
-        {"request": request, "user": user, "version": VERSION, "changelog": CHANGELOG},
+        {
+            "request": request,
+            "user": user,
+            "version": VERSION,
+            "changelog": CHANGELOG,
+            "lang": lang,
+            "js_translations": translations_for(lang, prefix="filter."),
+        },
     )
 
 
@@ -135,14 +170,16 @@ def settings_page(request: Request, db: Session = Depends(get_db)):
 def login_page(request: Request, db: Session = Depends(get_db)):
     if get_user_from_request(request, db):
         return RedirectResponse(".", status_code=303)
-    return templates.TemplateResponse("login.html", {"request": request})
+    lang = set_current_language(_resolve_language(request, None))
+    return templates.TemplateResponse("login.html", {"request": request, "lang": lang})
 
 
 @app.get("/register", response_class=HTMLResponse)
 def register_page(request: Request, db: Session = Depends(get_db)):
     if get_user_from_request(request, db):
         return RedirectResponse(".", status_code=303)
-    return templates.TemplateResponse("register.html", {"request": request})
+    lang = set_current_language(_resolve_language(request, None))
+    return templates.TemplateResponse("register.html", {"request": request, "lang": lang})
 
 
 @app.get("/health")
