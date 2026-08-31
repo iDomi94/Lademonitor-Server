@@ -42,8 +42,10 @@ backend/app/
   schemas.py          - Pydantic Request/Response-Schemas
   routers/
     vehicles.py, providers.py, locations.py, sessions.py, stats.py, importer.py,
-    geocoding.py, backup.py, auth.py
+    geocoding.py, backup.py, auth.py, webdav_backup.py, myskoda.py
   auth.py            - Passwort-Hashing, Token-Handling, Auth-Dependencies
+  myskoda.py         - Client fuer die offizielle MyŠkoda Public API (sync httpx)
+  myskoda_poller.py  - Zustandsmaschine der automatischen Ladeerkennung + Debug-Log
   templates/          - Jinja2 Web-UI (index=Dashboard, sessions, import, settings)
   static/style.css
 ios/Lademonitor/
@@ -277,6 +279,123 @@ Update 2026-08-23 oben - der `lademonitor.push_charging_session`-Service aus
 Lademonitor-HA ersetzt den `rest_command`-Aufruf, die restliche Automation
 (Trigger + Helfer) bleibt konzeptionell gleich.
 
+## MyŠkoda Public API (`myskoda.py`, `myskoda_poller.py`, `routers/myskoda.py`)
+
+**Neu 2026-08-31.** Zweite Quelle fuer `source=AUTOMATIC`-Ladevorgaenge,
+bewusst PARALLEL zum HA-Push oben und nicht als Ersatz: wer Home Assistant
+betreibt, faehrt mit dem Push weiter besser (Push statt Polling, kein
+Rate-Limit); der Server-Weg existiert fuer alle ohne HA. **Beide Quellen
+wissen nichts voneinander** - pro Fahrzeug darf nur eine aktiv sein, sonst
+entstehen Dubletten (die `external_session_id`-Praefixe unterscheiden sich:
+HA liefert eine eigene, der Poller nutzt `myskoda-<FIN>-<Startzeit>`).
+
+Vorerst nur ueber die Web-UI konfigurierbar (Einstellungen), die Endpunkte
+sind aber regulaerer Teil der REST-API, damit die iOS-App das ohne
+Serveraenderung uebernehmen kann.
+
+### Zwei Eigenschaften der API bestimmen das ganze Design
+
+1. **Rate-Limit 20 Anfragen/Stunde PRO API-KEY**, geteilt ueber alle Fahrzeuge
+   und alle Clients. Deshalb adaptives Polling: `poll_interval_idle_minutes`
+   (Standard 20 -> 3/h) und `poll_interval_active_minutes` (Standard 5 ->
+   12/h), Untergrenze im Schema 3 Minuten. Die `RateLimit-*`-Header werden
+   ausgewertet; bei <= `RATE_LIMIT_RESERVE` Restanfragen wird bis zur Freigabe
+   pausiert. Laeuft parallel die HA-Integration
+   (`homeassistant-myskoda-public-api`) mit demselben Key, teilen sich beide
+   das Kontingent - dann zweiten Key erzeugen.
+2. **Reines Polling, kein Push, kein Historie-Endpunkt.** Es gibt genau einen
+   lesenden Aufruf (`GET /api/v1/vehicles/{vin}`); ein "Ladevorgang" entsteht
+   erst dadurch, dass der Server die Zustandsuebergaenge zusammensetzt - genau
+   das, was sonst die HA-Automation macht. Die Antwort ist ein
+   zwischengespeicherter Cloud-Stand mit eigenem `carCapturedTimestamp`, der
+   bei schlafendem Fahrzeug Stunden bis Tage alt sein kann (im echten
+   Test-Fixture der HA-Integration liegen `charging` und `odometer` einen Tag
+   auseinander). Deshalb stammen ALLE Zeitstempel aus `carCapturedTimestamp`,
+   nicht aus der lokalen Uhr.
+
+### Schnitt eines Ladevorgangs
+
+Deckungsgleich mit dem HA-Blueprint, damit beide Quellen dasselbe unter
+"Ladevorgang" verstehen: Beginn = Uebergang "nicht verbunden"
+(`CONNECT_CABLE`) -> "verbunden" (`CHARGING`, `CONSERVING`,
+`READY_FOR_CHARGING`, `CHARGING_INTERRUPTED`), Ende = umgekehrt.
+`DISCHARGING` (V2H/V2G) zaehlt als "nicht verbunden" und erzeugt keinen
+Vorgang. Liefert eine Antwort gar keinen Ladezustand, wird bewusst NICHTS
+entschieden (ein laufender Vorgang wuerde sonst faelschlich beendet).
+
+### Bekannte Ungenauigkeiten (bewusst so, nicht uebersehen)
+
+- **Der Ladebeginn wird erst beim naechsten Abruf bemerkt.** `soc_start` ist
+  der SoC beim ERSTEN Abruf mit steckendem Kabel - also eher zu hoch, die aus
+  dem SoC-Delta geschaetzte Energie eher zu niedrig. AC 11 kW * 5 min ~ 1 kWh
+  (vernachlaessigbar), DC 150 kW * 5 min ~ 12 kWh (nicht vernachlaessigbar).
+  Es wird bewusst NICHT hochgerechnet: der SoC des vorherigen Abrufs waere
+  falsch in die andere Richtung, wenn das Fahrzeug zwischendurch gefahren ist.
+  Stattdessen landen beide Werte (`open_soc_before` vs. `open_soc_start`) samt
+  Zeitabstand in der `notes`-Spalte des Ladevorgangs und im Debug-Log -
+  **genau dafuer ist das Log da: nach dem ersten echten DC-Ladevorgang
+  entscheiden, ob eine Korrektur noetig ist.**
+- `soc_end` ist `max()` ueber alle Beobachtungen waehrend des Steckens, nicht
+  der Wert beim Ausstecken - sonst wuerde eine Vorklimatisierung aus der
+  Batterie oder ein Stueck Fahrt vor dem naechsten Abruf den Wert druecken.
+- **Ein schlafendes Fahrzeug kann einen ganzen Vorgang verstecken.** Dagegen
+  `detect_missed_sessions`: steigt der SoC zwischen zwei Abrufen um
+  >= `missed_session_min_soc_delta` (Standard 5), ohne dass je ein
+  "verbunden"-Zustand gesehen wurde, wird nachtraeglich ein Vorgang angelegt
+  (Start/Ende = die beiden Abrufe, Lade-Art unbekannt). Schwelle nicht zu
+  klein waehlen - Rekuperation hebt den SoC auf langer Gefaellestrecke
+  ebenfalls um ein paar Prozentpunkte.
+- **Kabel steckte, aber es wurde nie geladen** (Zielladestand schon erreicht):
+  SoC-Delta <= 0 UND nie Leistung > 0 -> kein Ladevorgang, nur ein
+  `session_discarded`-Logeintrag.
+- Es gibt **keinen Energiezaehler** in der API. `energy_kwh` bleibt wie beim
+  HA-Weg die serverseitige Schaetzung aus SoC-Delta x Akkukapazitaet.
+
+### Zustand liegt in der DB, nicht im Prozess
+
+`MySkodaConfig` ist Konfiguration UND Zustandsspeicher: die `open_*`-Spalten
+halten den laufenden, noch nicht abgeschlossenen Vorgang. Grund: ein
+Container-Neustart mitten im Laden ist der Normalfall (Update, Host-Reboot)
+und wuerde sonst den halben Vorgang verlieren. Dieselbe Ueberlegung wie in
+`session_store.py` der Lademonitor-HA-Integration.
+
+### Ablauf und Fehlerbehandlung
+
+Scheduler-Task in `main.py` (`_myskoda_scheduler_loop`, Takt 60 s, ueber
+`asyncio.to_thread` wie beim WebDAV-Backup - alles hier ist synchron).
+Der kurze Takt erzeugt keine zusaetzlichen API-Anfragen: faellig ist ein
+Fahrzeug nur, wenn `next_poll_at` erreicht ist. `poll_vehicle()` wirft
+bewusst nie weiter, sondern schreibt `last_status`/`last_error`:
+`auth_error` -> 60 min Backoff (ein abgelaufener Key wird erst wieder gueltig,
+wenn jemand in der App einen neuen erzeugt; HA hat dafuer einen Reauth-Dialog,
+der Server nur die Anzeige in den Einstellungen), `rate_limited` ->
+`Retry-After` bzw. 15 min, sonstige Fehler -> 15 min.
+
+`POST .../test` und `POST .../poll` sind bewusst getrennt: der Test macht
+einen Abruf OHNE Zustandsmaschine (kann also nie versehentlich einen
+Ladevorgang anlegen oder beenden) und gibt die geparste Zusammenfassung
+zurueck; `poll` ist die vollwertige Abfrage inkl. Auswertung und funktioniert
+auch bei deaktivierter Automatik.
+
+### Debug-Log (`MySkodaLogEntry`)
+
+Existiert, weil das Antwortverhalten der API waehrend eines echten
+Ladevorgangs noch nicht bekannt ist. Kleine Zusammenfassungsspalten
+(`charging_state`, `soc_percent`, `charge_power_kw`, `captured_at`) machen die
+Tabelle in der Web-UI ohne Aufklappen lesbar, `payload` haelt optional die
+komplette Rohantwort (separater Endpunkt, damit die Listenansicht leicht
+bleibt). Begrenzt auf `LOG_MAX_ENTRIES` (500) Zeilen pro Fahrzeug, JSON-Export
+zum Weiterreichen.
+
+### Secrets
+
+`api_key` liegt im Klartext in der DB wie alle uebrigen Zugangsdaten dieser
+App (Auth-Tokens, WebDAV-Passwort) - kein Vault vorhanden, Postgres ist nur
+containerlokal erreichbar. **Er wird aber NICHT in die Backup-ZIP exportiert**
+(siehe `routers/backup.py`), weil die ZIP typischerweise auf fremdem Speicher
+(WebDAV/Nextcloud) landet. Nach einer Neuinstallation muss der Key also neu
+eingetragen werden - das steht auch in der README innerhalb der ZIP.
+
 ## Verbrauchsberechnung pro Ladevorgang (`consumption.py`)
 
 Da das Fahrzeug fast nie vollgeladen wird, gibt es keinen festen
@@ -336,6 +455,18 @@ Icon/Tooltip-Logik in der SessionsList-View.
   Passwort-Raten oder Spam-Registrierungen. Bewusst zurueckgestellt (starkes
   Passwort des Nutzers als aktuelle Absicherung), waere ein separater,
   ueberschaubarer Zusatz (z.B. `slowapi` oder Nginx-seitig).
+- **MyŠkoda-Poller noch nicht an einem echten Ladevorgang erprobt** - die
+  Zustandsmaschine ist gegen einen simulierten Verlauf getestet, die reale
+  API-Antwortfolge waehrend des Ladens (Reihenfolge der Zustaende, Nachlauf
+  von `carCapturedTimestamp`, ob `chargeType` beim Ausstecken schon wieder
+  `OFF` meldet) ist offen. Genau dafuer das Debug-Log mit Rohantworten
+  einschalten und nach dem ersten echten AC- UND DC-Ladevorgang auswerten -
+  insbesondere, wie gross der verschluckte SoC-Anteil am Ladebeginn wirklich
+  ist (siehe Abschnitt oben).
+- **Kein Schutz gegen doppelte Erfassung, wenn HA-Push und MyŠkoda-Poller
+  gleichzeitig fuer dasselbe Fahrzeug laufen** - bewusst nicht geloest
+  (unterschiedliche `external_session_id`-Schemata, ein Abgleich ueber
+  Zeitfenster waere Rateraetsel). Dokumentiert in README und Web-UI.
 - **AC/DC fehlt bei Spritmonitor-Importen** - Spritmonitor-CSV-Export hat
   keine AC/DC-Spalte. Noch nicht umgesetzt: Muster-Erkennung anhand
   Ladeort-Name (z.B. "HPC"/"Ionity" → DC vorschlagen)

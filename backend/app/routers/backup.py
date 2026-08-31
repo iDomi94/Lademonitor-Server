@@ -72,6 +72,13 @@ Reimport:
   daher gefahrlos mehrfach ausfuehrbar.
 - Die Reihenfolge (Fahrzeuge vor Anbietern vor Ladeorten vor Ladevorgaengen,
   wegen Fremdschluesseln) uebernimmt der Importer automatisch.
+
+Nicht enthalten:
+- Zugangsdaten. Insbesondere der MyŠkoda-API-Key und das WebDAV-Passwort sind
+  bewusst NICHT Teil dieser ZIP - sie muessen nach einer Neuinstallation in
+  den Einstellungen neu eingetragen werden. Grund: diese Datei liegt
+  typischerweise auf fremdem Speicher (WebDAV/Nextcloud).
+- Das MyŠkoda-Debug-Protokoll (separat unter Einstellungen herunterladbar).
 """
 
 

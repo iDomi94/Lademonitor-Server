@@ -12,7 +12,9 @@ from . import models
 from .auth import get_current_user, get_user_from_request
 from .changelog import CHANGELOG, VERSION
 from .database import Base, engine, get_db, run_light_migrations
-from .routers import auth, backup, geocoding, importer, locations, providers, sessions, stats, vehicles, webdav_backup
+from .myskoda_poller import SCHEDULER_INTERVAL_SECONDS as MYSKODA_SCHEDULER_INTERVAL_SECONDS
+from .myskoda_poller import run_due_polls
+from .routers import auth, backup, geocoding, importer, locations, myskoda, providers, sessions, stats, vehicles, webdav_backup
 from .webdav_backup import run_due_backups
 
 Base.metadata.create_all(bind=engine)
@@ -36,11 +38,31 @@ async def _webdav_scheduler_loop() -> None:
         await asyncio.sleep(WEBDAV_SCHEDULER_INTERVAL_SECONDS)
 
 
+async def _myskoda_scheduler_loop() -> None:
+    """Automatische Ladeerkennung ueber die MyŠkoda Public API.
+
+    Deutlich feiner getaktet als das WebDAV-Backup (Minute statt Viertelstunde),
+    weil das Abfrageintervall waehrend eines laufenden Ladevorgangs bei wenigen
+    Minuten liegt. Welches Fahrzeug tatsaechlich faellig ist, entscheidet
+    `run_due_polls()` anhand von `next_poll_at` - der kurze Takt hier erzeugt
+    also keine zusaetzlichen API-Anfragen."""
+    while True:
+        try:
+            await asyncio.to_thread(run_due_polls)
+        except Exception:
+            logger.exception("MyŠkoda-Poller-Durchlauf fehlgeschlagen")
+        await asyncio.sleep(MYSKODA_SCHEDULER_INTERVAL_SECONDS)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    task = asyncio.create_task(_webdav_scheduler_loop())
+    tasks = [
+        asyncio.create_task(_webdav_scheduler_loop()),
+        asyncio.create_task(_myskoda_scheduler_loop()),
+    ]
     yield
-    task.cancel()
+    for task in tasks:
+        task.cancel()
 
 
 app = FastAPI(title="Lademonitor", lifespan=lifespan)
@@ -70,6 +92,7 @@ app.include_router(importer.router, dependencies=[Depends(get_current_user)])
 app.include_router(geocoding.router, dependencies=[Depends(get_current_user)])
 app.include_router(backup.router, dependencies=[Depends(get_current_user)])
 app.include_router(webdav_backup.router, dependencies=[Depends(get_current_user)])
+app.include_router(myskoda.router, dependencies=[Depends(get_current_user)])
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")

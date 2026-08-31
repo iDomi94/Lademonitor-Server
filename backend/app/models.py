@@ -224,3 +224,128 @@ class WebdavBackupFile(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     filename: Mapped[str] = mapped_column(String)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+
+class MySkodaConfig(Base):
+    """Konfiguration UND Zustandsspeicher der automatischen Ladeerkennung ueber
+    die MyŠkoda Public API - eine Zeile pro Fahrzeug.
+
+    Zweite, von Home Assistant unabhaengige Quelle fuer `source=AUTOMATIC`-
+    Ladevorgaenge; der HA-Push auf `/api/sessions/auto` bleibt unveraendert
+    daneben bestehen (siehe myskoda_poller.py).
+
+    Der `api_key` liegt bewusst im Klartext in der DB, genau wie die uebrigen
+    Zugangsdaten dieser App (Auth-Tokens, WebDAV-Passwort) - kein
+    Secrets-Vault vorhanden, Postgres ist ohnehin nur containerlokal
+    erreichbar. Er wird allerdings NICHT in die Backup-ZIP exportiert
+    (siehe routers/backup.py), weil die ZIP typischerweise auf fremdem
+    Speicher (WebDAV/Nextcloud) landet.
+
+    Die `open_*`-Spalten halten den gerade laufenden, noch nicht abgeschlossenen
+    Ladevorgang. Sie liegen bewusst in der DB und nicht im Prozessspeicher:
+    ein Container-Neustart mitten im Laden ist der Normalfall (Update, Reboot
+    des Hosts) und wuerde sonst den halben Vorgang verlieren.
+    """
+    __tablename__ = "myskoda_configs"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    vehicle_id: Mapped[str] = mapped_column(ForeignKey("vehicles.id"), unique=True, index=True)
+
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    api_key: Mapped[str | None] = mapped_column(String, nullable=True)
+    vin: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # Adaptives Polling: das Kontingent von 20 Anfragen/Stunde pro API-Key
+    # reicht nicht fuer durchgaengig enge Abfragen. Im Leerlauf selten, waehrend
+    # eines laufenden Ladevorgangs haeufiger - Standard 20/5 Minuten ergibt
+    # 3/h im Leerlauf und 12/h beim Laden, beides mit Reserve.
+    poll_interval_idle_minutes: Mapped[int] = mapped_column(Integer, default=20)
+    poll_interval_active_minutes: Mapped[int] = mapped_column(Integer, default=5)
+
+    # Nachtraegliche Erkennung: wenn das Fahrzeug zwischen zwei Abfragen
+    # geschlafen hat, kann ein kompletter Ladevorgang unbemerkt bleiben und sich
+    # nur als SoC-Sprung zeigen. Schwelle bewusst nicht zu klein - Rekuperation
+    # auf langer Gefaellestrecke hebt den SoC ebenfalls um ein paar Prozent.
+    detect_missed_sessions: Mapped[bool] = mapped_column(Boolean, default=True)
+    missed_session_min_soc_delta: Mapped[int] = mapped_column(Integer, default=5)
+
+    # Debug-Protokoll (siehe MySkodaLogEntry). Solange unklar ist, wie die API
+    # waehrend eines echten Ladevorgangs tatsaechlich antwortet, ist das der
+    # einzige Weg, die Erkennung nachtraeglich zu beurteilen.
+    log_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    log_raw_payload: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # --- Zustand des letzten Abrufs (nur lesend fuer die Web-UI) -------------
+    last_poll_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    next_poll_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_status: Mapped[str | None] = mapped_column(String, nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_charging_state: Mapped[str | None] = mapped_column(String, nullable=True)
+    last_soc: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    last_captured_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    api_key_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    rate_limit_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    rate_limit_remaining: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    rate_limit_resets_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    # --- Laufender, noch nicht abgeschlossener Ladevorgang -------------------
+    open_start_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    open_soc_start: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # SoC direkt VOR dem ersten "steckt"-Abruf. Nur fuer die Diagnose: die
+    # Differenz zu open_soc_start ist genau der Teil des Ladevorgangs, den das
+    # Polling-Intervall verschluckt hat (bei DC-Schnellladen der relevante
+    # Fehler). Landet als Notiz am angelegten Ladevorgang.
+    open_soc_before: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    open_soc_last: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    open_charging_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    open_max_power_kw: Mapped[float | None] = mapped_column(Float, nullable=True)
+    open_odometer_km: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    open_latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    open_longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    open_poll_count: Mapped[int] = mapped_column(Integer, default=0)
+    open_gap_before_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Beim EINSTECKEN erfasst, nicht beim Ausstecken: da steht das Fahrzeug
+    # sicher am Ladepunkt, waehrend es beim Ausstecken oft schon wieder faehrt
+    open_in_saved_location: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    vehicle: Mapped["Vehicle"] = relationship()
+
+
+class MySkodaLogEntry(Base):
+    """Debug-Protokoll der MyŠkoda-Abfragen, pro Fahrzeug.
+
+    Existiert, weil das Antwortverhalten der API waehrend eines echten
+    Ladevorgangs noch nicht bekannt ist: welche Zustaende in welcher
+    Reihenfolge kommen, wie stark `carCapturedTimestamp` nachlaeuft, ob
+    `chargeType` beim Ladeende schon wieder auf OFF steht. Die kleinen
+    Zusammenfassungsspalten machen die Tabelle in der Web-UI ohne Aufklappen
+    lesbar, `payload` haelt optional die komplette Rohantwort.
+
+    Wird pro Fahrzeug auf LOG_MAX_ENTRIES Zeilen begrenzt (siehe
+    myskoda_poller.py), damit ein dauerhaft laufender Poller die DB nicht
+    unbegrenzt fuellt.
+    """
+    __tablename__ = "myskoda_log_entries"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    vehicle_id: Mapped[str] = mapped_column(ForeignKey("vehicles.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+    # info | warning | error
+    level: Mapped[str] = mapped_column(String, default="info")
+    # Maschinenlesbarer Anlass, z.B. poll | session_started | session_finished |
+    # session_discarded | missed_session | api_error | rate_limit | test
+    event: Mapped[str] = mapped_column(String)
+    message: Mapped[str] = mapped_column(Text)
+
+    charging_state: Mapped[str | None] = mapped_column(String, nullable=True)
+    soc_percent: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    charge_power_kw: Mapped[float | None] = mapped_column(Float, nullable=True)
+    captured_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    # Komplette Rohantwort als JSON-Text, nur wenn log_raw_payload aktiv ist
+    payload: Mapped[str | None] = mapped_column(Text, nullable=True)

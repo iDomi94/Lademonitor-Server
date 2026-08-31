@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .models import ChargingType, SessionSource, WebdavBackupFrequency
 
@@ -274,3 +274,83 @@ class WebdavBackupConfigOut(BaseModel):
     last_run_at: datetime | None
     last_status: str | None
     last_error: str | None
+
+
+# ---------- MyŠkoda Public API (automatische Ladeerkennung) ----------
+
+class MySkodaConfigIn(BaseModel):
+    enabled: bool = False
+    # None/leer = API-Key unveraendert lassen (das Formular zeigt einen bereits
+    # gesetzten Key nie im Klartext an, siehe has_api_key unten)
+    api_key: str | None = None
+    vin: str | None = None
+    # Das Kontingent von 20 Anfragen/Stunde pro API-Key setzt die sinnvolle
+    # Untergrenze - 3 Minuten waeren 20/h und damit schon ohne jede Reserve
+    poll_interval_idle_minutes: int = Field(default=20, ge=3, le=1440)
+    poll_interval_active_minutes: int = Field(default=5, ge=3, le=1440)
+    detect_missed_sessions: bool = True
+    missed_session_min_soc_delta: int = Field(default=5, ge=1, le=100)
+    log_enabled: bool = True
+    log_raw_payload: bool = True
+
+    @field_validator("vin", "api_key", mode="before")
+    @classmethod
+    def _strip(cls, value: object) -> object:
+        return value.strip() or None if isinstance(value, str) else value
+
+
+class MySkodaConfigOut(BaseModel):
+    vehicle_id: str
+    vehicle_name: str
+    enabled: bool
+    has_api_key: bool
+    vin: str | None
+    poll_interval_idle_minutes: int
+    poll_interval_active_minutes: int
+    detect_missed_sessions: bool
+    missed_session_min_soc_delta: int
+    log_enabled: bool
+    log_raw_payload: bool
+
+    last_poll_at: datetime | None
+    next_poll_at: datetime | None
+    last_status: str | None
+    last_error: str | None
+    last_charging_state: str | None
+    last_soc: int | None
+    last_captured_at: datetime | None
+    api_key_expires_at: datetime | None
+    rate_limit_limit: int | None
+    rate_limit_remaining: int | None
+    rate_limit_resets_at: datetime | None
+
+    # Laufender, noch nicht abgeschlossener Ladevorgang (None = keiner offen)
+    open_start_time: datetime | None
+    open_soc_start: int | None
+    open_soc_last: int | None
+    open_charging_type: str | None
+    open_max_power_kw: float | None
+    open_poll_count: int
+
+
+class MySkodaTestResult(BaseModel):
+    ok: bool
+    error: str | None = None
+    # Geparste Zusammenfassung der Antwort (VehicleSnapshot.summary()) - zeigt
+    # in der Web-UI direkt, welche Felder die API fuer dieses Fahrzeug liefert
+    summary: dict | None = None
+    config: MySkodaConfigOut
+
+
+class MySkodaLogOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    created_at: datetime
+    level: str
+    event: str
+    message: str
+    charging_state: str | None
+    soc_percent: int | None
+    charge_power_kw: float | None
+    captured_at: datetime | None
+    has_payload: bool

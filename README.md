@@ -20,6 +20,10 @@ Zugehörige iOS-App (SwiftUI, reiner REST-Client gegen dieses Backend):
   um den Server direkt als Add-on statt separat (z.B. auf Unraid) zu betreiben.
 - Ladevorgänge manuell erfassen oder automatisch per Home-Assistant-Automation
   pushen lassen (`POST /api/sessions/auto`)
+- **MyŠkoda Public API**: alternativ erkennt der Server Ladevorgänge selbst,
+  indem er die offizielle Škoda-API direkt abfragt – ganz ohne Home Assistant.
+  Nur API-Key und FIN eintragen, siehe
+  [Automatische Ladeerkennung](#automatische-ladeerkennung-über-die-myškoda-public-api)
 - Verbrauchsberechnung (kWh/100km) pro Ladevorgang über eine priorisierte
   Fallback-Kette (Vollladungs-Intervalle als Goldstandard, SoC-Korrektur,
   naive Rechnung, Schätzung) – Details in `CLAUDE.md`
@@ -134,6 +138,54 @@ Die `external_session_id` verhindert Duplikate, falls die Automation mehrfach
 feuert. Sessions über diesen Weg werden mit `source: automatic` und
 `needs_review: true` markiert und, falls die Koordinaten zu einem bekannten
 Ladeort passen, automatisch mit Anbieter/Preis vorbefüllt.
+
+## Automatische Ladeerkennung über die MyŠkoda Public API
+
+Zweite, von Home Assistant unabhängige Quelle für automatisch erfasste
+Ladevorgänge – gedacht für alle, die kein Home Assistant betreiben. Der
+Server fragt die
+[offizielle MyŠkoda Public API](https://public.api.connect.skoda-auto.cz/docs)
+selbst ab, erkennt Beginn und Ende eines Ladevorgangs aus den Zustands-
+übergängen und legt ihn wie einen HA-Push mit `source: automatic` und
+`needs_review: true` an.
+
+**Einrichtung** (Einstellungen → Automatische Ladeerkennung):
+
+1. API-Key in der MyŠkoda-App erzeugen: [go.skoda.eu/api-keys](https://go.skoda.eu/api-keys)
+   (Link auf dem Handy öffnen). Der Key ist an die beim Erzeugen ausgewählten
+   Fahrzeuge gebunden und läuft nach einiger Zeit ab.
+2. Fahrzeug auswählen, API-Key und FIN (17 Zeichen) eintragen, speichern.
+3. "Verbindung testen" zeigt die geparste Antwort der API – das ist gleichzeitig
+   die Kontrolle, welche Felder das eigene Fahrzeug überhaupt liefert.
+4. "Automatisch abfragen" aktivieren.
+
+**Wichtig zu wissen:**
+
+- **Nur einen der beiden Wege pro Fahrzeug aktivieren.** Der HA-Push und diese
+  Erkennung wissen nichts voneinander und würden denselben Ladevorgang doppelt
+  anlegen.
+- **Rate-Limit: 20 Anfragen pro Stunde und API-Key**, geteilt über alle
+  Fahrzeuge und alle Clients. Die Standardintervalle (20 min im Leerlauf,
+  5 min während eines Ladevorgangs) bleiben mit Reserve darunter. Läuft
+  parallel die
+  [MySkoda-PublicAPI-Integration in Home Assistant](https://github.com/iDomi94/homeassistant-myskoda-public-api)
+  mit demselben Key, teilen sich beide dieses Kontingent – dann besser einen
+  zweiten Key erzeugen.
+- **Genauigkeit:** Die API kennt keinen Push und keinen Energiezähler. Der
+  Ladebeginn wird erst beim nächsten Abruf bemerkt, der Anfangs-SoC ist also
+  eher zu hoch und die Energie eher zu niedrig – bei AC-Laden vernachlässigbar,
+  bei DC-Schnellladen deutlich spürbar. Jeder erkannte Vorgang bekommt deshalb
+  eine Notiz mit den Werten davor und danach.
+- **Debug-Protokoll:** Unter derselben Sektion; protokolliert jede Abfrage und
+  jede Erkennungsentscheidung inklusive der vollständigen Rohantworten und
+  lässt sich als JSON herunterladen. Da das Antwortverhalten der API (noch in
+  der Beta) während eines echten Ladevorgangs kaum dokumentiert ist, ist das
+  der Weg, eine nicht erkannte Ladung nachträglich aufzuklären.
+- Der API-Key liegt im Klartext in der Datenbank (wie alle Zugangsdaten dieser
+  App), wird aber bewusst **nicht** in die Backup-ZIP exportiert.
+
+Vorerst nur über die Web-UI konfigurierbar; die Endpunkte (`/api/myskoda/...`)
+sind trotzdem regulärer Teil der REST-API und in `/docs` dokumentiert.
 
 ## Backup
 

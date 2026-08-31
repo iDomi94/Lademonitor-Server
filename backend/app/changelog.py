@@ -5,6 +5,19 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.10.0",
+        "date": "2026-08-31",
+        "title": "Automatische Ladeerkennung über die MyŠkoda Public API",
+        "changes": [
+            "Neue Sektion in den Einstellungen: der Server kann Ladevorgaenge jetzt selbst erkennen, indem er die offizielle MyŠkoda Public API direkt abfragt - ohne Home Assistant. Noetig sind nur ein API-Key aus der MyŠkoda-App und die FIN.",
+            "Laeuft parallel zum bisherigen Home-Assistant-Push, ersetzt ihn nicht - pro Fahrzeug sollte aber nur ein Weg aktiv sein, sonst entstehen doppelte Ladevorgaenge.",
+            "Adaptives Abfrageintervall (Standard 20 Minuten im Leerlauf, 5 Minuten waehrend eines Ladevorgangs) bleibt mit Reserve unter dem Rate-Limit der API von 20 Anfragen pro Stunde und API-Key; Restkontingent und Ablaufdatum des Keys werden angezeigt.",
+            "Nacherkennung verpasster Ladevorgaenge ueber einen SoC-Sprung, falls das Fahrzeug zwischen zwei Abfragen geschlafen hat.",
+            "Jeder automatisch erkannte Vorgang bekommt eine Notiz mit den Messwerten davor und danach, damit sich die Genauigkeit beim Nachbearbeiten beurteilen laesst.",
+            "Debug-Protokoll pro Fahrzeug mit \"Verbindung testen\"- und \"Jetzt abfragen\"-Buttons, Rohantworten der API und JSON-Download - gedacht, um das Verhalten der noch jungen API an einem echten Ladevorgang nachzuvollziehen.",
+        ],
+    },
+    {
         "version": "0.9.1",
         "date": "2026-08-25",
         "title": "Ingress-Kompatibilitaet und Cache-Fix",

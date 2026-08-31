@@ -6,6 +6,33 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.10.0] — 2026-08-31
+
+### Added
+- Automatische Ladeerkennung über die **MyŠkoda Public API**: neue Sektion in
+  den Einstellungen, in der pro Fahrzeug ein API-Key (aus der MyŠkoda-App,
+  [go.skoda.eu/api-keys](https://go.skoda.eu/api-keys)) und die FIN hinterlegt
+  werden. Der Server fragt das Fahrzeug dann selbst ab und legt erkannte
+  Ladevorgänge an - ohne Home Assistant.
+- Läuft **parallel** zum bisherigen Home-Assistant-Push, ersetzt ihn nicht.
+  Pro Fahrzeug sollte nur einer der beiden Wege aktiv sein, sonst entstehen
+  doppelte Ladevorgänge (die Quellen erkennen sich gegenseitig nicht).
+- Adaptives Abfrageintervall (Standard 20 min im Leerlauf, 5 min während eines
+  Ladevorgangs) inklusive Auswertung der `RateLimit-*`-Header - bleibt mit
+  Reserve unter dem Limit der API von 20 Anfragen pro Stunde und API-Key.
+  Restkontingent und Ablaufdatum des Keys werden in der Web-UI angezeigt.
+- Nacherkennung verpasster Ladevorgänge über einen SoC-Sprung, falls das
+  Fahrzeug zwischen zwei Abfragen geschlafen hat (Schwelle konfigurierbar).
+- Diagnose-Notiz an jedem automatisch erkannten Vorgang mit den Messwerten
+  vor und nach dem Einstecken, maximaler Ladeleistung und Anzahl Abfragen.
+- Debug-Protokoll pro Fahrzeug mit "Verbindung testen"- und "Jetzt
+  abfragen"-Buttons, gespeicherten Rohantworten der API und JSON-Download.
+
+### Changed
+- Die Backup-ZIP enthält weiterhin **keine** Zugangsdaten; der neue
+  MyŠkoda-API-Key und das WebDAV-Passwort sind dort ausdrücklich
+  ausgenommen (steht jetzt auch in der README innerhalb der ZIP).
+
 ## [0.9.1] — 2026-08-25
 
 ### Fixed

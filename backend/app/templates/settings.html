@@ -110,6 +110,77 @@
 </form>
 <div id="webdav-status" style="margin-top:8px; font-size:0.9em"></div>
 
+<h2>Automatische Ladeerkennung (MyŠkoda Public API)</h2>
+<p style="color:var(--muted); font-size:0.9em">
+  Zweite, von Home Assistant unabhängige Quelle für automatisch erfasste
+  Ladevorgänge: der Server fragt die offizielle
+  <a href="https://public.api.connect.skoda-auto.cz/docs" target="_blank" rel="noopener">MyŠkoda Public API</a>
+  selbst ab und legt erkannte Ladevorgänge an (immer mit "zu prüfen"-Markierung).
+  Der bestehende Home-Assistant-Push läuft unverändert parallel weiter – beide
+  Quellen erkennen sich gegenseitig nicht, doppelte Vorgänge müssen also
+  vermieden werden, indem pro Fahrzeug nur ein Weg aktiv ist.
+  <br><br>
+  API-Key erzeugen unter <a href="https://go.skoda.eu/api-keys" target="_blank" rel="noopener">go.skoda.eu/api-keys</a>
+  (Link auf dem Handy öffnen, die MyŠkoda-App verwaltet die Keys). Der Key ist an
+  die beim Erzeugen ausgewählten Fahrzeuge gebunden und läuft nach einiger Zeit ab –
+  der Ablauftermin wird unten angezeigt, sobald einmal abgefragt wurde.
+  <br><br>
+  <strong>Rate-Limit: 20 Anfragen pro Stunde und API-Key</strong>, geteilt über alle
+  Fahrzeuge und alle Clients. Läuft parallel die Home-Assistant-Integration mit
+  demselben Key, teilen sich beide dieses Kontingent – dann besser einen zweiten
+  Key erzeugen. Die Standardintervalle (20 min im Leerlauf, 5 min während eines
+  Ladevorgangs) bleiben mit Reserve darunter.
+  <br><br>
+  <strong>Genauigkeit:</strong> Der Ladebeginn wird erst beim nächsten Abruf bemerkt,
+  der Anfangs-SoC ist also eher zu hoch und die Energie eher zu niedrig – bei
+  AC-Laden vernachlässigbar, bei DC-Schnellladen nicht. Jeder erkannte Vorgang
+  bekommt eine Notiz mit den Werten davor und danach, damit sich der Fehler
+  nachvollziehen lässt.
+</p>
+<form class="inline-form" id="myskoda-form">
+  <div><label>Fahrzeug</label><select id="ms-vehicle"></select></div>
+  <div>
+    <label><input type="checkbox" id="ms-enabled" style="width:auto; display:inline-block; margin-right:6px">Automatisch abfragen</label>
+  </div>
+  <div><label>API-Key</label><input type="password" id="ms-apikey" placeholder="API-Key" autocomplete="off"></div>
+  <div><label>FIN (17 Zeichen)</label><input id="ms-vin" placeholder="TMB..." maxlength="17" autocomplete="off"></div>
+  <div><label>Intervall im Leerlauf (min)</label><input type="number" id="ms-idle" min="3" max="1440" value="20"></div>
+  <div><label>Intervall beim Laden (min)</label><input type="number" id="ms-active" min="3" max="1440" value="5"></div>
+  <div>
+    <label><input type="checkbox" id="ms-missed" style="width:auto; display:inline-block; margin-right:6px">Verpasste Vorgänge nacherkennen</label>
+  </div>
+  <div><label>Mindest-SoC-Sprung dafür (%)</label><input type="number" id="ms-missed-delta" min="1" max="100" value="5"></div>
+  <div>
+    <label><input type="checkbox" id="ms-log" style="width:auto; display:inline-block; margin-right:6px">Debug-Protokoll schreiben</label>
+  </div>
+  <div>
+    <label><input type="checkbox" id="ms-log-raw" style="width:auto; display:inline-block; margin-right:6px">Rohantworten mitspeichern</label>
+  </div>
+  <div class="form-actions">
+    <button type="button" id="ms-delete-btn" style="background:var(--danger); display:none">Konfiguration löschen</button>
+    <button type="button" id="ms-test-btn" style="background:var(--accent2)">Verbindung testen</button>
+    <button type="button" id="ms-poll-btn" style="background:var(--accent2)">Jetzt abfragen</button>
+    <button type="submit">Speichern</button>
+  </div>
+</form>
+<div id="myskoda-status" style="margin-top:8px; font-size:0.9em"></div>
+<pre id="myskoda-test-result" style="display:none; margin-top:12px; padding:12px; background:var(--card); border:1px solid var(--border); border-radius:12px; font-size:12px; overflow-x:auto"></pre>
+
+<h3 style="margin-top:24px">Debug-Protokoll</h3>
+<p style="color:var(--muted); font-size:0.9em">
+  Protokolliert jede Abfrage und jede Erkennungsentscheidung – gedacht, um nach
+  einem echten Ladevorgang nachzusehen, wie die API tatsächlich geantwortet hat.
+  Pro Fahrzeug werden die letzten 500 Einträge behalten. "Rohantwort" öffnet die
+  vollständige, unveränderte API-Antwort dieses Zeitpunkts.
+</p>
+<div class="form-actions" style="margin-bottom:12px">
+  <button type="button" id="ms-log-refresh">Aktualisieren</button>
+  <button type="button" id="ms-log-export" style="background:var(--accent2)">Als JSON herunterladen</button>
+  <button type="button" id="ms-log-clear" style="background:var(--danger)">Protokoll leeren</button>
+</div>
+<table><thead><tr><th>Zeit</th><th>Ereignis</th><th>Zustand</th><th>SoC</th><th>Leistung</th><th>Meldung</th><th></th></tr></thead>
+<tbody id="ms-log-rows"></tbody></table>
+
 {% if user.is_admin %}
 <h2>Benutzerverwaltung</h2>
 <p style="color:var(--muted); font-size:0.9em">
@@ -142,6 +213,9 @@ async function loadVehicles() {
     <tr><td>${v.name}</td><td>${v.external_id}</td><td>${[v.brand, v.model].filter(Boolean).join(' ') || '–'}</td>
     <td>${v.battery_capacity_kwh ?? '–'}</td>
     <td style="white-space:nowrap">${actionButtons('Vehicle', v.id)}</td></tr>`).join('');
+  // Auswahlliste der MySkoda-Sektion mitziehen, damit ein neu angelegtes oder
+  // geloeschtes Fahrzeug dort nicht fehlt bzw. stehen bleibt
+  if (document.getElementById('ms-vehicle')) renderMyskodaVehicleOptions();
 }
 
 function startEditVehicle(id) {
@@ -487,6 +561,219 @@ document.getElementById('wd-run-btn').addEventListener('click', async () => {
   }
 });
 
+// ---------- MyŠkoda Public API ----------
+
+function msVehicleId() {
+  return document.getElementById('ms-vehicle').value;
+}
+
+// Der Server speichert naive UTC-Zeitstempel (wie ueberall in dieser App),
+// deshalb das angehaengte 'Z' vor der lokalen Formatierung.
+function msFmt(value) {
+  return value ? new Date(value + 'Z').toLocaleString('de-DE') : '–';
+}
+
+function msFmtNum(value, digits = 1) {
+  return (value === null || value === undefined) ? '–' : value.toFixed(digits).replace('.', ',');
+}
+
+function msRelative(value) {
+  if (!value) return '';
+  const minutes = Math.round((Date.now() - new Date(value + 'Z').getTime()) / 60000);
+  if (minutes < 1) return 'gerade eben';
+  if (minutes < 60) return `vor ${minutes} min`;
+  const hours = Math.round(minutes / 60);
+  return hours < 48 ? `vor ${hours} h` : `vor ${Math.round(hours / 24)} Tagen`;
+}
+
+function renderMyskodaVehicleOptions() {
+  const select = document.getElementById('ms-vehicle');
+  const previous = select.value;
+  select.innerHTML = vehicles.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+  if (previous && vehicles.some(v => v.id === previous)) select.value = previous;
+}
+
+function renderMyskodaStatus(c) {
+  const el = document.getElementById('myskoda-status');
+  document.getElementById('ms-delete-btn').style.display = (c.has_api_key || c.vin) ? '' : 'none';
+
+  const labels = {
+    ok: 'Letzte Abfrage erfolgreich',
+    error: 'Letzte Abfrage fehlgeschlagen',
+    auth_error: 'API-Key wurde abgelehnt',
+    rate_limited: 'Rate-Limit erreicht',
+  };
+  const colors = {
+    ok: 'var(--accent)', error: 'var(--danger)',
+    auth_error: 'var(--danger)', rate_limited: 'var(--warn)',
+  };
+  const lines = [];
+  const status = labels[c.last_status] || 'Noch nie abgefragt';
+  lines.push(`<strong style="color:${colors[c.last_status] || 'var(--muted)'}">${status}</strong>`
+    + (c.last_poll_at ? ` – ${msFmt(c.last_poll_at)} (${msRelative(c.last_poll_at)})` : ''));
+
+  if (c.last_error) lines.push(`<span style="color:var(--danger)">${c.last_error}</span>`);
+
+  if (c.last_charging_state) {
+    lines.push(`Fahrzeug: <code>${c.last_charging_state}</code>`
+      + ` · SoC ${c.last_soc ?? '–'} %`
+      + ` · Stand des Fahrzeugs vom ${msFmt(c.last_captured_at)} (${msRelative(c.last_captured_at)})`);
+  }
+
+  if (c.open_start_time) {
+    lines.push(`<span style="color:var(--warn)">Ladevorgang läuft</span> seit ${msFmt(c.open_start_time)}`
+      + ` · SoC ${c.open_soc_start ?? '–'} % → ${c.open_soc_last ?? '–'} %`
+      + ` · max. ${msFmtNum(c.open_max_power_kw)} kW`
+      + ` · Lade-Art ${c.open_charging_type || 'unbekannt'}`
+      + ` · ${c.open_poll_count} Abfragen`);
+  }
+
+  if (c.enabled && c.next_poll_at) lines.push(`Nächste Abfrage: ${msFmt(c.next_poll_at)}`);
+  else if (c.enabled) lines.push('Nächste Abfrage: beim nächsten Durchlauf (max. 1 Minute)');
+
+  if (c.rate_limit_limit !== null || c.rate_limit_remaining !== null) {
+    const low = c.rate_limit_remaining !== null && c.rate_limit_remaining <= 3;
+    lines.push(`<span style="color:${low ? 'var(--warn)' : 'inherit'}">Kontingent: `
+      + `${c.rate_limit_remaining ?? '?'} von ${c.rate_limit_limit ?? '?'} Anfragen übrig`
+      + (c.rate_limit_resets_at ? `, Freigabe ${msFmt(c.rate_limit_resets_at)}` : '') + '</span>');
+  }
+
+  if (c.api_key_expires_at) {
+    const days = Math.round((new Date(c.api_key_expires_at + 'Z').getTime() - Date.now()) / 86400000);
+    const color = days <= 14 ? 'var(--danger)' : (days <= 30 ? 'var(--warn)' : 'inherit');
+    lines.push(`<span style="color:${color}">API-Key läuft ab am ${msFmt(c.api_key_expires_at)}`
+      + ` (in ${days} Tagen)</span>`);
+  }
+
+  el.innerHTML = lines.join('<br>');
+  el.style.color = 'var(--muted)';
+}
+
+async function loadMyskodaConfig() {
+  const vehicleId = msVehicleId();
+  if (!vehicleId) {
+    document.getElementById('myskoda-status').textContent = 'Bitte zuerst ein Fahrzeug anlegen.';
+    return;
+  }
+  const c = await (await fetch(`api/myskoda/configs/${vehicleId}`)).json();
+  document.getElementById('ms-enabled').checked = c.enabled;
+  document.getElementById('ms-apikey').value = '';
+  document.getElementById('ms-apikey').placeholder = c.has_api_key
+    ? 'API-Key gesetzt – leer lassen zum Beibehalten' : 'API-Key';
+  document.getElementById('ms-vin').value = c.vin || '';
+  document.getElementById('ms-idle').value = c.poll_interval_idle_minutes;
+  document.getElementById('ms-active').value = c.poll_interval_active_minutes;
+  document.getElementById('ms-missed').checked = c.detect_missed_sessions;
+  document.getElementById('ms-missed-delta').value = c.missed_session_min_soc_delta;
+  document.getElementById('ms-log').checked = c.log_enabled;
+  document.getElementById('ms-log-raw').checked = c.log_raw_payload;
+  document.getElementById('myskoda-test-result').style.display = 'none';
+  renderMyskodaStatus(c);
+  await loadMyskodaLog();
+}
+
+async function loadMyskodaLog() {
+  const vehicleId = msVehicleId();
+  const rows = document.getElementById('ms-log-rows');
+  if (!vehicleId) { rows.innerHTML = ''; return; }
+  const entries = await (await fetch(`api/myskoda/logs?vehicle_id=${vehicleId}&limit=200`)).json();
+  if (!entries.length) {
+    rows.innerHTML = '<tr><td colspan="7" style="color:var(--muted)">Noch keine Einträge.</td></tr>';
+    return;
+  }
+  const levelColor = { error: 'var(--danger)', warning: 'var(--warn)' };
+  rows.innerHTML = entries.map(e => `
+    <tr>
+      <td style="white-space:nowrap">${msFmt(e.created_at)}</td>
+      <td><code>${e.event}</code></td>
+      <td>${e.charging_state || '–'}</td>
+      <td>${e.soc_percent ?? '–'}</td>
+      <td>${e.charge_power_kw === null ? '–' : msFmtNum(e.charge_power_kw) + ' kW'}</td>
+      <td style="color:${levelColor[e.level] || 'inherit'}">${e.message}</td>
+      <td>${e.has_payload
+        ? `<a href="api/myskoda/logs/${e.id}/payload" target="_blank" rel="noopener">Rohantwort</a>`
+        : ''}</td>
+    </tr>`).join('');
+}
+
+document.getElementById('ms-vehicle').addEventListener('change', loadMyskodaConfig);
+
+document.getElementById('myskoda-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const payload = {
+    enabled: document.getElementById('ms-enabled').checked,
+    api_key: document.getElementById('ms-apikey').value || null,
+    vin: document.getElementById('ms-vin').value || null,
+    poll_interval_idle_minutes: parseInt(document.getElementById('ms-idle').value || 20),
+    poll_interval_active_minutes: parseInt(document.getElementById('ms-active').value || 5),
+    detect_missed_sessions: document.getElementById('ms-missed').checked,
+    missed_session_min_soc_delta: parseInt(document.getElementById('ms-missed-delta').value || 5),
+    log_enabled: document.getElementById('ms-log').checked,
+    log_raw_payload: document.getElementById('ms-log-raw').checked,
+  };
+  const res = await fetch(`api/myskoda/configs/${msVehicleId()}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) { alert('Fehler: ' + await res.text()); return; }
+  await loadMyskodaConfig();
+});
+
+async function msRunAction(btnId, url, label) {
+  const btn = document.getElementById(btnId);
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = label;
+  try {
+    const res = await fetch(url, { method: 'POST' });
+    if (!res.ok) { alert('Fehler: ' + await res.text()); return null; }
+    return await res.json();
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+}
+
+document.getElementById('ms-test-btn').addEventListener('click', async () => {
+  const result = await msRunAction('ms-test-btn', `api/myskoda/configs/${msVehicleId()}/test`, 'Teste…');
+  if (!result) return;
+  const box = document.getElementById('myskoda-test-result');
+  box.style.display = 'block';
+  box.textContent = result.ok
+    ? JSON.stringify(result.summary, null, 2)
+    : 'Fehlgeschlagen: ' + result.error;
+  box.style.color = result.ok ? 'var(--text)' : 'var(--danger)';
+  renderMyskodaStatus(result.config);
+  await loadMyskodaLog();
+});
+
+document.getElementById('ms-poll-btn').addEventListener('click', async () => {
+  const config = await msRunAction('ms-poll-btn', `api/myskoda/configs/${msVehicleId()}/poll`, 'Frage ab…');
+  if (!config) return;
+  renderMyskodaStatus(config);
+  await loadMyskodaLog();
+});
+
+document.getElementById('ms-delete-btn').addEventListener('click', async () => {
+  if (!confirm('Konfiguration inklusive API-Key und Protokoll löschen? Bereits erfasste Ladevorgänge bleiben erhalten.')) return;
+  const res = await fetch(`api/myskoda/configs/${msVehicleId()}`, { method: 'DELETE' });
+  if (!res.ok) { alert('Fehler: ' + await res.text()); return; }
+  await loadMyskodaConfig();
+});
+
+document.getElementById('ms-log-refresh').addEventListener('click', loadMyskodaLog);
+
+document.getElementById('ms-log-export').addEventListener('click', () => {
+  window.location = `api/myskoda/logs/export?vehicle_id=${msVehicleId()}`;
+});
+
+document.getElementById('ms-log-clear').addEventListener('click', async () => {
+  if (!confirm('Debug-Protokoll dieses Fahrzeugs löschen?')) return;
+  const res = await fetch(`api/myskoda/logs?vehicle_id=${msVehicleId()}`, { method: 'DELETE' });
+  if (!res.ok) { alert('Fehler: ' + await res.text()); return; }
+  await loadMyskodaLog();
+});
+
 // ---------- Benutzerverwaltung (nur fuer Admins gerendert) ----------
 
 async function loadUsers() {
@@ -515,6 +802,8 @@ async function deleteUser(id) {
   await loadLocations();
   await loadUsers();
   await loadWebdavConfig();
+  renderMyskodaVehicleOptions();
+  await loadMyskodaConfig();
 })();
 </script>
 {% endblock %}
