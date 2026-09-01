@@ -6,6 +6,22 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.10.3] — 2026-09-01
+
+### Changed
+- **Automatisches API-Polling ist jetzt ein Schalter (AN/AUS) neben der
+  Abschnittsüberschrift**, statt einer Checkbox zwischen zehn weiteren
+  Formularfeldern. Dort wurde sie leicht übersehen – mit der Folge, dass
+  ausschließlich die von Hand ausgelösten Abfragen liefen und die
+  automatische Ladeerkennung stillschweigend nichts tat. Der Schalter
+  speichert sofort, statt auf "Speichern" zu warten.
+
+### Fixed
+- Die Datumsspalte der Ladevorgangs-Tabelle bricht nicht mehr auf mehrere
+  Zeilen um. In der englischen Oberfläche ist die Überschrift ("Date") kürzer
+  als der Inhalt ("Sep 1, 2026, 5:56 PM"), und an der Überschrift hat sich die
+  automatische Spaltenbreite orientiert.
+
 ## [0.10.2] — 2026-08-31
 
 ### Fixed

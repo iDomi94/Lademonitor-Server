@@ -71,7 +71,7 @@
 <table>
   <thead>
     <tr>
-      <th>{{ t('sessions.table.date') }}</th><th>{{ t('sessions.table.vehicle') }}</th><th>{{ t('sessions.table.provider') }}</th><th>{{ t('sessions.table.location') }}</th><th>{{ t('sessions.table.type') }}</th><th>{{ t('sessions.table.soc') }}</th><th>{{ t('sessions.table.kwh') }}</th>
+      <th class="col-datetime">{{ t('sessions.table.date') }}</th><th>{{ t('sessions.table.vehicle') }}</th><th>{{ t('sessions.table.provider') }}</th><th>{{ t('sessions.table.location') }}</th><th>{{ t('sessions.table.type') }}</th><th>{{ t('sessions.table.soc') }}</th><th>{{ t('sessions.table.kwh') }}</th>
       <th>{{ t('sessions.table.price') }}</th><th>{{ t('sessions.table.odometer') }}</th><th>{{ t('sessions.table.consumption') }}</th><th>{{ t('sessions.table.source') }}</th><th></th>
     </tr>
   </thead>
@@ -188,7 +188,7 @@ async function loadSessions() {
     else if (s.soc_end != null) socText = `${s.soc_end}%`;
 
     return `<tr class="${s.needs_review ? 'needs-review' : ''}">
-      <td>${date}</td>
+      <td class="col-datetime">${date}</td>
       <td>${vehicle ? vehicle.name : '–'}</td>
       <td>${provider ? provider.name : '–'}</td>
       <td>${ortText}</td>

@@ -5,6 +5,16 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.10.3",
+        "date": "2026-09-01",
+        "title": "MyŠkoda-Polling als Schalter, Datumsspalte bricht nicht mehr um",
+        "changes": [
+            "Das automatische Abfragen der MyŠkoda-API laesst sich jetzt ueber einen Schalter mit AN/AUS neben der Abschnittsueberschrift ein- und ausschalten - bisher war es eine Checkbox zwischen zehn weiteren Formularfeldern und wurde leicht uebersehen. Wer sie uebersah, bekam ausschliesslich die von Hand ausgeloesten Abfragen und keine automatische Ladeerkennung.",
+            "Der Schalter speichert sofort, statt auf \"Speichern\" zu warten.",
+            "Datumsspalte der Ladevorgangs-Tabelle bricht nicht mehr auf mehrere Zeilen um. In der englischen Oberflaeche ist die Ueberschrift (\"Date\") kuerzer als der Inhalt (\"Sep 1, 2026, 5:56 PM\"), woran sich die automatische Spaltenbreite orientiert hat.",
+        ],
+    },
+    {
         "version": "0.10.2",
         "date": "2026-08-31",
         "title": "MyŠkoda: \"Verbindung testen\"/\"Jetzt abfragen\" vor dem Speichern repariert",

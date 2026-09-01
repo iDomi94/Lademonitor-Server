@@ -99,13 +99,18 @@
 </form>
 <div id="webdav-status" style="margin-top:8px; font-size:0.9em"></div>
 
-<h2>{{ t('settings.myskoda.heading') }}</h2>
+<div class="section-head">
+  <h2>{{ t('settings.myskoda.heading') }}</h2>
+  <label class="switch">
+    {{ t('settings.myskoda.polling_label') }}
+    <input type="checkbox" id="ms-enabled">
+    <span class="track"></span>
+    <span class="state" id="ms-enabled-state"></span>
+  </label>
+</div>
 <p style="color:var(--muted); font-size:0.9em">{{ t('settings.myskoda.description')|safe }}</p>
 <form class="inline-form" id="myskoda-form">
   <div><label>{{ t('settings.myskoda.vehicle') }}</label><select id="ms-vehicle"></select></div>
-  <div>
-    <label><input type="checkbox" id="ms-enabled" style="width:auto; display:inline-block; margin-right:6px">{{ t('settings.myskoda.auto_query') }}</label>
-  </div>
   <div><label>{{ t('settings.myskoda.apikey') }}</label><input type="password" id="ms-apikey" placeholder="{{ t('settings.myskoda.apikey') }}" autocomplete="off"></div>
   <div><label>{{ t('settings.myskoda.vin') }}</label><input id="ms-vin" placeholder="TMB..." maxlength="17" autocomplete="off"></div>
   <div><label>{{ t('settings.myskoda.idle_interval') }}</label><input type="number" id="ms-idle" min="3" max="1440" value="20"></div>
@@ -224,6 +229,8 @@ const T = {
   webdavRunNow: {{ t('settings.webdav.run_now')|tojson }},
   webdavRunRunning: {{ t('settings.webdav.run_running')|tojson }},
 
+  msPollingOn: {{ t('settings.myskoda.polling_on')|tojson }},
+  msPollingOff: {{ t('settings.myskoda.polling_off')|tojson }},
   msPleaseAddVehicle: {{ t('settings.myskoda.status.please_add_vehicle')|tojson }},
   msStatusOk: {{ t('settings.myskoda.status.ok')|tojson }},
   msStatusError: {{ t('settings.myskoda.status.error')|tojson }},
@@ -731,6 +738,7 @@ async function loadMyskodaConfig() {
   }
   const c = await (await fetch(`api/myskoda/configs/${vehicleId}`)).json();
   document.getElementById('ms-enabled').checked = c.enabled;
+  msRenderEnabledState();
   document.getElementById('ms-apikey').value = '';
   document.getElementById('ms-apikey').placeholder = c.has_api_key
     ? T.msApikeyPlaceholderSet : T.msApikey;
@@ -769,6 +777,27 @@ async function loadMyskodaLog() {
         : ''}</td>
     </tr>`).join('');
 }
+
+function msRenderEnabledState() {
+  const on = document.getElementById('ms-enabled').checked;
+  document.getElementById('ms-enabled-state').textContent = on ? T.msPollingOn : T.msPollingOff;
+}
+
+// Der Schalter speichert sofort, statt wie die uebrigen Formularfelder auf
+// "Speichern" zu warten - er sieht aus wie ein Schalter, also soll er auch
+// wie einer wirken. Schlaegt das Speichern fehl (z.B. Aktivieren ohne
+// API-Key, was der Server mit 422 ablehnt), springt er in seine alte
+// Stellung zurueck.
+document.getElementById('ms-enabled').addEventListener('change', async (e) => {
+  msRenderEnabledState();
+  const config = await msSaveConfig();
+  if (!config) {
+    e.target.checked = !e.target.checked;
+    msRenderEnabledState();
+    return;
+  }
+  renderMyskodaStatus(config);
+});
 
 document.getElementById('ms-vehicle').addEventListener('change', loadMyskodaConfig);
 
@@ -915,6 +944,7 @@ document.getElementById('language-form').addEventListener('submit', async (e) =>
   await loadUsers();
   await loadWebdavConfig();
   renderMyskodaVehicleOptions();
+  msRenderEnabledState();
   await loadMyskodaConfig();
 })();
 </script>
