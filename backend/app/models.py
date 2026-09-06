@@ -278,6 +278,17 @@ class MySkodaConfig(Base):
     detect_missed_sessions: Mapped[bool] = mapped_column(Boolean, default=True)
     missed_session_min_soc_delta: Mapped[int] = mapped_column(Integer, default=5)
 
+    # Rueckdatierung des Ladebeginns auf den SoC des letzten Abrufs VOR dem
+    # Einstecken - der Teil des Ladevorgangs, den das Abfrageintervall sonst
+    # verschluckt (bei DC-Schnellladen zweistellige Prozentpunkte). Warum das
+    # zulaessig ist und welche zwei Waechter es begrenzen: ausfuehrlich in
+    # myskoda_poller.py, Abschnitt "Rueckdatierung des Ladebeginns".
+    backdate_session_start: Mapped[bool] = mapped_column(Boolean, default=True)
+    # 0 = automatisch, dann das Doppelte des Leerlaufintervalls. Bewusst kein
+    # fester Default in Minuten: wer selten abfragt, braucht ein groesseres
+    # Fenster, sonst greift die Korrektur nie.
+    backdate_max_gap_minutes: Mapped[int] = mapped_column(Integer, default=0)
+
     # Debug-Protokoll (siehe MySkodaLogEntry). Solange unklar ist, wie die API
     # waehrend eines echten Ladevorgangs tatsaechlich antwortet, ist das der
     # einzige Weg, die Erkennung nachtraeglich zu beurteilen.

@@ -5,6 +5,18 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.11.0",
+        "date": "2026-09-06",
+        "title": "DC-Ladevorgaenge: verschluckter Ladebeginn wird nachgetragen",
+        "changes": [
+            "Die automatische Ladeerkennung ueber die MyŠkoda-API merkte den Ladebeginn erst beim naechsten Abruf - beim DC-Schnellladen fehlte dadurch ein erheblicher Teil des Vorgangs. Zwei echte Vorgaenge im Debug-Log wurden als 30 %-77 % und 64 %-80 % erfasst, tatsaechlich waren es 8 %-77 % und 48 %-80 %: rund 17 bzw. 12 kWh, die in Energie, Kosten und Verbrauchsstatistik gefehlt haben.",
+            "Als Startwert zaehlt jetzt der SoC des letzten Abrufs VOR dem Einstecken. Das ist zulaessig, weil Fahren den SoC senkt - dieser Wert kann nie unter dem echten Startwert liegen. In beiden Faellen oben trifft er den echten Wert exakt.",
+            "Zwei Waechter verhindern, dass dabei ein woanders geladener Vorgang mitgezaehlt wird: der Abruf davor darf nicht zu alt sein (einstellbar, standardmaessig das Doppelte des Leerlaufintervalls), und der Zuwachs muss bei der beobachteten Ladeleistung ueberhaupt moeglich gewesen sein (dafuer muss die Akkukapazitaet am Fahrzeug hinterlegt sein).",
+            "Die Startzeit wird passend mit vorgezogen, damit die abgeleitete Durchschnittsleistung plausibel bleibt.",
+            "Abschaltbar in den Einstellungen. Die Rohwerte beider Abrufe stehen weiterhin in der Notiz des Ladevorgangs, die Korrektur ist dort und im Debug-Protokoll nachvollziehbar.",
+        ],
+    },
+    {
         "version": "0.10.3",
         "date": "2026-09-01",
         "title": "MyŠkoda-Polling als Schalter, Datumsspalte bricht nicht mehr um",

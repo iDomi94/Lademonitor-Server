@@ -27,18 +27,62 @@ Ladung unterbrochen), gehoeren mit zum Vorgang.
 - **Der Ladebeginn wird erst beim naechsten Abruf bemerkt.** Der Ladevorgang
   hat dann schon bis zu ein Abfrageintervall lang gelaufen. Bei AC-Laden ist
   das vernachlaessigbar (11 kW * 5 min ~ 1 kWh), bei DC-Schnellladen nicht
-  (150 kW * 5 min ~ 12 kWh). `soc_start` ist deshalb der SoC beim ERSTEN
-  Abruf, der "steckt" meldet - also eher zu hoch, die Energie eher zu
-  niedrig. Es wird bewusst nicht hochgerechnet: der SoC des vorherigen
-  Abrufs waere bei einer Fahrt zwischen den Abrufen falsch in die andere
-  Richtung. Stattdessen wird beides (`open_soc_before` vs. `open_soc_start`)
-  in der Notiz des Ladevorgangs und im Debug-Log festgehalten, damit nach
-  einem echten Ladevorgang entschieden werden kann, ob eine Korrektur noetig
-  ist.
+  (150 kW * 5 min ~ 12 kWh). Dagegen steht die Rueckdatierung, siehe unten.
 - **Ein schlafendes Fahrzeug kann einen ganzen Vorgang verstecken.** Dagegen
   steht die Nacherkennung ueber einen SoC-Sprung (`detect_missed_sessions`).
 - **Alle Zeitstempel stammen wenn moeglich aus `carCapturedTimestamp`**, nicht
   aus der lokalen Uhr - die Antwort kann ein aelterer Cloud-Stand sein.
+
+## Rueckdatierung des Ladebeginns (`_backdated_start`)
+
+Bis 2026-09 war `soc_start` immer der SoC beim ERSTEN Abruf, der "steckt"
+meldet - mit der Begruendung, der SoC des vorherigen Abrufs waere bei einer
+Fahrt zwischen den Abrufen "falsch in die andere Richtung". Das war nur zur
+Haelfte richtig und ist bewusst revidiert:
+
+Fahren SENKT den SoC. Solange nicht geladen wird, ist der SoC monoton
+fallend, also gilt immer `soc_echt <= min(open_soc_before, open_soc_start)`.
+Der vorherige Wert kann damit nie unter dem echten Startwert liegen - er ist
+schlimmstenfalls (lange Fahrt dazwischen) zu wenig korrigiert, nie zu viel.
+Der einzige Fall, in dem er wirklich in die falsche Richtung zeigt, ist
+`open_soc_before > open_soc_start` (viel gefahren, dann DC gestartet) - und
+der ist trivial erkennbar.
+
+Belegt an zwei DC-Vorgaengen im Debug-Log (05./06.09.2026): erkannt wurden
+30 %->77 % bzw. 64 %->80 %, tatsaechlich waren es 8 %->77 % und 48 %->80 %.
+Der jeweils letzte Abruf davor stand punktgenau auf 8 % bzw. 48 % - beim
+zweiten, obwohl dazwischen noch 5 km gefahren wurden (der 15 min alte Wert
+enthielt die Fahrt bereits). Verschluckt wurden so 17 bzw. 12 kWh, was ueber
+`estimate_energy_kwh` direkt auf Energie, Kosten und Verbrauchsstatistik
+durchschlaegt.
+
+`soc_start` ist deshalb jetzt `open_soc_before`, aber nur unter zwei
+Waechtern - ohne sie waere ein komplett unbemerkter Ladevorgang zwischen den
+Abrufen (fahren, woanders laden, heimkommen, einstecken) als Zuwachs DIESES
+Vorgangs gezaehlt worden:
+
+1. **Alter.** Nur wenn der vorherige Abruf hoechstens
+   `backdate_max_gap_minutes` zurueckliegt (Default: das Doppelte des
+   Leerlaufintervalls). Ist er aelter, kann dazwischen zu viel passiert sein.
+2. **Physik.** Aus `open_max_power_kw` und `vehicle.battery_capacity_kwh`
+   ergibt sich, wie viele Prozentpunkte in der Luecke ueberhaupt geladen
+   worden sein KOENNEN - weiter zurueck als diese Untergrenze wird nicht
+   korrigiert. Ohne hinterlegte Akkukapazitaet greift dieser Waechter nicht,
+   dann bleibt nur der Alterswaechter.
+
+Die **Startzeit** wird aus derselben Physik mitgezogen, sonst wuerde die
+abgeleitete Durchschnittsleistung unphysikalisch (05.09.: 53 kWh in den
+gemessenen 19 min waeren 168 kW avg bei 134 kW Peak). Zurueck geht es um die
+Zeit, die das nachgetragene SoC-Delta bei der beobachteten Leistung braucht,
+hoechstens aber bis zum vorherigen Abruf.
+
+Was NICHT passiert: eine Korrektur um die Fahrstrecke zwischen den Abrufen
+(`odometer`). Beim DC-Vorgang vom 06.09. lag der 15 min alte SoC trotz 5 km
+Fahrt exakt richtig - die Fahrt steckte schon drin. Abziehen wuerde
+ueberkorrigieren; der Kilometerstand dient nur der Diagnose in der Notiz.
+
+Rueckdatierter Start und Rohwerte stehen weiterhin beide in der Notiz des
+Ladevorgangs und im Debug-Log, und die Vorgaenge bleiben `needs_review`.
 """
 
 import json
@@ -82,6 +126,12 @@ RATE_LIMIT_RESERVE = 2
 AUTH_ERROR_BACKOFF_MINUTES = 60
 #: Netz-/Serverfehler: zuegig erneut versuchen, aber nicht im Sekundentakt.
 ERROR_BACKOFF_MINUTES = 15
+
+#: Zurueckdatiert wird nur, wenn der letzte Abruf vor dem Einstecken hoechstens
+#: dieses Vielfache des Leerlaufintervalls zurueckliegt - sofern die Konfiguration
+#: kein festes Fenster vorgibt (`backdate_max_gap_minutes = 0`). Zwei Intervalle,
+#: damit ein einzelner ausgefallener Abruf die Korrektur nicht sofort verhindert.
+BACKDATE_GAP_INTERVAL_FACTOR = 2
 
 
 # --------------------------------------------------------------------------
@@ -171,6 +221,79 @@ def _fmt_minutes(seconds: int | None) -> str:
         return "unbekannt"
     minutes = round(seconds / 60)
     return f"{minutes} min"
+
+
+def _backdate_limit_seconds(config: models.MySkodaConfig) -> int:
+    """Wie alt der letzte Abruf vor dem Einstecken hoechstens sein darf, damit
+    sein SoC noch als Startwert taugt."""
+    configured = config.backdate_max_gap_minutes or 0
+    if configured > 0:
+        return configured * 60
+    return BACKDATE_GAP_INTERVAL_FACTOR * max(1, config.poll_interval_idle_minutes) * 60
+
+
+def _backdated_start(
+    config: models.MySkodaConfig, capacity_kwh: float | None
+) -> tuple[int | None, datetime | None, str | None]:
+    """Korrigierter Ladebeginn: `(soc_start, start_time, Begruendung)`.
+
+    Ohne Korrektur kommen die unveraenderten `open_*`-Werte zurueck und die
+    Begruendung ist None. Ausfuehrliche Herleitung im Modul-Docstring,
+    Abschnitt "Rueckdatierung des Ladebeginns".
+    """
+    soc_start = config.open_soc_start
+    start_time = config.open_start_time
+    before = config.open_soc_before
+    gap = config.open_gap_before_seconds
+
+    if not config.backdate_session_start:
+        return soc_start, start_time, None
+    if before is None or soc_start is None or gap is None or start_time is None:
+        return soc_start, start_time, None
+    if before >= soc_start:
+        # Kein Zuwachs verschluckt. Ein HOEHERER Wert davor heisst: dazwischen
+        # wurde gefahren, nicht geladen - dann ist der erkannte Wert der
+        # richtige und der vorherige der falsche.
+        return soc_start, start_time, None
+
+    limit = _backdate_limit_seconds(config)
+    if gap > limit:
+        return soc_start, start_time, None
+
+    # Physik-Waechter: mehr als das kann in der Luecke nicht geladen worden
+    # sein. Ohne Akkukapazitaet am Fahrzeug nicht berechenbar - dann bleibt es
+    # beim reinen Alterswaechter oben.
+    power = config.open_max_power_kw or 0.0
+    floor = float(before)
+    if capacity_kwh and power > 0:
+        max_gain_pct = power * (gap / 3600) / capacity_kwh * 100
+        floor = max(floor, soc_start - max_gain_pct)
+    elif capacity_kwh and power <= 0:
+        # Nie Leistung gesehen -> es kann auch nichts verschluckt worden sein.
+        return soc_start, start_time, None
+
+    corrected = int(round(floor))
+    if corrected >= soc_start:
+        return soc_start, start_time, None
+
+    # Startzeit aus derselben Physik mitziehen: sonst wird die aus Energie und
+    # Dauer abgeleitete Durchschnittsleistung unphysikalisch. Hoechstens bis
+    # zum vorherigen Abruf zurueck - davor stand das Kabel nachweislich nicht.
+    offset = float(gap)
+    if capacity_kwh and power > 0:
+        hours = (soc_start - corrected) / 100 * capacity_kwh / power
+        offset = min(offset, hours * 3600)
+    # Auf ganze Sekunden, wie alle uebrigen Zeitstempel aus
+    # `carCapturedTimestamp` - die Startzeit landet u.a. in der
+    # `external_session_id` und in der Anzeige.
+    corrected_time = (start_time - timedelta(seconds=offset)).replace(microsecond=0)
+
+    reason = (
+        f"Ladebeginn zurückdatiert: Startwert {soc_start} % → {corrected} % "
+        f"(letzter Abruf davor vor {_fmt_minutes(gap)} mit {before} %), "
+        f"Startzeit um {_fmt_minutes(int(offset))} vorgezogen."
+    )
+    return corrected, corrected_time, reason
 
 
 def _reset_open_session(config: models.MySkodaConfig) -> None:
@@ -366,17 +489,26 @@ def _finish_open_session(
     db: Session, config: models.MySkodaConfig, snapshot: VehicleSnapshot
 ) -> None:
     """Uebergang "verbunden" -> "nicht verbunden": Ladevorgang abschliessen."""
-    start_time = config.open_start_time or snapshot.captured_at
+    # Den vom Abfrageintervall verschluckten Anfang nachtragen, bevor irgendwas
+    # daraus abgeleitet wird (Dauer, SoC-Delta, external_session_id).
+    vehicle = db.get(models.Vehicle, config.vehicle_id)
+    soc_start, backdated_time, backdate_reason = _backdated_start(
+        config, vehicle.battery_capacity_kwh if vehicle else None
+    )
+
+    start_time = backdated_time or config.open_start_time or snapshot.captured_at
     end_time = snapshot.captured_at
     if end_time <= start_time:
         # Kann passieren, wenn die API einen aelteren Cloud-Stand liefert als
         # beim Ladebeginn - dann ist die lokale Uhr die ehrlichere Angabe.
         end_time = max(snapshot.fetched_at, start_time + timedelta(minutes=1))
 
-    soc_start = config.open_soc_start
     soc_end = config.open_soc_last
     if snapshot.soc_percent is not None:
         soc_end = max(soc_end or 0, snapshot.soc_percent)
+
+    if backdate_reason:
+        log_event(db, config, "session_backdated", backdate_reason, snapshot=snapshot)
 
     delta = (soc_end - soc_start) if (soc_start is not None and soc_end is not None) else None
     max_power = config.open_max_power_kw or 0.0
@@ -397,7 +529,7 @@ def _finish_open_session(
         _reset_open_session(config)
         return
 
-    notes = _detection_note(config, delta)
+    notes = _detection_note(config, delta, backdate_reason)
     session = _create_session(
         db,
         config,
@@ -439,12 +571,16 @@ def _finish_open_session(
     _reset_open_session(config)
 
 
-def _detection_note(config: models.MySkodaConfig, delta: int | None) -> str:
+def _detection_note(
+    config: models.MySkodaConfig, delta: int | None, backdate_reason: str | None = None
+) -> str:
     """Diagnose-Notiz am Ladevorgang.
 
     Bewusst am Datensatz selbst und nicht nur im Log: beim Nachbearbeiten
     (needs_review) ist genau das die Information, mit der sich beurteilen
-    laesst, wie zuverlaessig die automatisch erfassten Werte sind.
+    laesst, wie zuverlaessig die automatisch erfassten Werte sind. Deshalb
+    stehen hier immer die ROHWERTE beider Abrufe, auch wenn zurueckdatiert
+    wurde - sonst laesst sich die Korrektur nachtraeglich nicht mehr pruefen.
     """
     lines = ["Automatisch erkannt über die MyŠkoda Public API."]
 
@@ -455,7 +591,12 @@ def _detection_note(config: models.MySkodaConfig, delta: int | None) -> str:
             f"(vor {_fmt_minutes(config.open_gap_before_seconds)}), "
             f"beim ersten Abruf mit steckendem Kabel: {config.open_soc_start} %."
         )
-        if missed < 0:
+        if backdate_reason:
+            # Nicht aus `missed` neu gerechnet: der Physik-Waechter kann weniger
+            # als die volle Differenz nachgetragen haben, `backdate_reason`
+            # nennt die tatsaechlich angesetzten Werte.
+            lines.append(backdate_reason)
+        elif missed < 0:
             lines.append(
                 f"Achtung: dazwischen wurden bereits {abs(missed)} Prozentpunkte geladen, "
                 "die in diesem Vorgang fehlen (Abfrageintervall)."

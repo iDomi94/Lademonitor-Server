@@ -75,6 +75,8 @@ def _to_out(db: Session, config: models.MySkodaConfig) -> schemas.MySkodaConfigO
         poll_interval_active_minutes=config.poll_interval_active_minutes,
         detect_missed_sessions=config.detect_missed_sessions,
         missed_session_min_soc_delta=config.missed_session_min_soc_delta,
+        backdate_session_start=config.backdate_session_start,
+        backdate_max_gap_minutes=config.backdate_max_gap_minutes,
         log_enabled=config.log_enabled,
         log_raw_payload=config.log_raw_payload,
         last_poll_at=config.last_poll_at,
@@ -148,6 +150,8 @@ def update_config(
     config.poll_interval_active_minutes = payload.poll_interval_active_minutes
     config.detect_missed_sessions = payload.detect_missed_sessions
     config.missed_session_min_soc_delta = payload.missed_session_min_soc_delta
+    config.backdate_session_start = payload.backdate_session_start
+    config.backdate_max_gap_minutes = payload.backdate_max_gap_minutes
     config.log_enabled = payload.log_enabled
     config.log_raw_payload = payload.log_raw_payload
 

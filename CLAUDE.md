@@ -325,16 +325,9 @@ entschieden (ein laufender Vorgang wuerde sonst faelschlich beendet).
 
 ### Bekannte Ungenauigkeiten (bewusst so, nicht uebersehen)
 
-- **Der Ladebeginn wird erst beim naechsten Abruf bemerkt.** `soc_start` ist
-  der SoC beim ERSTEN Abruf mit steckendem Kabel - also eher zu hoch, die aus
-  dem SoC-Delta geschaetzte Energie eher zu niedrig. AC 11 kW * 5 min ~ 1 kWh
-  (vernachlaessigbar), DC 150 kW * 5 min ~ 12 kWh (nicht vernachlaessigbar).
-  Es wird bewusst NICHT hochgerechnet: der SoC des vorherigen Abrufs waere
-  falsch in die andere Richtung, wenn das Fahrzeug zwischendurch gefahren ist.
-  Stattdessen landen beide Werte (`open_soc_before` vs. `open_soc_start`) samt
-  Zeitabstand in der `notes`-Spalte des Ladevorgangs und im Debug-Log -
-  **genau dafuer ist das Log da: nach dem ersten echten DC-Ladevorgang
-  entscheiden, ob eine Korrektur noetig ist.**
+- **Der Ladebeginn wird erst beim naechsten Abruf bemerkt.** Seit 2026-09-06
+  wird er zurueckdatiert, siehe eigenen Abschnitt unten - vorher war
+  `soc_start` immer der SoC beim ERSTEN Abruf mit steckendem Kabel.
 - `soc_end` ist `max()` ueber alle Beobachtungen waehrend des Steckens, nicht
   der Wert beim Ausstecken - sonst wuerde eine Vorklimatisierung aus der
   Batterie oder ein Stueck Fahrt vor dem naechsten Abruf den Wert druecken.
@@ -350,6 +343,50 @@ entschieden (ein laufender Vorgang wuerde sonst faelschlich beendet).
   `session_discarded`-Logeintrag.
 - Es gibt **keinen Energiezaehler** in der API. `energy_kwh` bleibt wie beim
   HA-Weg die serverseitige Schaetzung aus SoC-Delta x Akkukapazitaet.
+
+### Rueckdatierung des Ladebeginns (2026-09-06, kippt eine fruehere Entscheidung)
+
+Urspruenglich war `soc_start` immer der SoC beim ersten Abruf mit steckendem
+Kabel, mit der Begruendung "der SoC des vorherigen Abrufs waere falsch in die
+andere Richtung, wenn das Fahrzeug zwischendurch gefahren ist". Das war nur zur
+Haelfte richtig und ist bewusst revidiert - **Fahren senkt den SoC**. Solange
+nicht geladen wird, ist der SoC monoton fallend, also gilt immer
+`soc_echt <= min(open_soc_before, open_soc_start)`: der vorherige Wert kann nie
+UNTER dem echten Startwert liegen, schlimmstenfalls (lange Fahrt dazwischen)
+ist er zu wenig korrigiert. Der einzige Fall, in dem er wirklich in die falsche
+Richtung zeigt, ist `open_soc_before > open_soc_start` - und der ist trivial
+erkennbar.
+
+Ausloeser war die im TODO oben geforderte Auswertung des Debug-Logs nach den
+ersten echten DC-Ladevorgaengen (05./06.09.2026): erfasst wurden 30 %->77 % und
+64 %->80 %, tatsaechlich waren es 8 %->77 % und 48 %->80 % - rund 17 bzw.
+12 kWh, die ueber `estimate_energy_kwh` direkt in Energie, Kosten und
+Verbrauchsstatistik gefehlt haben. Der jeweils letzte Abruf davor stand
+punktgenau auf 8 % bzw. 48 %; beim zweiten sogar, obwohl dazwischen noch 5 km
+gefahren wurden (der 15 min alte Wert enthielt die Fahrt schon). Genau deshalb
+wird die Fahrstrecke (`odometer`) NICHT zusaetzlich abgezogen - das wuerde
+ueberkorrigieren.
+
+`_backdated_start()` in `myskoda_poller.py` setzt `soc_start` deshalb auf
+`open_soc_before`, unter zwei Waechtern (ohne sie waere ein unbemerkter
+Ladevorgang zwischen den Abrufen - fahren, woanders laden, heimkommen,
+einstecken - als Zuwachs DIESES Vorgangs gezaehlt worden):
+
+1. **Alter** (`backdate_max_gap_minutes`, 0 = automatisch das Doppelte des
+   Leerlaufintervalls): ist der Abruf davor aelter, kann zu viel passiert sein.
+2. **Physik**: aus `open_max_power_kw` und `vehicle.battery_capacity_kwh` ergibt
+   sich die Obergrenze dessen, was in der Luecke geladen worden sein KANN.
+   Ohne hinterlegte Akkukapazitaet greift dieser Waechter nicht.
+
+Die **Startzeit** wird aus derselben Physik mitgezogen (die Zeit, die das
+nachgetragene SoC-Delta bei der beobachteten Leistung braucht, hoechstens bis
+zum vorherigen Abruf) - sonst wird die aus Energie und Dauer abgeleitete
+Durchschnittsleistung unphysikalisch: 53 kWh in den gemessenen 19 min waeren
+168 kW avg bei 134 kW Peak. Mit Korrektur: 122 kW avg bei 26 min.
+
+Abschaltbar per `backdate_session_start`. Die Rohwerte beider Abrufe stehen
+weiterhin in `notes`, die angewandte Korrektur dort und als
+`session_backdated`-Zeile im Debug-Log; die Vorgaenge bleiben `needs_review`.
 
 ### Zustand liegt in der DB, nicht im Prozess
 
@@ -455,14 +492,16 @@ Icon/Tooltip-Logik in der SessionsList-View.
   Passwort-Raten oder Spam-Registrierungen. Bewusst zurueckgestellt (starkes
   Passwort des Nutzers als aktuelle Absicherung), waere ein separater,
   ueberschaubarer Zusatz (z.B. `slowapi` oder Nginx-seitig).
-- **MyŠkoda-Poller noch nicht an einem echten Ladevorgang erprobt** - die
-  Zustandsmaschine ist gegen einen simulierten Verlauf getestet, die reale
-  API-Antwortfolge waehrend des Ladens (Reihenfolge der Zustaende, Nachlauf
-  von `carCapturedTimestamp`, ob `chargeType` beim Ausstecken schon wieder
-  `OFF` meldet) ist offen. Genau dafuer das Debug-Log mit Rohantworten
-  einschalten und nach dem ersten echten AC- UND DC-Ladevorgang auswerten -
-  insbesondere, wie gross der verschluckte SoC-Anteil am Ladebeginn wirklich
-  ist (siehe Abschnitt oben).
+- **MyŠkoda-Poller: erledigt bis auf die Rueckdatierung selbst.** Das
+  Debug-Log ist inzwischen ueber je einen echten AC- und zwei DC-Ladevorgaenge
+  ausgewertet (Stand 06.09.2026, 355 Zeilen) - Zustandsfolge, Nachlauf von
+  `carCapturedTimestamp` und `chargeType` verhalten sich wie angenommen. Der
+  verschluckte SoC-Anteil am Ladebeginn war mit 22 bzw. 16 Prozentpunkten
+  deutlich groesser als befuerchtet; daraus entstand die Rueckdatierung (siehe
+  Abschnitt oben). **Offen:** die Rueckdatierung selbst ist bisher nur gegen
+  die drei Vorgaenge aus dem Log verifiziert, nicht im Live-Betrieb - der
+  naechste echte DC-Vorgang sollte daraufhin geprueft werden, insbesondere ob
+  der Physik-Waechter bei einer laenger als erwartet dauernden Luecke greift.
 - **Kein Schutz gegen doppelte Erfassung, wenn HA-Push und MyŠkoda-Poller
   gleichzeitig fuer dasselbe Fahrzeug laufen** - bewusst nicht geloest
   (unterschiedliche `external_session_id`-Schemata, ein Abgleich ueber

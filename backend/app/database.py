@@ -46,6 +46,36 @@ def run_light_migrations() -> None:
         )
         conn.execute(text("UPDATE users SET language = 'de' WHERE language IS NULL"))
 
+        # Rueckdatierung des Ladebeginns (siehe myskoda_poller.py, Abschnitt
+        # "Rueckdatierung des Ladebeginns"). Bestandszeilen bekommen dieselben
+        # Werte wie neue: die Korrektur ist an, das Zeitfenster automatisch.
+        # Wie oben bei users.language noetig, weil Postgres den DEFAULT bei
+        # ADD COLUMN nicht rueckwirkend auf bestehende Zeilen anwendet.
+        conn.execute(
+            text(
+                "ALTER TABLE myskoda_configs "
+                "ADD COLUMN IF NOT EXISTS backdate_session_start BOOLEAN DEFAULT TRUE"
+            )
+        )
+        conn.execute(
+            text(
+                "UPDATE myskoda_configs SET backdate_session_start = TRUE "
+                "WHERE backdate_session_start IS NULL"
+            )
+        )
+        conn.execute(
+            text(
+                "ALTER TABLE myskoda_configs "
+                "ADD COLUMN IF NOT EXISTS backdate_max_gap_minutes INTEGER DEFAULT 0"
+            )
+        )
+        conn.execute(
+            text(
+                "UPDATE myskoda_configs SET backdate_max_gap_minutes = 0 "
+                "WHERE backdate_max_gap_minutes IS NULL"
+            )
+        )
+
         # Multi-User-Umstellung: user_id auf allen vier Kern-Tabellen ergaenzen.
         # Bestehende Zeilen (aus der Zeit vor Multi-User) werden dem ERSTEN
         # jemals registrierten Nutzer zugeordnet - das ist zuverlaessig der

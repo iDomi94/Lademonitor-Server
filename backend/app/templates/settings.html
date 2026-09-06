@@ -120,6 +120,10 @@
   </div>
   <div><label>{{ t('settings.myskoda.missed_delta') }}</label><input type="number" id="ms-missed-delta" min="1" max="100" value="5"></div>
   <div>
+    <label><input type="checkbox" id="ms-backdate" style="width:auto; display:inline-block; margin-right:6px">{{ t('settings.myskoda.backdate') }}</label>
+  </div>
+  <div><label>{{ t('settings.myskoda.backdate_gap') }}</label><input type="number" id="ms-backdate-gap" min="0" max="1440" value="0"></div>
+  <div>
     <label><input type="checkbox" id="ms-log" style="width:auto; display:inline-block; margin-right:6px">{{ t('settings.myskoda.log_checkbox') }}</label>
   </div>
   <div>
@@ -747,6 +751,8 @@ async function loadMyskodaConfig() {
   document.getElementById('ms-active').value = c.poll_interval_active_minutes;
   document.getElementById('ms-missed').checked = c.detect_missed_sessions;
   document.getElementById('ms-missed-delta').value = c.missed_session_min_soc_delta;
+  document.getElementById('ms-backdate').checked = c.backdate_session_start;
+  document.getElementById('ms-backdate-gap').value = c.backdate_max_gap_minutes;
   document.getElementById('ms-log').checked = c.log_enabled;
   document.getElementById('ms-log-raw').checked = c.log_raw_payload;
   document.getElementById('myskoda-test-result').style.display = 'none';
@@ -810,6 +816,9 @@ function msBuildPayload() {
     poll_interval_active_minutes: parseInt(document.getElementById('ms-active').value || 5),
     detect_missed_sessions: document.getElementById('ms-missed').checked,
     missed_session_min_soc_delta: parseInt(document.getElementById('ms-missed-delta').value || 5),
+    backdate_session_start: document.getElementById('ms-backdate').checked,
+    // 0 = automatisch (2x Leerlaufintervall), deshalb || 0 statt eines Defaults
+    backdate_max_gap_minutes: parseInt(document.getElementById('ms-backdate-gap').value || 0),
     log_enabled: document.getElementById('ms-log').checked,
     log_raw_payload: document.getElementById('ms-log-raw').checked,
   };

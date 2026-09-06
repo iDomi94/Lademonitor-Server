@@ -305,6 +305,10 @@ class MySkodaConfigIn(BaseModel):
     poll_interval_active_minutes: int = Field(default=5, ge=3, le=1440)
     detect_missed_sessions: bool = True
     missed_session_min_soc_delta: int = Field(default=5, ge=1, le=100)
+    # Ladebeginn auf den letzten Abruf davor zurueckdatieren (siehe
+    # myskoda_poller.py). 0 = Zeitfenster automatisch aus dem Leerlaufintervall.
+    backdate_session_start: bool = True
+    backdate_max_gap_minutes: int = Field(default=0, ge=0, le=1440)
     log_enabled: bool = True
     log_raw_payload: bool = True
 
@@ -324,6 +328,8 @@ class MySkodaConfigOut(BaseModel):
     poll_interval_active_minutes: int
     detect_missed_sessions: bool
     missed_session_min_soc_delta: int
+    backdate_session_start: bool
+    backdate_max_gap_minutes: int
     log_enabled: bool
     log_raw_payload: bool
 

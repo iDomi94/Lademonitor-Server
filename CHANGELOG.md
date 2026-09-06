@@ -6,6 +6,37 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.11.0] — 2026-09-06
+
+### Changed
+- **Der vom Abfrageintervall verschluckte Ladebeginn wird nachgetragen.** Die
+  automatische Ladeerkennung über die MyŠkoda Public API bemerkte den
+  Ladebeginn erst beim nächsten Abruf; beim DC-Schnellladen fehlte dadurch ein
+  erheblicher Teil des Vorgangs. Zwei echte Vorgänge im Debug-Log wurden als
+  30 %→77 % und 64 %→80 % erfasst, tatsächlich waren es 8 %→77 % und
+  48 %→80 % — rund 17 bzw. 12 kWh, die in Energie, Kosten und
+  Verbrauchsstatistik gefehlt haben.
+
+  Als Startwert zählt jetzt der SoC des letzten Abrufs **vor** dem Einstecken.
+  Das ist zulässig, weil Fahren den SoC senkt: solange nicht geladen wird, ist
+  der SoC monoton fallend, dieser Wert kann also nie unter dem echten
+  Startwert liegen. In beiden Fällen oben trifft er ihn exakt — beim zweiten
+  sogar, obwohl zwischen den Abrufen noch 5 km gefahren wurden.
+
+  Zwei Wächter verhindern, dass ein anderswo geladener Vorgang mitgezählt
+  wird: der Abruf davor darf höchstens `backdate_max_gap_minutes` zurückliegen
+  (Standard: das Doppelte des Leerlaufintervalls), und der Zuwachs muss bei der
+  beobachteten Ladeleistung physikalisch möglich gewesen sein — letzteres
+  setzt eine hinterlegte Akkukapazität am Fahrzeug voraus.
+
+  Die Startzeit wird aus derselben Rechnung mit vorgezogen, sonst würde die
+  aus Energie und Dauer abgeleitete Durchschnittsleistung unphysikalisch.
+
+  Abschaltbar in den Einstellungen ("Ladebeginn auf den letzten Abruf davor
+  zurückdatieren"). Die Rohwerte beider Abrufe stehen weiterhin in der Notiz
+  des Ladevorgangs, die angewandte Korrektur ebenfalls — dort und als
+  `session_backdated`-Zeile im Debug-Protokoll.
+
 ## [0.10.3] — 2026-09-01
 
 ### Changed
