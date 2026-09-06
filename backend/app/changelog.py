@@ -5,6 +5,20 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.12.0",
+        "date": "2026-09-06",
+        "title": "Web-Oberflaeche auf dem Handy benutzbar",
+        "changes": [
+            "Die Navigationsleiste war auf dem Handy zu breit - die Links liegen jetzt hinter einem Menue-Knopf und klappen darunter auf. Auf dem Desktop bleibt die Leiste unveraendert.",
+            "Die Ladevorgangs-Liste war mit zwoelf Spalten auf schmalen Schirmen nicht lesbar. Sie erscheint dort jetzt als Karten im selben Aufbau wie in der iOS-App: Datum, Lade-Art und Ort links, kWh und Preis rechts, SoC und Kilometerstand darunter. Ein Tipp auf die Karte oeffnet den Bearbeiten-Modus. Auf breiten Schirmen bleibt es die gewohnte Tabelle.",
+            "Das Formular fuer einen neuen Ladevorgang ist auf dem Handy eingeklappt - vorher schob es die Liste um gut zwei Bildschirmhoehen nach unten.",
+            "Die Einstellungen sind deutlich kuerzer geworden, auf dem Handy wie am Rechner: die Anlege-Formulare fuer Fahrzeuge, Anbieter, Ladeorte und das WebDAV-Backup klappen nur bei Bedarf auf, die langen Erklaertexte liegen unter \"Hinweise\".",
+            "Das MyŠkoda-Debug-Protokoll hat die Seite dominiert und steht jetzt in einem eigenen aufklappbaren Abschnitt - die 200 Zeilen werden erst beim Aufklappen geladen.",
+            "Breite Tabellen schieben die Seite nicht mehr seitlich aus dem Bild, sondern scrollen fuer sich.",
+            "Die Kennzahlen im Dashboard stehen auf dem Handy zweispaltig statt untereinander.",
+        ],
+    },
+    {
         "version": "0.11.0",
         "date": "2026-09-06",
         "title": "DC-Ladevorgaenge: verschluckter Ladebeginn wird nachgetragen",

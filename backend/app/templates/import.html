@@ -19,10 +19,12 @@
 <div id="preview-area" style="display:none">
   <h2>{{ t('import.preview.heading') }}</h2>
   <p id="preview-summary" style="color: var(--muted); font-size: 14px;"></p>
-  <table>
-    <thead><tr><th>{{ t('import.preview.table.date') }}</th><th>{{ t('import.preview.table.odometer') }}</th><th>{{ t('import.preview.table.quantity') }}</th><th>{{ t('import.preview.table.price_total') }}</th><th>{{ t('import.preview.table.price_unit') }}</th><th>{{ t('import.preview.table.status') }}</th></tr></thead>
-    <tbody id="preview-rows"></tbody>
-  </table>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>{{ t('import.preview.table.date') }}</th><th>{{ t('import.preview.table.odometer') }}</th><th>{{ t('import.preview.table.quantity') }}</th><th>{{ t('import.preview.table.price_total') }}</th><th>{{ t('import.preview.table.price_unit') }}</th><th>{{ t('import.preview.table.status') }}</th></tr></thead>
+      <tbody id="preview-rows"></tbody>
+    </table>
+  </div>
   <div class="form-actions" style="margin-top:16px">
     <button id="commit-btn">{{ t('import.commit') }}</button>
   </div>

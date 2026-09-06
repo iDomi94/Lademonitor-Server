@@ -5,6 +5,7 @@
   "nav.settings": "Settings",
   "nav.version_title": "What's new",
   "nav.admin_badge": "(Admin)",
+  "nav.menu": "Menu",
   "nav.logout": "Logout",
 
   "changelog.title": "What's new",
@@ -111,6 +112,7 @@
   "import.js.skipped_default": "skipped",
   "import.js.commit_done": "Import complete: {imported} imported, {skipped} skipped.",
 
+  "common.help": "Details",
   "common.edit": "Edit",
   "common.delete": "Delete",
   "common.none_option": "– none –",

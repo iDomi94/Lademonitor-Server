@@ -4,7 +4,11 @@
 
 <div id="filter-bar"></div>
 
-<h2 id="form-heading" style="margin-top:0">{{ t('sessions.form.new_heading') }}</h2>
+<!-- Das Formular hat zwoelf Felder; mobil (eine Spalte) schiebt es die Liste
+     um gut 1400 px nach unten. Deshalb dort eingeklappt - auf dem Desktop
+     bleibt es offen, siehe setupFormPanel(). -->
+<details class="panel plain" id="session-form-panel" open>
+  <summary id="form-heading">{{ t('sessions.form.new_heading') }}</summary>
 <form class="inline-form" id="session-form">
   <div>
     <label>{{ t('sessions.form.vehicle') }}</label>
@@ -67,16 +71,23 @@
     <button type="submit" id="submit-btn">{{ t('sessions.form.submit_new') }}</button>
   </div>
 </form>
+</details>
 
-<table>
-  <thead>
-    <tr>
-      <th class="col-datetime">{{ t('sessions.table.date') }}</th><th>{{ t('sessions.table.vehicle') }}</th><th>{{ t('sessions.table.provider') }}</th><th>{{ t('sessions.table.location') }}</th><th>{{ t('sessions.table.type') }}</th><th>{{ t('sessions.table.soc') }}</th><th>{{ t('sessions.table.kwh') }}</th>
-      <th>{{ t('sessions.table.price') }}</th><th>{{ t('sessions.table.odometer') }}</th><th>{{ t('sessions.table.consumption') }}</th><th>{{ t('sessions.table.source') }}</th><th></th>
-    </tr>
-  </thead>
-  <tbody id="session-rows"></tbody>
-</table>
+<!-- Zwei Darstellungen derselben Liste: die Tabelle fuer breite Schirme, die
+     Karten fuer schmale. Es liegt immer nur eine davon im DOM - welche,
+     entscheidet renderSessions() ueber eine Media Query. -->
+<div class="tablewrap" id="session-table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th class="col-datetime">{{ t('sessions.table.date') }}</th><th>{{ t('sessions.table.vehicle') }}</th><th>{{ t('sessions.table.provider') }}</th><th>{{ t('sessions.table.location') }}</th><th>{{ t('sessions.table.type') }}</th><th>{{ t('sessions.table.soc') }}</th><th>{{ t('sessions.table.kwh') }}</th>
+        <th>{{ t('sessions.table.price') }}</th><th>{{ t('sessions.table.odometer') }}</th><th>{{ t('sessions.table.consumption') }}</th><th>{{ t('sessions.table.source') }}</th><th></th>
+      </tr>
+    </thead>
+    <tbody id="session-rows"></tbody>
+  </table>
+</div>
+<div class="session-cards" id="session-card-list" style="display:none"></div>
 
 <script>
 let vehicles = [];
@@ -168,43 +179,128 @@ function consumptionCell(kwhPer100km, method) {
   return `<span title="${tooltip}">${kwhPer100km.toFixed(1)} kWh ${icon}</span>`;
 }
 
+// Aufbereitete Anzeigewerte eines Ladevorgangs - einmal berechnet, von
+// Tabellen- UND Kartendarstellung genutzt, damit beide nie auseinanderlaufen.
+function sessionView(s) {
+  const vehicle = vehicles.find(v => v.id === s.vehicle_id);
+  const provider = providers.find(p => p.id === s.provider_id);
+  const location = locations.find(l => l.id === s.location_id);
+
+  let place = location ? location.name : (s.geocoded_place || '');
+  if (!location && !s.geocoded_place && s.notes) {
+    const m = s.notes.match(/Ort:\s*(.+)$/);
+    if (m && m[1]) place = m[1];
+  }
+
+  let soc = '';
+  if (s.soc_start != null && s.soc_end != null) soc = `${s.soc_start}→${s.soc_end}%`;
+  else if (s.soc_end != null) soc = `${s.soc_end}%`;
+
+  return {
+    vehicleName: vehicle ? vehicle.name : '',
+    providerName: provider ? provider.name : '',
+    place,
+    soc,
+    date: new Date(s.start_time).toLocaleString(LOCALE, { dateStyle: 'medium', timeStyle: 'short' }),
+    kwh: s.energy_kwh != null ? s.energy_kwh.toFixed(1) : null,
+    priceTotal: s.price_total != null ? s.price_total.toFixed(2) : null,
+    pricePerKwh: s.price_per_kwh != null ? s.price_per_kwh.toFixed(3) : null,
+    odometer: s.odometer_km != null ? s.odometer_km.toLocaleString(LOCALE) : null,
+  };
+}
+
+function sessionRowHtml(s) {
+  const v = sessionView(s);
+  return `<tr class="${s.needs_review ? 'needs-review' : ''}">
+    <td class="col-datetime">${v.date}</td>
+    <td>${v.vehicleName || '–'}</td>
+    <td>${v.providerName || '–'}</td>
+    <td>${v.place || '–'}</td>
+    <td>${s.charging_type || '–'}</td>
+    <td>${v.soc || '–'}</td>
+    <td>${v.kwh ?? '–'}</td>
+    <td>${v.priceTotal != null ? v.priceTotal + ' €' : '–'}</td>
+    <td>${v.odometer ?? '–'}</td>
+    <td>${consumptionCell(s.consumption_kwh_per_100km, s.consumption_method)}</td>
+    <td>${badgeFor(s.source)}</td>
+    <td style="white-space:nowrap">
+      <button onclick="startEdit('${s.id}')" style="background:var(--accent2)">${T.edit}</button>
+      <button onclick="deleteSession('${s.id}')" style="background:var(--danger)">${T.del}</button>
+    </td>
+  </tr>`;
+}
+
+// Kartendarstellung fuer schmale Schirme, im Aufbau bewusst identisch zur
+// Zeile in der iOS-App (SessionsListView.swift::SessionRow): links Datum,
+// Lade-Art und Sekundaerzeilen, rechts die Zahlen. Wie dort oeffnet ein Tipp
+// auf die Karte den Bearbeiten-Modus.
+function sessionCardHtml(s) {
+  const v = sessionView(s);
+  const type = s.charging_type
+    ? `<span class="type-badge type-${s.charging_type.toLowerCase()}">${s.charging_type}</span>` : '';
+  const review = s.needs_review ? `<span title="${T.badgeAutomatic}">⚠️</span>` : '';
+  const hasCoords = s.latitude != null && s.longitude != null;
+
+  const subtitle = [v.vehicleName, v.providerName, v.place].filter(Boolean).join(' · ');
+  const meta = [v.soc && `SoC ${v.soc}`, v.odometer && `${v.odometer} km`].filter(Boolean).join(' · ');
+
+  let consumption = '';
+  if (s.consumption_kwh_per_100km != null && s.consumption_method !== 'unavailable') {
+    const icon = CONSUMPTION_ICON[s.consumption_method] || '';
+    const tooltip = CONSUMPTION_TOOLTIP[s.consumption_method] || '';
+    consumption = `<div class="smeta" title="${tooltip}">${icon} ` +
+      `${s.consumption_kwh_per_100km.toFixed(1)} kWh/100km</div>`;
+  }
+
+  return `<div class="scard ${s.needs_review ? 'needs-review' : ''}" onclick="startEdit('${s.id}')">
+    <div class="main">
+      <div class="stitle"><span class="sdate">${v.date}</span>${type}${review}</div>
+      ${subtitle || hasCoords
+        ? `<div class="ssub">${subtitle}${hasCoords ? ' 📍' : ''}</div>` : ''}
+      ${meta ? `<div class="smeta">${meta}</div>` : ''}
+      ${consumption}
+    </div>
+    <div class="side">
+      ${v.kwh != null ? `<span class="skwh">${v.kwh} kWh</span>` : ''}
+      ${v.priceTotal != null ? `<span class="ssub">${v.priceTotal} €</span>` : ''}
+      ${v.pricePerKwh != null ? `<span class="smeta">${v.pricePerKwh} €/kWh</span>` : ''}
+      <div class="sactions">
+        <button type="button" title="${T.del}" aria-label="${T.del}"
+                onclick="event.stopPropagation(); deleteSession('${s.id}')">✕</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+// Es liegt immer nur EINE Darstellung im DOM - beide gleichzeitig zu rendern
+// und per CSS zu verstecken wuerde jeden Ladevorgang doppelt aufbauen.
+const NARROW = window.matchMedia('(max-width: 720px)');
+
+function renderSessions() {
+  const cards = NARROW.matches;
+  document.getElementById('session-table-wrap').style.display = cards ? 'none' : '';
+  document.getElementById('session-card-list').style.display = cards ? '' : 'none';
+  if (cards) {
+    document.getElementById('session-card-list').innerHTML = allSessions.map(sessionCardHtml).join('');
+    document.getElementById('session-rows').innerHTML = '';
+  } else {
+    document.getElementById('session-rows').innerHTML = allSessions.map(sessionRowHtml).join('');
+    document.getElementById('session-card-list').innerHTML = '';
+  }
+}
+
+// Beim Drehen des Geraets bzw. Groessenaendern des Fensters umschalten.
+NARROW.addEventListener('change', renderSessions);
+
+// Nur der Ausgangszustand haengt an der Breite - wer das Formular danach
+// selbst auf- oder zuklappt, soll das beim Drehen nicht wieder verlieren.
+function setupFormPanel() {
+  document.getElementById('session-form-panel').open = !NARROW.matches;
+}
+
 async function loadSessions() {
   allSessions = await (await fetch('api/sessions' + filterQueryString())).json();
-  const tbody = document.getElementById('session-rows');
-  tbody.innerHTML = allSessions.map(s => {
-    const vehicle = vehicles.find(v => v.id === s.vehicle_id);
-    const provider = providers.find(p => p.id === s.provider_id);
-    const location = locations.find(l => l.id === s.location_id);
-    const date = new Date(s.start_time).toLocaleString(LOCALE, { dateStyle: 'medium', timeStyle: 'short' });
-
-    let ortText = location ? location.name : (s.geocoded_place || '–');
-    if (!location && !s.geocoded_place && s.notes) {
-      const m = s.notes.match(/Ort:\s*(.+)$/);
-      if (m && m[1]) ortText = m[1];
-    }
-
-    let socText = '–';
-    if (s.soc_start != null && s.soc_end != null) socText = `${s.soc_start}→${s.soc_end}%`;
-    else if (s.soc_end != null) socText = `${s.soc_end}%`;
-
-    return `<tr class="${s.needs_review ? 'needs-review' : ''}">
-      <td class="col-datetime">${date}</td>
-      <td>${vehicle ? vehicle.name : '–'}</td>
-      <td>${provider ? provider.name : '–'}</td>
-      <td>${ortText}</td>
-      <td>${s.charging_type || '–'}</td>
-      <td>${socText}</td>
-      <td>${s.energy_kwh != null ? s.energy_kwh.toFixed(1) : '–'}</td>
-      <td>${s.price_total != null ? s.price_total.toFixed(2) + ' €' : '–'}</td>
-      <td>${s.odometer_km ?? '–'}</td>
-      <td>${consumptionCell(s.consumption_kwh_per_100km, s.consumption_method)}</td>
-      <td>${badgeFor(s.source)}</td>
-      <td style="white-space:nowrap">
-        <button onclick="startEdit('${s.id}')" style="background:var(--accent2)">${T.edit}</button>
-        <button onclick="deleteSession('${s.id}')" style="background:var(--danger)">${T.del}</button>
-      </td>
-    </tr>`;
-  }).join('');
+  renderSessions();
 }
 
 function toDatetimeLocalValue(isoString) {
@@ -216,6 +312,8 @@ function startEdit(id) {
   const s = allSessions.find(x => x.id === id);
   if (!s) return;
   editingSessionId = id;
+  // Mobil ist das Formular zugeklappt - sonst scrollt startEdit ins Leere.
+  document.getElementById('session-form-panel').open = true;
 
   document.getElementById('f-vehicle').value = s.vehicle_id;
   document.getElementById('f-provider').value = s.provider_id || '';
@@ -299,6 +397,7 @@ document.getElementById('session-form').addEventListener('submit', async (e) => 
 });
 
 (async () => {
+  setupFormPanel();
   renderFilterBar('filter-bar', loadSessions);
   await loadDropdowns();
   await loadSessions();

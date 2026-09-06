@@ -2,7 +2,8 @@
 {% block content %}
 <h1>{{ t('settings.heading') }}</h1>
 
-<h2 id="vehicle-form-heading">{{ t('settings.vehicle.heading') }}</h2>
+<details class="panel plain" id="vehicle-form-panel">
+  <summary id="vehicle-form-heading">{{ t('settings.vehicle.heading') }}</summary>
 <form class="inline-form" id="vehicle-form">
   <div><label>{{ t('settings.vehicle.name') }}</label><input id="v-name" required></div>
   <div><label>{{ t('settings.vehicle.external_id') }}</label><input id="v-external" required placeholder="{{ t('settings.vehicle.external_id_placeholder') }}"></div>
@@ -14,10 +15,12 @@
     <button type="submit" id="vehicle-submit-btn">{{ t('settings.vehicle.submit_new') }}</button>
   </div>
 </form>
-<table><thead><tr><th>{{ t('settings.vehicle.table.name') }}</th><th>{{ t('settings.vehicle.table.external_id') }}</th><th>{{ t('settings.vehicle.table.brand_model') }}</th><th>{{ t('settings.vehicle.table.battery') }}</th><th></th></tr></thead>
-<tbody id="vehicle-rows"></tbody></table>
+</details>
+<div class="tablewrap"><table><thead><tr><th>{{ t('settings.vehicle.table.name') }}</th><th>{{ t('settings.vehicle.table.external_id') }}</th><th>{{ t('settings.vehicle.table.brand_model') }}</th><th>{{ t('settings.vehicle.table.battery') }}</th><th></th></tr></thead>
+<tbody id="vehicle-rows"></tbody></table></div>
 
-<h2 id="provider-form-heading">{{ t('settings.provider.heading') }}</h2>
+<details class="panel plain" id="provider-form-panel">
+  <summary id="provider-form-heading">{{ t('settings.provider.heading') }}</summary>
 <form class="inline-form" id="provider-form">
   <div><label>{{ t('settings.provider.name') }}</label><input id="p-name" required></div>
   <div><label>{{ t('settings.provider.ac_price') }}</label><input type="number" step="0.0001" id="p-ac"></div>
@@ -27,10 +30,12 @@
     <button type="submit" id="provider-submit-btn">{{ t('settings.provider.submit_new') }}</button>
   </div>
 </form>
-<table><thead><tr><th>{{ t('settings.provider.table.name') }}</th><th>{{ t('settings.provider.table.ac_price') }}</th><th>{{ t('settings.provider.table.dc_price') }}</th><th></th></tr></thead>
-<tbody id="provider-rows"></tbody></table>
+</details>
+<div class="tablewrap"><table><thead><tr><th>{{ t('settings.provider.table.name') }}</th><th>{{ t('settings.provider.table.ac_price') }}</th><th>{{ t('settings.provider.table.dc_price') }}</th><th></th></tr></thead>
+<tbody id="provider-rows"></tbody></table></div>
 
-<h2 id="location-form-heading">{{ t('settings.location.heading') }}</h2>
+<details class="panel plain" id="location-form-panel">
+  <summary id="location-form-heading">{{ t('settings.location.heading') }}</summary>
 <form class="inline-form" id="location-form">
   <div><label>{{ t('settings.location.name') }}</label><input id="l-name" required></div>
   <div>
@@ -51,11 +56,15 @@
     <button type="submit" id="location-submit-btn">{{ t('settings.location.submit_new') }}</button>
   </div>
 </form>
-<table><thead><tr><th>{{ t('settings.location.table.name') }}</th><th>{{ t('settings.location.table.coordinates') }}</th><th>{{ t('settings.location.table.radius') }}</th><th>{{ t('settings.location.table.default_provider') }}</th><th></th></tr></thead>
-<tbody id="location-rows"></tbody></table>
+</details>
+<div class="tablewrap"><table><thead><tr><th>{{ t('settings.location.table.name') }}</th><th>{{ t('settings.location.table.coordinates') }}</th><th>{{ t('settings.location.table.radius') }}</th><th>{{ t('settings.location.table.default_provider') }}</th><th></th></tr></thead>
+<tbody id="location-rows"></tbody></table></div>
 
 <h2>{{ t('settings.backup.heading') }}</h2>
-<p style="color:var(--muted); font-size:0.9em">{{ t('settings.backup.description') }}</p>
+<details class="help">
+  <summary>{{ t('common.help') }}</summary>
+  <div class="inner">{{ t('settings.backup.description') }}</div>
+</details>
 <div class="form-actions">
   <a href="api/backup/export"><button type="button">{{ t('settings.backup.export_btn') }}</button></a>
 </div>
@@ -71,8 +80,12 @@
 </form>
 <div id="backup-import-result" style="display:none; margin-top:8px; font-size:0.9em"></div>
 
-<h2>{{ t('settings.webdav.heading') }}</h2>
-<p style="color:var(--muted); font-size:0.9em">{{ t('settings.webdav.description')|safe }}</p>
+<details class="panel plain" id="webdav-form-panel">
+  <summary>{{ t('settings.webdav.heading') }}</summary>
+<details class="help">
+  <summary>{{ t('common.help') }}</summary>
+  <div class="inner">{{ t('settings.webdav.description')|safe }}</div>
+</details>
 <form class="inline-form" id="webdav-form">
   <div>
     <label><input type="checkbox" id="wd-enabled" style="width:auto; display:inline-block; margin-right:6px">{{ t('settings.webdav.enabled_label') }}</label>
@@ -98,6 +111,7 @@
   </div>
 </form>
 <div id="webdav-status" style="margin-top:8px; font-size:0.9em"></div>
+</details>
 
 <div class="section-head">
   <h2>{{ t('settings.myskoda.heading') }}</h2>
@@ -108,7 +122,10 @@
     <span class="state" id="ms-enabled-state"></span>
   </label>
 </div>
-<p style="color:var(--muted); font-size:0.9em">{{ t('settings.myskoda.description')|safe }}</p>
+<details class="help">
+  <summary>{{ t('common.help') }}</summary>
+  <div class="inner">{{ t('settings.myskoda.description')|safe }}</div>
+</details>
 <form class="inline-form" id="myskoda-form">
   <div><label>{{ t('settings.myskoda.vehicle') }}</label><select id="ms-vehicle"></select></div>
   <div><label>{{ t('settings.myskoda.apikey') }}</label><input type="password" id="ms-apikey" placeholder="{{ t('settings.myskoda.apikey') }}" autocomplete="off"></div>
@@ -139,15 +156,23 @@
 <div id="myskoda-status" style="margin-top:8px; font-size:0.9em"></div>
 <pre id="myskoda-test-result" style="display:none; margin-top:12px; padding:12px; background:var(--card); border:1px solid var(--border); border-radius:12px; font-size:12px; overflow-x:auto"></pre>
 
-<h3 style="margin-top:24px">{{ t('settings.myskoda.log_heading') }}</h3>
-<p style="color:var(--muted); font-size:0.9em">{{ t('settings.myskoda.log_description') }}</p>
-<div class="form-actions" style="margin-bottom:12px">
-  <button type="button" id="ms-log-refresh">{{ t('settings.myskoda.log_refresh') }}</button>
-  <button type="button" id="ms-log-export" style="background:var(--accent2)">{{ t('settings.myskoda.log_export') }}</button>
-  <button type="button" id="ms-log-clear" style="background:var(--danger)">{{ t('settings.myskoda.log_clear') }}</button>
-</div>
-<table><thead><tr><th>{{ t('settings.myskoda.log.table.time') }}</th><th>{{ t('settings.myskoda.log.table.event') }}</th><th>{{ t('settings.myskoda.log.table.state') }}</th><th>{{ t('settings.myskoda.log.table.soc') }}</th><th>{{ t('settings.myskoda.log.table.power') }}</th><th>{{ t('settings.myskoda.log.table.message') }}</th><th></th></tr></thead>
-<tbody id="ms-log-rows"></tbody></table>
+<!-- Das Protokoll ist 200 Zeilen mit sieben Spalten und hat die Seite bisher
+     dominiert, obwohl es nur zur Fehlersuche gebraucht wird. Eingeklappt, und
+     die Zeilen werden erst beim Aufklappen geholt (siehe msLogPanel unten) -
+     das spart beim normalen Oeffnen der Einstellungen einen API-Aufruf. -->
+<details class="panel" id="ms-log-panel" style="margin-top:24px">
+  <summary>{{ t('settings.myskoda.log_heading') }}</summary>
+  <div class="inner">
+    <p style="color:var(--muted); font-size:0.9em; margin-top:0">{{ t('settings.myskoda.log_description') }}</p>
+    <div class="form-actions" style="margin-bottom:12px">
+      <button type="button" id="ms-log-refresh">{{ t('settings.myskoda.log_refresh') }}</button>
+      <button type="button" id="ms-log-export" style="background:var(--accent2)">{{ t('settings.myskoda.log_export') }}</button>
+      <button type="button" id="ms-log-clear" style="background:var(--danger)">{{ t('settings.myskoda.log_clear') }}</button>
+    </div>
+<div class="tablewrap"><table><thead><tr><th>{{ t('settings.myskoda.log.table.time') }}</th><th>{{ t('settings.myskoda.log.table.event') }}</th><th>{{ t('settings.myskoda.log.table.state') }}</th><th>{{ t('settings.myskoda.log.table.soc') }}</th><th>{{ t('settings.myskoda.log.table.power') }}</th><th>{{ t('settings.myskoda.log.table.message') }}</th><th></th></tr></thead>
+<tbody id="ms-log-rows"></tbody></table></div>
+  </div>
+</details>
 
 <h2>{{ t('settings.language.heading') }}</h2>
 <p style="color:var(--muted); font-size:0.9em">{{ t('settings.language.description') }}</p>
@@ -168,8 +193,8 @@
 {% if user.is_admin %}
 <h2>{{ t('settings.users.heading') }}</h2>
 <p style="color:var(--muted); font-size:0.9em">{{ t('settings.users.description') }}</p>
-<table><thead><tr><th>{{ t('settings.users.table.username') }}</th><th>{{ t('settings.users.table.role') }}</th><th>{{ t('settings.users.table.created_at') }}</th><th></th></tr></thead>
-<tbody id="user-rows"></tbody></table>
+<div class="tablewrap"><table><thead><tr><th>{{ t('settings.users.table.username') }}</th><th>{{ t('settings.users.table.role') }}</th><th>{{ t('settings.users.table.created_at') }}</th><th></th></tr></thead>
+<tbody id="user-rows"></tbody></table></div>
 {% endif %}
 
 <script>
@@ -312,6 +337,9 @@ function startEditVehicle(id) {
   document.getElementById('vehicle-form-heading').textContent = T.vehicleEditHeading;
   document.getElementById('vehicle-submit-btn').textContent = T.vehicleSubmitEdit;
   document.getElementById('vehicle-cancel-btn').style.display = 'inline-block';
+  // Panel ist zugeklappt, solange niemand etwas anlegt - sonst scrollt
+  // das Bearbeiten ins Leere.
+  document.getElementById('vehicle-form-panel').open = true;
   document.getElementById('vehicle-form').scrollIntoView({ behavior: 'smooth' });
 }
 
@@ -382,6 +410,9 @@ function startEditProvider(id) {
   document.getElementById('provider-form-heading').textContent = T.providerEditHeading;
   document.getElementById('provider-submit-btn').textContent = T.providerSubmitEdit;
   document.getElementById('provider-cancel-btn').style.display = 'inline-block';
+  // Panel ist zugeklappt, solange niemand etwas anlegt - sonst scrollt
+  // das Bearbeiten ins Leere.
+  document.getElementById('provider-form-panel').open = true;
   document.getElementById('provider-form').scrollIntoView({ behavior: 'smooth' });
 }
 
@@ -449,6 +480,9 @@ function startEditLocation(id) {
   document.getElementById('location-form-heading').textContent = T.locationEditHeading;
   document.getElementById('location-submit-btn').textContent = T.locationSubmitEdit;
   document.getElementById('location-cancel-btn').style.display = 'inline-block';
+  // Panel ist zugeklappt, solange niemand etwas anlegt - sonst scrollt
+  // das Bearbeiten ins Leere.
+  document.getElementById('location-form-panel').open = true;
   document.getElementById('location-form').scrollIntoView({ behavior: 'smooth' });
 }
 
@@ -760,10 +794,15 @@ async function loadMyskodaConfig() {
   await loadMyskodaLog();
 }
 
+// Zugeklappt kostet das Protokoll nichts: der Abruf entfaellt, bis jemand das
+// Panel oeffnet. Beim Fahrzeugwechsel wird der Inhalt geleert, damit nicht die
+// Zeilen des vorherigen Fahrzeugs stehenbleiben.
 async function loadMyskodaLog() {
+  const panel = document.getElementById('ms-log-panel');
   const vehicleId = msVehicleId();
   const rows = document.getElementById('ms-log-rows');
   if (!vehicleId) { rows.innerHTML = ''; return; }
+  if (!panel.open) { rows.innerHTML = ''; return; }
   const entries = await (await fetch(`api/myskoda/logs?vehicle_id=${vehicleId}&limit=200`)).json();
   if (!entries.length) {
     rows.innerHTML = `<tr><td colspan="7" style="color:var(--muted)">${T.msLogNoEntries}</td></tr>`;
@@ -891,6 +930,9 @@ document.getElementById('ms-delete-btn').addEventListener('click', async () => {
 });
 
 document.getElementById('ms-log-refresh').addEventListener('click', loadMyskodaLog);
+document.getElementById('ms-log-panel').addEventListener('toggle', () => {
+  if (document.getElementById('ms-log-panel').open) loadMyskodaLog();
+});
 
 document.getElementById('ms-log-export').addEventListener('click', () => {
   window.location = `api/myskoda/logs/export?vehicle_id=${msVehicleId()}`;

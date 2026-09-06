@@ -559,6 +559,64 @@ Icon/Tooltip-Logik in der SessionsList-View.
   neuester-zuerst zeigen, weil ein Zeitverlauf von links nach rechts gelesen
   werden soll
 
+## Web-UI: Responsive-Verhalten (`static/style.css`, ab 2026-09-06)
+
+Bis dahin gab es **keine einzige Media Query** - die Oberflaeche war rein fuer
+den Desktop gebaut und auf dem Handy praktisch unbenutzbar (Navigationsleiste
+zu breit, die zwoelfspaltige Ladevorgangs-Tabelle weit ausserhalb des
+Viewports). Ein Breakpoint bei **720 px**, mehr nicht - bewusst kein
+Framework und kein zweiter Breakpoint, die App hat vier Seiten.
+
+**Navigation:** Die Links liegen in einem `.navlinks`-Container mit
+`display: contents`. Auf dem Desktop ist das ein No-op - die `.topnav` bleibt
+exakt dieselbe flache Flexbox wie vorher; mobil wird der Container sichtbar
+und traegt die aufgeklappte Liste unter der Leiste. Umgeschaltet wird nur eine
+Klasse (`.topnav.open`), was sichtbar ist, entscheidet die Media Query.
+
+**Ladevorgaenge - Tabelle ODER Karten, nie beides.** Auf schmalen Schirmen
+rendert `renderSessions()` (sessions.html) Karten statt Tabellenzeilen,
+entschieden ueber `matchMedia('(max-width: 720px)')` und bei dessen
+`change`-Event neu. Bewusst NICHT beide Varianten rendern und eine per CSS
+verstecken - das baute jeden Ladevorgang doppelt auf. Beide Darstellungen
+ziehen ihre Anzeigewerte aus derselben `sessionView()`-Funktion, damit sie
+nicht auseinanderlaufen.
+
+Der Kartenaufbau folgt bewusst der Zeile in der iOS-App
+(`SessionsListView.swift::SessionRow`), damit App und Web sich gleich anfuehlen:
+links Datum + AC/DC-Badge + Hinweis-Symbol, darunter Fahrzeug/Anbieter/Ort,
+SoC + Kilometerstand, Verbrauch mit Methoden-Symbol; rechts kWh, Gesamtpreis,
+Preis je kWh. Ein Tipp auf die Karte oeffnet den Bearbeiten-Modus - wie in der
+App, wo der Nutzer die Zeilen selbst komplett antippbar gemacht hat. Loeschen
+liegt dort hinter einer Wischgeste; im Web ist es ein zurueckhaltender
+Ghost-Button am Rand (`event.stopPropagation()`), nicht der flaechig rote
+Knopf der Tabelle - der waere sonst das auffaelligste Element der Liste.
+`needs_review` zeigt sich als orange linke Kante statt als flaechige
+Einfaerbung wie in der Tabelle (die schluckt auf kleinen Schirmen die
+Sekundaertexte).
+
+**Aufklappbare Bloecke** sind durchgaengig natives `<details>` (kein eigenes
+JS): `details.help` fuer die langen Erklaertexte, `details.panel` fuer ganze
+Abschnitte. Zwei Muster:
+
+- `details.panel.plain` uebernimmt eine bestehende Abschnittsueberschrift als
+  `<summary>` - in den Einstellungen tragen die `<h2 id="*-form-heading">`
+  ohnehin schon den Wechsel zwischen "Fahrzeuge" und "Fahrzeug bearbeiten",
+  sie wurden nur zu `<summary>`. Jede `startEdit*()`-Funktion setzt
+  `panel.open = true`, sonst scrollt das Bearbeiten ins Leere.
+- Das MyŠkoda-Debug-Protokoll laedt seine 200 Zeilen erst beim Aufklappen
+  (`toggle`-Listener); zugeklappt entfaellt der API-Aufruf ganz.
+
+Der Ausgangszustand des Ladevorgangs-Formulars haengt an der Breite
+(`setupFormPanel()`, nur beim Laden) - wer danach selbst auf- oder zuklappt,
+soll das beim Drehen des Geraets nicht wieder verlieren.
+
+**Tabellen** stehen jetzt in `div.tablewrap` mit `overflow-x: auto`. Vorher
+schoben die breiten (Ladeorte mit Koordinaten, das Protokoll) die ganze Seite
+seitlich aus dem Bild.
+
+Messbar: Einstellungen auf 375 px von 4322 px auf 2568 px Seitenhoehe, keine
+horizontale Ueberlaeufe mehr auf irgendeiner Seite in beiden Sprachen.
+
 ## Backup-Export/-Import (`routers/backup.py`)
 
 Reiner Backup/Restore-Mechanismus (z.B. Server-Neuaufsetzung), bewusst KEIN

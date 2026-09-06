@@ -6,6 +6,39 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.12.0] — 2026-09-06
+
+### Changed
+- **Die Web-Oberfläche ist auf dem Handy benutzbar.** Bisher gab es keine
+  einzige Media Query – alles war für den Desktop gebaut. Neu ab 720 px
+  abwärts:
+  - **Navigation:** Die Links liegen hinter einem Menü-Knopf und klappen unter
+    der Leiste auf. Auf dem Desktop bleibt die Leiste unverändert (der
+    Container nutzt `display: contents`, die Flexbox ist dieselbe wie vorher).
+  - **Ladevorgänge:** Die zwölfspaltige Tabelle weicht Karten im selben Aufbau
+    wie die Zeile in der iOS-App – Datum, Lade-Art und Ort links, kWh und Preis
+    rechts, SoC und Kilometerstand darunter, Verbrauch mit Methoden-Symbol. Ein
+    Tipp auf die Karte öffnet den Bearbeiten-Modus, Löschen ist ein
+    zurückhaltender Knopf am Rand. Es liegt immer nur eine der beiden
+    Darstellungen im DOM.
+  - **Formulare:** Das Formular für einen neuen Ladevorgang ist auf dem Handy
+    eingeklappt – ausgeklappt schob es die Liste um gut 1400 px nach unten. Ein
+    Klick auf "Bearbeiten" klappt es selbstverständlich wieder auf.
+  - **Dashboard:** Die Kennzahlen stehen zweispaltig statt untereinander.
+- **Die Einstellungen sind kompakter – auf dem Handy wie am Desktop.** Die
+  Anlege-Formulare für Fahrzeuge, Anbieter, Ladeorte und WebDAV-Backup klappen
+  nur bei Bedarf auf (die bestehende Abschnittsüberschrift ist jetzt das
+  `<summary>`), die langen Erklärtexte liegen unter "Hinweise". Die Seite ist
+  dadurch am Handy von 4322 px auf 2568 px geschrumpft.
+- **Das MyŠkoda-Debug-Protokoll steht in einem eigenen aufklappbaren
+  Abschnitt** und wird erst beim Aufklappen geladen – zugeklappt spart das
+  einen API-Aufruf bei jedem Öffnen der Einstellungen.
+
+### Fixed
+- Breite Tabellen (Ladeorte mit Koordinaten, das Debug-Protokoll) haben die
+  ganze Seite seitlich aus dem Bild geschoben. Sie scrollen jetzt in einem
+  eigenen Container; die Seite selbst bleibt an beiden Rändern stehen.
+
 ## [0.11.0] — 2026-09-06
 
 ### Changed

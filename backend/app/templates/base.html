@@ -22,21 +22,29 @@
   <script src="static/filter.js"></script>
 </head>
 <body>
-  <nav class="topnav">
+  <nav class="topnav" id="topnav">
     <div class="brand">⚡ Lademonitor</div>
     {% if version %}
     <button class="ver" type="button" onclick="openChangelog()" title="{{ t('nav.version_title') }}">v{{ version }}</button>
     {% endif %}
-    <a href=".">{{ t('nav.dashboard') }}</a>
-    <a href="sessions">{{ t('nav.sessions') }}</a>
-    <a href="import">{{ t('nav.import') }}</a>
-    <a href="settings">{{ t('nav.settings') }}</a>
-    {% if user %}
-    <span style="margin-left:auto; color:var(--muted); font-size:14px">
-      {{ user.username }}{% if user.is_admin %} {{ t('nav.admin_badge') }}{% endif %}
-      · <a href="#" onclick="logout(); return false;">{{ t('nav.logout') }}</a>
-    </span>
-    {% endif %}
+    <button class="navtoggle" type="button" id="navtoggle"
+            aria-controls="navlinks" aria-expanded="false"
+            aria-label="{{ t('nav.menu') }}">☰</button>
+    <!-- display:contents auf .navlinks - auf dem Desktop bleibt die Leiste
+         dadurch exakt dieselbe flache Flexbox wie vorher, mobil wird der
+         Container sichtbar und traegt die aufgeklappte Liste. -->
+    <div class="navlinks" id="navlinks">
+      <a href=".">{{ t('nav.dashboard') }}</a>
+      <a href="sessions">{{ t('nav.sessions') }}</a>
+      <a href="import">{{ t('nav.import') }}</a>
+      <a href="settings">{{ t('nav.settings') }}</a>
+      {% if user %}
+      <span class="navuser" style="margin-left:auto; color:var(--muted); font-size:14px">
+        {{ user.username }}{% if user.is_admin %} {{ t('nav.admin_badge') }}{% endif %}
+        · <a href="#" onclick="logout(); return false;">{{ t('nav.logout') }}</a>
+      </span>
+      {% endif %}
+    </div>
   </nav>
   <main class="container">
     {% block content %}{% endblock %}
@@ -79,6 +87,19 @@
     function closeChangelog() {
       document.getElementById('changelog-modal')?.classList.remove('open');
     }
+
+    // Burger-Menue. Nur ein Klassenwechsel - was sichtbar ist, entscheidet
+    // die Media Query in style.css; auf dem Desktop ist der Button gar nicht
+    // erst da, die Klasse also folgenlos.
+    (function () {
+      const nav = document.getElementById('topnav');
+      const btn = document.getElementById('navtoggle');
+      if (!nav || !btn) return;
+      btn.addEventListener('click', () => {
+        const open = nav.classList.toggle('open');
+        btn.setAttribute('aria-expanded', String(open));
+      });
+    })();
   </script>
 </body>
 </html>

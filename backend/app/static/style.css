@@ -30,6 +30,26 @@ body {
 
 .topnav .brand { font-weight: 700; margin-right: 16px; }
 
+/* Nur auf schmalen Schirmen sichtbar (siehe Media Query unten) - dort traegt
+   der Button das Aufklappen, auf dem Desktop bleibt die Leiste wie bisher. */
+.navtoggle {
+  display: none;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 16px;
+  line-height: 1;
+  margin-left: auto;
+}
+
+/* Die eigentlichen Links, damit sie mobil als Block unter der Leiste
+   sitzen koennen, ohne die Reihenfolge im Markup zu aendern. */
+.navlinks {
+  display: contents;
+}
+
 .topnav a {
   color: var(--muted);
   text-decoration: none;
@@ -303,3 +323,191 @@ h2 { font-size: 16px; color: var(--muted); margin: 24px 0 12px; }
 .clogtitle { font-weight: 600; margin: 8px 0 4px; }
 .cloglist { margin: 0; padding-left: 18px; color: var(--muted); font-size: 14px; }
 .cloglist li { margin-bottom: 4px; }
+
+/* --------------------------------------------------------------------------
+   Aufklappbare Bloecke (<details>)
+
+   Zwei Rollen: `.help` fuer die langen Erklaertexte, die auf jeder Seite
+   dauerhaft Platz gekostet haben, und `.panel` fuer ganze Abschnitte wie das
+   MyŠkoda-Debug-Protokoll. Bewusst natives <details> statt eigenem JS -
+   funktioniert ohne Skript, ist per Tastatur bedienbar und der Browser merkt
+   sich beim Zurueckspringen den Zustand.
+   -------------------------------------------------------------------------- */
+details.help, details.panel {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  margin-bottom: 16px;
+}
+details.help > summary, details.panel > summary {
+  cursor: pointer;
+  padding: 12px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+details.help > summary::-webkit-details-marker,
+details.panel > summary::-webkit-details-marker { display: none; }
+/* Eigener Pfeil statt des Standard-Dreiecks, damit er zum Chevron der
+   Filterleiste passt und in beiden Browsern gleich aussieht. */
+details.help > summary::before, details.panel > summary::before {
+  content: "▸";
+  font-size: 10px;
+  transition: transform 0.15s;
+}
+details.help[open] > summary::before, details.panel[open] > summary::before {
+  transform: rotate(90deg);
+}
+details.help > summary:hover, details.panel > summary:hover { color: var(--text); }
+/* Das Ladevorgangs-Formular ist selbst schon eine Karte (form.inline-form) -
+   der Panel-Rahmen drumherum wuerde doppelt wirken. */
+details.panel.plain { border: none; background: transparent; margin-bottom: 0; }
+/* Uebernimmt den Abstand, den vorher das <h2> der Abschnittsueberschrift
+   hatte - die Ueberschrift IST hier das <summary>. */
+details.panel.plain > summary { padding: 24px 0 12px; font-size: 16px; color: var(--muted); }
+details.panel.plain > summary:hover { color: var(--text); }
+details.panel.plain > .inner { border-top: none; padding: 0; }
+
+details.help > .inner, details.panel > .inner {
+  padding: 0 16px 16px;
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
+details.help > .inner { color: var(--muted); font-size: 0.9em; }
+details.panel > summary { font-size: 15px; color: var(--text); }
+
+/* Tabellen laufen sonst aus dem Viewport (die Ladeorte-Tabelle hat fuenf
+   Spalten mit Koordinaten). Der Wrapper scrollt statt die Seite zu dehnen. */
+.tablewrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.tablewrap table { min-width: 100%; }
+
+/* --------------------------------------------------------------------------
+   Ladevorgaenge als Karten (mobil statt der zwoelfspaltigen Tabelle)
+
+   Aufbau bewusst wie die Zeile in der iOS-App (SessionsListView.swift):
+   links Datum + Lade-Art + Hinweis, darunter Fahrzeug/Anbieter/Ort, SoC und
+   Kilometerstand, Verbrauch; rechts die Zahlen (kWh, Preis, Preis je kWh).
+   Die ganze Karte ist antippbar und oeffnet den Bearbeiten-Modus, ebenfalls
+   wie in der App.
+   -------------------------------------------------------------------------- */
+.session-cards { display: flex; flex-direction: column; gap: 10px; }
+
+.scard {
+  display: flex;
+  gap: 12px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+}
+.scard:active { border-color: var(--accent2); }
+/* Gleiche Bedeutung wie tr.needs-review in der Tabelle, nur als Kante statt
+   als Flaeche - eine flaechige Einfaerbung schluckt auf kleinen Schirmen die
+   Lesbarkeit der Sekundaertexte. */
+.scard.needs-review { border-left-color: var(--warn); }
+
+.scard .main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.scard .side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.scard .stitle { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.scard .sdate { font-size: 14px; font-weight: 600; }
+.scard .skwh { font-size: 14px; font-weight: 600; }
+/* Zweite/dritte Zeile: alles Sekundaerinformation, wie in der App gestaffelt. */
+.scard .ssub { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.scard .smeta { font-size: 11px; color: var(--muted); }
+
+/* Loeschen ist auf der Karte bewusst zurueckhaltend: in der iOS-App liegt es
+   hinter einer Wischgeste und draengt sich gar nicht auf. Ein flaechig roter
+   Button waere hier das auffaelligste Element der ganzen Liste - und die
+   Karte selbst ist das, was man antippen soll (Bearbeiten). Rot wird er erst
+   beim Draufzeigen; die Sicherheitsabfrage haengt ohnehin davor. */
+.scard .sactions { margin-top: auto; padding-top: 6px; }
+.scard .sactions button {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 2px 8px;
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.2;
+}
+.scard .sactions button:hover { color: var(--danger); border-color: var(--danger); opacity: 1; }
+
+/* Ovales AC/DC-Badge, Farbgebung wie ChargingTypeBadge in der iOS-App. */
+.type-badge {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.type-ac { background: rgba(91, 141, 239, 0.15); color: var(--accent2); }
+.type-dc { background: rgba(242, 184, 75, 0.15); color: var(--warn); }
+
+/* --------------------------------------------------------------------------
+   Schmale Schirme
+   -------------------------------------------------------------------------- */
+@media (max-width: 720px) {
+  .container { padding: 16px 12px; }
+  h1 { font-size: 20px; margin-bottom: 16px; }
+
+  /* Navigation: Links verschwinden hinter dem Burger-Button. Die Leiste
+     selbst bleibt eine Zeile (Marke + Version + Button), die Links klappen
+     darunter als Liste auf. */
+  .topnav { flex-wrap: wrap; gap: 12px; padding: 12px 16px; }
+  .topnav .brand { margin-right: 0; }
+  .navtoggle { display: block; }
+  .navlinks {
+    display: none;
+    flex-basis: 100%;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .topnav.open .navlinks { display: flex; }
+  .navlinks a {
+    padding: 10px 4px;
+    font-size: 15px;
+    border-top: 1px solid var(--border);
+  }
+  /* Der Nutzerblock ist im Markup ein <span> mit margin-left:auto - das ergibt
+     umgebrochen einen sinnlosen Rechtsbund. */
+  .navlinks .navuser { margin-left: 0 !important; padding: 10px 4px; border-top: 1px solid var(--border); }
+
+  /* Die Kennzahlen sind kurz genug fuer zwei Spalten - mit der
+     auto-fit-Regel (min. 180 px) passte auf 375 px nur eine, was acht
+     Bildschirmhoehen Kacheln vor den ersten Chart schob. */
+  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .card { padding: 12px 14px; }
+  .stat-value { font-size: 20px; }
+  .stat-label { font-size: 11px; }
+
+  /* Ein Feld pro Zeile: bei zwei Spalten sind Zahlenfelder auf dem Handy so
+     schmal, dass der Wert nicht mehr vollstaendig sichtbar ist. */
+  form.inline-form { grid-template-columns: 1fr; padding: 16px; }
+  .form-actions { flex-wrap: wrap; gap: 8px; }
+  .form-actions button, .form-actions a { flex: 1 1 auto; }
+
+
+  /* Tabellen scrollen mobil im Wrapper - je weniger Polsterung, desto seltener
+     muss man ueberhaupt schieben. Die Aktionsknoepfe sind dort der breiteste
+     Teil und schrumpfen mit. */
+  .tablewrap th, .tablewrap td { padding: 8px 8px; }
+  .tablewrap td button { padding: 6px 10px; font-size: 12px; }
+
+  .filter-row input[type="date"] { flex: 1 1 45%; }
+  .modal { padding: 12px; }
+}
