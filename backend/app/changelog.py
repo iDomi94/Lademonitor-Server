@@ -5,6 +5,17 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.12.1",
+        "date": "2026-09-06",
+        "title": "Handy-Ansicht kam nicht an (alte CSS aus dem Browser-Cache)",
+        "changes": [
+            "Nach dem Update auf 0.12.0 sah die Oberflaeche auf dem Handy weiterhin kaputt aus: der Menue-Knopf reagierte nicht, die Seiten-Links standen klein aneinandergereiht und die Ladevorgangs-Karten hatten keine Abgrenzung. Ursache war der Browser-Cache - das neue HTML kam an, die zugehoerige style.css nicht, sodass alle neuen Elemente voellig ungestylt blieben. Statische Dateien hatten keinen Cache-Control-Header, woraufhin Browser sie einfach fuer beliebig lange frisch halten.",
+            "Stylesheet und Skript tragen jetzt die App-Version in der Adresse, und statische Dateien werden vor Benutzung kurz beim Server rueckgefragt. Ein Update schlaegt damit sofort durch, ohne den Browser-Cache von Hand zu leeren.",
+            "Das aufgeklappte Menue nutzt jetzt die volle Breite: jeder Eintrag ist eine eigene Zeile mit 44 px Hoehe statt eines kleinen Textlinks. Auch der Menue-Knopf selbst und der Logout-Link sind auf Fingergroesse gebracht.",
+            "Ladevorgangs-Karten heben sich deutlicher ab: kraeftigerer Rahmen, leichter Schatten und eine farbige linke Kante nach Lade-Art (blau AC, orange DC). Vorher verschwammen Kartenflaeche und Seitenhintergrund auf einem Handydisplay zu einer Flaeche.",
+        ],
+    },
+    {
         "version": "0.12.0",
         "date": "2026-09-06",
         "title": "Web-Oberflaeche auf dem Handy benutzbar",

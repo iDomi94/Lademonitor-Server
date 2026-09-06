@@ -78,15 +78,32 @@ app = FastAPI(title="Lademonitor", lifespan=lifespan)
 
 @app.middleware("http")
 async def _no_cache_html(request: Request, call_next):
-    """Verhindert, dass Browser die serverseitig gerenderten, login-status-
-    abhaengigen HTML-Seiten cachen - sonst kann nach einem Update (neues
-    Image) oder einem Login/Logout eine veraltete Seite aus dem Browser-Cache
-    angezeigt werden, obwohl der Server laengst anders antworten wuerde
-    (aeusserte sich bei einem Nutzer nach einem Rebuild als "Seite erst nach
-    Cache-Leeren wieder erreichbar")."""
+    """Verhindert, dass Browser veraltete Seiten oder Assets aus dem Cache
+    zeigen, obwohl der Server laengst anders antworten wuerde.
+
+    HTML: `no-store`. Die Seiten sind login-status-abhaengig, nach einem
+    Login/Logout oder einem Update (neues Image) darf da nichts Altes mehr
+    kommen (aeusserte sich bei einem Nutzer nach einem Rebuild als "Seite erst
+    nach Cache-Leeren wieder erreichbar").
+
+    Statische Dateien: `no-cache`, also "vor Benutzung nachfragen" - NICHT
+    `no-store`. `StaticFiles` liefert ETag und Last-Modified, aber von sich aus
+    keinen `Cache-Control`-Header; ohne den wenden Browser heuristisches Caching
+    an und halten eine Datei ohne jede Rueckfrage fuer frisch. Genau das ist
+    2026-09-06 passiert: nach dem Responsive-Update kam auf dem Handy das neue
+    HTML mit der ALTEN style.css an - der Menue-Knopf war da, hatte aber keine
+    Regeln, die Ladevorgangs-Karten waren voellig ungestylt. Mit `no-cache`
+    fragt der Browser jedes Mal kurz nach und bekommt in aller Regel ein
+    leeres 304 zurueck, also praktisch dieselbe Ersparnis ohne das Risiko.
+    Zusaetzlich haengt an style.css/filter.js ein `?v=`-Parameter mit der
+    App-Version (siehe base.html), damit ein Update auch bei einem
+    zwischengeschalteten Proxy-Cache garantiert durchschlaegt."""
     response = await call_next(request)
-    if response.headers.get("content-type", "").startswith("text/html"):
+    content_type = response.headers.get("content-type", "")
+    if content_type.startswith("text/html"):
         response.headers["Cache-Control"] = "no-store"
+    elif request.url.path.startswith("/static/"):
+        response.headers.setdefault("Cache-Control", "no-cache")
     return response
 
 
@@ -171,7 +188,9 @@ def login_page(request: Request, db: Session = Depends(get_db)):
     if get_user_from_request(request, db):
         return RedirectResponse(".", status_code=303)
     lang = set_current_language(_resolve_language(request, None))
-    return templates.TemplateResponse("login.html", {"request": request, "lang": lang})
+    return templates.TemplateResponse(
+        "login.html", {"request": request, "lang": lang, "version": VERSION}
+    )
 
 
 @app.get("/register", response_class=HTMLResponse)
@@ -179,7 +198,9 @@ def register_page(request: Request, db: Session = Depends(get_db)):
     if get_user_from_request(request, db):
         return RedirectResponse(".", status_code=303)
     lang = set_current_language(_resolve_language(request, None))
-    return templates.TemplateResponse("register.html", {"request": request, "lang": lang})
+    return templates.TemplateResponse(
+        "register.html", {"request": request, "lang": lang, "version": VERSION}
+    )
 
 
 @app.get("/health")

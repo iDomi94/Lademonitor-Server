@@ -252,7 +252,8 @@ function sessionCardHtml(s) {
       `${s.consumption_kwh_per_100km.toFixed(1)} kWh/100km</div>`;
   }
 
-  return `<div class="scard ${s.needs_review ? 'needs-review' : ''}" onclick="startEdit('${s.id}')">
+  const typeRow = s.charging_type ? ` type-row-${s.charging_type.toLowerCase()}` : '';
+  return `<div class="scard${typeRow}${s.needs_review ? ' needs-review' : ''}" onclick="startEdit('${s.id}')">
     <div class="main">
       <div class="stitle"><span class="sdate">${v.date}</span>${type}${review}</div>
       ${subtitle || hasCoords

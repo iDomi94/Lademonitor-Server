@@ -6,6 +6,38 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.12.1] — 2026-09-06
+
+### Fixed
+- **Die Handy-Ansicht aus 0.12.0 kam beim Nutzer gar nicht an.** Der Menü-Knopf
+  reagierte nicht, die Seiten-Links standen klein aneinandergereiht, die
+  Ladevorgangs-Karten hatten keine Abgrenzung. Ursache war nicht das neue CSS,
+  sondern dessen Auslieferung: `StaticFiles` setzt ETag und `Last-Modified`,
+  aber **keinen `Cache-Control`-Header** – ohne den wenden Browser
+  heuristisches Caching an und halten eine Datei ohne jede Rückfrage für
+  frisch. Das neue HTML kam also an (`no-store` war dort schon gesetzt), die
+  alte `style.css` blieb im Cache, und damit hatten `.navtoggle`, `.navlinks`
+  und `.scard` schlicht keine Regeln.
+
+  Zwei Ebenen dagegen: statische Dateien bekommen `Cache-Control: no-cache`
+  (vor Benutzung rückfragen – dank ETag in aller Regel ein leeres 304, also
+  praktisch dieselbe Ersparnis), und `style.css`/`filter.js` tragen die
+  App-Version als `?v=`-Parameter. Ein Versionssprung ändert damit die Adresse
+  und schlägt auch durch einen zwischengeschalteten Proxy-Cache durch.
+
+### Changed
+- **Das aufgeklappte Menü nutzt die volle Breite der Leiste**: jeder Eintrag
+  ist eine eigene Zeile mit 44 px Höhe (übliche Mindestgröße für eine
+  Fingerfläche) und eigener Trennlinie, statt eines kleinen Textlinks in einer
+  Reihe. Der Menü-Knopf ist 44 × 44 px und färbt sich im geöffneten Zustand
+  ein; der Logout-Link ist ein eigener Knopf statt Inline-Text.
+- **Die Ladevorgangs-Karten heben sich deutlich ab.** Der Unterschied zwischen
+  `--card` (#171e2e) und `--bg` (#0f1420) allein trug nicht – auf einem
+  Handydisplay verschwammen beide zu einer Fläche. Jetzt: kräftigerer Rahmen,
+  leichter Schatten und eine farbige linke Kante nach Lade-Art (blau AC,
+  orange DC), die gleichzeitig trennt und codiert. `needs_review` bleibt
+  unterscheidbar über eine schwache Flächenfärbung plus orange Kante.
+
 ## [0.12.0] — 2026-09-06
 
 ### Changed

@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" href="static/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="192x192" href="static/icon-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="static/icon-512.png">
-  <link rel="stylesheet" href="static/style.css">
+  <link rel="stylesheet" href="static/style.css?v={{ version|default('dev') }}">
   <script>
     // Kleine Uebersetzungstabelle fuer static/filter.js - die Datei ist ein
     // normales statisches Asset (kein Jinja2-Template), bekommt Texte also
@@ -19,7 +19,7 @@
     window.LADEMONITOR_LANG = {{ lang|default('de')|tojson }};
     window.I18N_FILTER = {{ js_translations|default({})|tojson }};
   </script>
-  <script src="static/filter.js"></script>
+  <script src="static/filter.js?v={{ version|default('dev') }}"></script>
 </head>
 <body>
   <nav class="topnav" id="topnav">

@@ -614,6 +614,21 @@ soll das beim Drehen des Geraets nicht wieder verlieren.
 schoben die breiten (Ladeorte mit Koordinaten, das Protokoll) die ganze Seite
 seitlich aus dem Bild.
 
+**Statische Dateien MUESSEN einen `Cache-Control`-Header haben** (2026-09-06,
+teuer gelernt): `StaticFiles` liefert ETag und `Last-Modified`, aber von sich
+aus keinen `Cache-Control` - ohne den wenden Browser heuristisches Caching an
+und halten eine Datei ohne jede Rueckfrage fuer frisch. Beim Responsive-Update
+kam auf dem Handy des Nutzers deshalb das neue HTML mit der ALTEN `style.css`
+an: der Menue-Knopf war im Markup da, hatte aber keine Regeln, die
+Ladevorgangs-Karten waren voellig ungestylt. Das sah nach einem Fehler im
+neuen CSS aus, war aber reine Auslieferung. `main.py::_no_cache_html` setzt
+jetzt zusaetzlich `no-cache` auf alles unter `/static/` (mit ETag praktisch
+immer ein leeres 304), und `base.html`/`login.html`/`register.html` haengen
+`?v={{ version }}` an `style.css` und `filter.js`. **Bei jeder Aenderung an
+einer statischen Datei also die Version in `changelog.py` mitziehen** - sonst
+bleibt die Adresse gleich und ein Proxy-Cache dazwischen kann weiter die alte
+Datei liefern.
+
 Messbar: Einstellungen auf 375 px von 4322 px auf 2568 px Seitenhoehe, keine
 horizontale Ueberlaeufe mehr auf irgendeiner Seite in beiden Sprachen.
 

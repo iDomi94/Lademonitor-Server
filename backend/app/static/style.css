@@ -38,11 +38,16 @@ body {
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 6px 10px;
-  font-size: 16px;
+  /* 44 px ist die uebliche Mindestgroesse fuer eine Fingerflaeche. */
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 12px;
+  font-size: 20px;
   line-height: 1;
   margin-left: auto;
 }
+.navtoggle:hover { border-color: var(--accent2); color: var(--accent2); opacity: 1; }
+.topnav.open .navtoggle { border-color: var(--accent2); color: var(--accent2); }
 
 /* Die eigentlichen Links, damit sie mobil als Block unter der Leiste
    sitzen koennen, ohne die Reihenfolge im Markup zu aendern. */
@@ -400,17 +405,29 @@ details.panel > summary { font-size: 15px; color: var(--text); }
   display: flex;
   gap: 12px;
   background: var(--card);
-  border: 1px solid var(--border);
-  border-left-width: 3px;
+  /* Der Unterschied zwischen --card und --bg allein traegt nicht: auf einem
+     Handydisplay bei Tageslicht verschwimmen #171e2e und #0f1420 zu einer
+     Flaeche und die Liste sieht aus wie durchlaufender Text. Deshalb ein
+     deutlicherer Rahmen, ein Schatten fuer die Abhebung und eine farbige
+     linke Kante nach Lade-Art - die trennt und codiert gleichzeitig. */
+  border: 1px solid #38445e;
+  border-left: 4px solid var(--border);
   border-radius: 12px;
   padding: 12px 14px;
   cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
 }
 .scard:active { border-color: var(--accent2); }
-/* Gleiche Bedeutung wie tr.needs-review in der Tabelle, nur als Kante statt
-   als Flaeche - eine flaechige Einfaerbung schluckt auf kleinen Schirmen die
-   Lesbarkeit der Sekundaertexte. */
-.scard.needs-review { border-left-color: var(--warn); }
+.scard.type-row-ac { border-left-color: var(--accent2); }
+.scard.type-row-dc { border-left-color: var(--warn); }
+/* Gleiche Bedeutung wie tr.needs-review in der Tabelle, aber als Flaeche UND
+   Kante: rein ueber die Kante ginge es hier mit der Lade-Art-Codierung oben
+   durcheinander. Die Einfaerbung bleibt schwach genug fuer die grauen
+   Sekundaertexte darauf. */
+.scard.needs-review {
+  border-left-color: var(--warn);
+  background: linear-gradient(rgba(242, 184, 75, 0.07), rgba(242, 184, 75, 0.07)), var(--card);
+}
 
 .scard .main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .scard .side {
@@ -475,17 +492,51 @@ details.panel > summary { font-size: 15px; color: var(--text); }
     display: none;
     flex-basis: 100%;
     flex-direction: column;
-    gap: 2px;
-  }
-  .topnav.open .navlinks { display: flex; }
-  .navlinks a {
-    padding: 10px 4px;
-    font-size: 15px;
+    gap: 0;
+    /* Bis an den Rand der Leiste, damit die Trennlinien die volle Breite
+       haben und die Liste nicht wie eingerueckter Fliesstext wirkt. Die
+       flex-basis muss die negativen Raender mitrechnen - sonst bleibt die
+       Liste 100 % breit und haengt nur nach links verschoben. */
+    margin: 0 -16px -12px;
+    flex-basis: calc(100% + 32px);
     border-top: 1px solid var(--border);
   }
+  .topnav.open .navlinks { display: flex; }
+  /* Jeder Eintrag eine eigene Zeile mit Fingerflaeche (44 px) statt
+     aneinandergereihter Textlinks. */
+  .navlinks a {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 16px;
+    font-size: 16px;
+    color: var(--text);
+  }
+  .navlinks a:active { background: var(--bg); }
+  .navlinks a + a { border-top: 1px solid var(--border); }
   /* Der Nutzerblock ist im Markup ein <span> mit margin-left:auto - das ergibt
      umgebrochen einen sinnlosen Rechtsbund. */
-  .navlinks .navuser { margin-left: 0 !important; padding: 10px 4px; border-top: 1px solid var(--border); }
+  .navlinks .navuser {
+    margin-left: 0 !important;
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 16px;
+    border-top: 1px solid var(--border);
+    background: var(--bg);
+  }
+  /* Logout ist eine echte Aktion und liegt hier als Inline-Link mitten im
+     Nutzernamen - ohne eigene Flaeche waere er 17 px hoch. */
+  .navlinks .navuser a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 36px;
+    padding: 0 8px;
+    margin-left: 4px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 14px;
+  }
 
   /* Die Kennzahlen sind kurz genug fuer zwei Spalten - mit der
      auto-fit-Regel (min. 180 px) passte auf 375 px nur eine, was acht
