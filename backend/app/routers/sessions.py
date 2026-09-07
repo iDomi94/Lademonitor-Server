@@ -185,8 +185,26 @@ def update_session(
     if not session:
         raise HTTPException(404, "Ladevorgang nicht gefunden")
 
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    fields = payload.model_dump(exclude_unset=True)
+    previous_energy = session.energy_kwh
+    for field, value in fields.items():
         setattr(session, field, value)
+
+    # Korrigiert der Nutzer eine geschaetzte Energiemenge (z.B. abgelesen aus der
+    # App des Ladeanbieters), ist der Wert nicht mehr geschaetzt - sonst bliebe die
+    # Session dauerhaft als "(geschätzt)" bzw. Verbrauchsmethode `estimated_energy`
+    # markiert. Web-UI und Apps senden energy_kwh bei JEDEM Speichern mit, deshalb
+    # zaehlt nur eine tatsaechliche Wertaenderung als Korrektur - reines Oeffnen und
+    # Speichern (z.B. zum Abhaken von needs_review) laesst das Flag unangetastet.
+    # Ein explizit mitgeschicktes energy_is_estimated hat Vorrang.
+    if "energy_is_estimated" not in fields and session.energy_is_estimated:
+        if session.energy_kwh is None:
+            # Wert geleert - es gibt nichts mehr, das geschaetzt sein koennte.
+            # estimate_energy_kwh() setzt das Flag gleich unten neu, falls es aus
+            # dem SoC-Delta erneut rechnen kann.
+            session.energy_is_estimated = False
+        elif previous_energy is None or abs(session.energy_kwh - previous_energy) > 1e-6:
+            session.energy_is_estimated = False
 
     vehicle = db.get(models.Vehicle, session.vehicle_id)
     estimate_energy_kwh(session, vehicle)
