@@ -91,7 +91,7 @@ from datetime import datetime, timedelta
 
 from sqlalchemy.orm import Session
 
-from . import models
+from . import models, notifications
 from .database import SessionLocal
 from .myskoda import (
     DISCHARGING_STATES,
@@ -754,6 +754,9 @@ def poll_vehicle(db: Session, config: models.MySkodaConfig) -> None:
     manuelle "Jetzt abfragen"-Endpunkt; beide lesen das Ergebnis aus
     `config.last_status`/`last_error` bzw. dem Debug-Log.
     """
+    # Vor dem Ueberschreiben merken: gemeldet wird nur der UEBERGANG nach
+    # auth_error, nicht jeder Abruf im Fehlerzustand (siehe notifications.py).
+    previous_status = config.last_status
     config.last_poll_at = datetime.utcnow()
     try:
         snapshot = MySkodaClient(config.api_key).get_vehicle(config.vin)
@@ -796,6 +799,7 @@ def poll_vehicle(db: Session, config: models.MySkodaConfig) -> None:
         _apply_snapshot(db, config, snapshot)
     finally:
         db.commit()
+        notifications.notify_myskoda_status(db, config, previous_status)
 
 
 def test_connection(db: Session, config: models.MySkodaConfig) -> dict:

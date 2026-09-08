@@ -1,0 +1,49 @@
+{#
+  Grundgeruest der Seiten OHNE Anmeldung: Login, Registrieren, Passwort
+  vergessen, Passwort setzen, Adresse bestaetigen.
+
+  Diese Seiten koennen base.html nicht erben - dort haengen Navigationsleiste,
+  Nutzerblock und Changelog-Modal drin, alles Dinge, die ein angemeldetes Konto
+  voraussetzen. Vorher trugen login.html und register.html denselben
+  Style-Block je einmal selbst; mit drei weiteren Seiten waeren daraus fuenf
+  Kopien geworden.
+
+  Wie ueberall in dieser App relative Pfade (static/..., login, register) -
+  noetig fuer den Home-Assistant-Ingress-Unterpfad.
+#}
+<!DOCTYPE html>
+<html lang="{{ lang|default('de') }}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block page_title %}Lademonitor{% endblock %}</title>
+  {# Dieselben Icons wie base.html - ohne sie fragt der Browser /favicon.ico ab
+     und bekommt eine 404, und im Tab steht kein App-Symbol. #}
+  <link rel="icon" href="static/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="static/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="static/favicon-16.png">
+  <link rel="apple-touch-icon" href="static/apple-touch-icon.png">
+  <link rel="stylesheet" href="static/style.css?v={{ version|default('dev') }}">
+  <style>
+    .auth-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    .auth-card { width: 100%; max-width: 360px; }
+    .auth-card h1 { margin-bottom: 16px; }
+    .auth-card .field { margin-bottom: 14px; }
+    .auth-card button { width: 100%; margin-top: 8px; }
+    .auth-error { color: var(--danger); font-size: 13px; margin-top: 10px; min-height: 1em; }
+    .auth-note { color: var(--accent); font-size: 13px; margin-top: 10px; }
+    .auth-hint { font-size: 12px; color: var(--muted); margin-top: -8px; margin-bottom: 14px; }
+    .auth-intro { font-size: 13px; color: var(--muted); line-height: 1.5; margin: 0 0 16px; }
+    .auth-switch { margin-top: 16px; font-size: 13px; color: var(--muted); text-align: center; }
+    .auth-switch a { color: var(--accent2); }
+  </style>
+</head>
+<body>
+  <div class="auth-wrap">
+    <div class="card auth-card">
+      {% block card %}{% endblock %}
+    </div>
+  </div>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,8 +1,35 @@
+import re
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from .models import ChargingType, SessionSource, WebdavBackupFrequency
+from .models import (
+    ChargingType,
+    ReviewDigestFrequency,
+    SessionSource,
+    SmtpSecurity,
+    WebdavBackupFrequency,
+)
+
+# Absichtlich nachsichtig: die Adresse soll wie eine Adresse aussehen, mehr
+# nicht. Eine strenge RFC-5322-Pruefung braeuchte `email-validator` als
+# zusaetzliche Abhaengigkeit und wuerde trotzdem nicht beantworten, ob das
+# Postfach existiert - das klaert erst die Bestaetigungsmail.
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def _clean_email(value: str | None) -> str | None:
+    """Leer -> None (Adresse entfernen), sonst getrimmt und validiert.
+    Gross-/Kleinschreibung bleibt erhalten, verglichen wird ueber lower()
+    (siehe den Unique-Index in database.py)."""
+    if value is None:
+        return None
+    value = value.strip()
+    if not value:
+        return None
+    if not _EMAIL_RE.match(value):
+        raise ValueError("Keine gültige E-Mail-Adresse")
+    return value
 
 
 # ---------- Auth ----------
@@ -10,9 +37,17 @@ from .models import ChargingType, SessionSource, WebdavBackupFrequency
 class RegisterRequest(BaseModel):
     username: str
     password: str
+    # Optional - ein Konto laesst sich weiterhin ganz ohne Adresse anlegen,
+    # dann eben ohne "Passwort vergessen" und ohne Benachrichtigungen.
+    email: str | None = None
+
+    _v_email = field_validator("email")(lambda cls, v: _clean_email(v))
 
 
 class LoginRequest(BaseModel):
+    # Heisst weiterhin `username`, nimmt aber auch die E-Mail-Adresse an - der
+    # Feldname bleibt, damit die iOS-App und der Home-Assistant-Login
+    # unveraendert weiterfunktionieren.
     username: str
     password: str
 
@@ -24,6 +59,79 @@ class UserOut(BaseModel):
     is_admin: bool
     language: str
     created_at: datetime
+    email: str | None = None
+    email_verified_at: datetime | None = None
+    notify_backup_failed: bool = True
+    notify_myskoda_error: bool = True
+    notify_monthly_report: bool = False
+    notify_new_registration: bool = True
+    review_digest: ReviewDigestFrequency = ReviewDigestFrequency.OFF
+
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str
+
+
+class EmailUpdate(BaseModel):
+    email: str | None = None
+    # Wer die Adresse aendern kann, kann anschliessend das Passwort
+    # zuruecksetzen lassen - bei einer kurz unbeaufsichtigten Sitzung ist diese
+    # Abfrage die einzige Huerde.
+    current_password: str
+
+    _v_email = field_validator("email")(lambda cls, v: _clean_email(v))
+
+
+class NotificationSettingsUpdate(BaseModel):
+    notify_backup_failed: bool
+    notify_myskoda_error: bool
+    notify_monthly_report: bool
+    notify_new_registration: bool
+    review_digest: ReviewDigestFrequency
+
+
+class AdminUserUpdate(BaseModel):
+    """Admins pflegen fremde Adressen (z.B. nachtragen, Tippfehler
+    korrigieren). Bewusst NICHT das Passwort - dafuer gibt es die Einladung
+    bzw. den Reset-Link, damit kein Admin ein fremdes Passwort kennt."""
+    email: str | None = None
+
+    _v_email = field_validator("email")(lambda cls, v: _clean_email(v))
+
+
+class AdminUserCreate(BaseModel):
+    username: str
+    email: str
+    is_admin: bool = False
+
+    _v_email = field_validator("email")(lambda cls, v: _clean_email(v))
+
+
+class PasswordResetRequest(BaseModel):
+    # Nutzername ODER E-Mail-Adresse.
+    identifier: str
+
+
+class PasswordResetConfirm(BaseModel):
+    token: str
+    new_password: str
+
+
+class TokenOnly(BaseModel):
+    token: str
+
+
+class TokenCheckResult(BaseModel):
+    """Zustand eines Links, bevor der Nutzer etwas eintippt - damit die Seite
+    "Link abgelaufen" sagen kann, statt das Formular erst nach dem Absenden
+    abzulehnen."""
+    valid: bool
+    # ok | unknown | expired | used
+    reason: str
+    username: str | None = None
+    # password_reset | invite
+    purpose: str | None = None
 
 
 class LoginResponse(BaseModel):
@@ -375,3 +483,71 @@ class MySkodaLogOut(BaseModel):
     charge_power_kw: float | None
     captured_at: datetime | None
     has_payload: bool
+
+
+# ---------- E-Mail / SMTP ----------
+
+class SmtpConfigIn(BaseModel):
+    enabled: bool = False
+    host: str = ""
+    port: int = Field(default=587, ge=1, le=65535)
+    security: SmtpSecurity = SmtpSecurity.STARTTLS
+    username: str | None = None
+    # None/leer = Passwort unveraendert lassen (das Formular zeigt ein bereits
+    # gesetztes Passwort nie im Klartext, siehe has_password unten) - dieselbe
+    # Handhabung wie beim WebDAV-Backup.
+    password: str | None = None
+    from_address: str = ""
+    from_name: str = "Lademonitor"
+    base_url: str = ""
+
+    @field_validator("from_address")
+    @classmethod
+    def _validate_from(cls, value: str) -> str:
+        value = value.strip()
+        if value and not _EMAIL_RE.match(value):
+            raise ValueError("Keine gültige Absenderadresse")
+        return value
+
+    @field_validator("base_url")
+    @classmethod
+    def _validate_base_url(cls, value: str) -> str:
+        value = value.strip().rstrip("/")
+        if value and not value.startswith(("http://", "https://")):
+            raise ValueError("Basis-Adresse muss mit http:// oder https:// beginnen")
+        return value
+
+
+class SmtpConfigOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    enabled: bool
+    host: str
+    port: int
+    security: SmtpSecurity
+    username: str | None
+    from_address: str
+    from_name: str
+    base_url: str
+    last_test_at: datetime | None
+    last_status: str | None
+    last_error: str | None
+    # Das Passwort selbst wird nie zurueckgegeben.
+    has_password: bool = False
+
+
+class SmtpTestRequest(BaseModel):
+    # Leer = an die eigene Adresse des angemeldeten Admins.
+    to_address: str | None = None
+
+    _v_email = field_validator("to_address")(lambda cls, v: _clean_email(v))
+
+
+class EmailLogOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    created_at: datetime
+    to_address: str
+    subject: str
+    kind: str
+    status: str
+    error: str | None

@@ -20,7 +20,7 @@ from datetime import datetime, timedelta
 import httpx
 from sqlalchemy.orm import Session
 
-from . import models
+from . import models, notifications
 from .database import SessionLocal
 from .routers.backup import build_backup_zip
 
@@ -71,6 +71,9 @@ def run_backup_for_user(
     Wirft bewusst NICHT weiter - Aufrufer (Scheduler-Schleife ueber mehrere
     Nutzer, oder der manuelle "Jetzt sichern"-Endpunkt) lesen den Status aus
     `config.last_status`/`last_error` statt eine Exception behandeln zu muessen."""
+    # Vor dem Ueberschreiben merken - gemeldet wird der UEBERGANG nach
+    # "kaputt", nicht jeder Fehldurchlauf (siehe notifications.py).
+    previous_status = config.last_status
     # Mikrosekunden-Praezision statt nur Sekunden - verhindert, dass zwei
     # schnell aufeinanderfolgende Laeufe (z.B. doppelt geklicktes "Jetzt
     # sichern") denselben Dateinamen erzeugen. Ein Namenskollision waere hier
@@ -110,6 +113,10 @@ def run_backup_for_user(
     finally:
         config.last_run_at = datetime.utcnow()
         db.commit()
+        # Ein gescheitertes Backup faellt sonst nur auf, wenn jemand zufaellig
+        # die Einstellungen aufmacht - und ein Backup, das man faelschlich fuer
+        # laufend haelt, ist schlimmer als gar keins.
+        notifications.notify_backup_result(db, config, previous_status)
 
 
 def run_due_backups() -> None:

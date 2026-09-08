@@ -20,9 +20,25 @@ from .i18n import (
     translate,
     translations_for,
 )
+from .mailer import are_links_available, get_config as get_smtp_config
 from .myskoda_poller import SCHEDULER_INTERVAL_SECONDS as MYSKODA_SCHEDULER_INTERVAL_SECONDS
 from .myskoda_poller import run_due_polls
-from .routers import auth, backup, geocoding, importer, locations, myskoda, providers, sessions, stats, vehicles, webdav_backup
+from .notifications import SCHEDULER_INTERVAL_SECONDS as NOTIFICATION_SCHEDULER_INTERVAL_SECONDS
+from .notifications import run_due_notifications
+from .routers import (
+    auth,
+    backup,
+    email,
+    geocoding,
+    importer,
+    locations,
+    myskoda,
+    providers,
+    sessions,
+    stats,
+    vehicles,
+    webdav_backup,
+)
 from .webdav_backup import run_due_backups
 
 Base.metadata.create_all(bind=engine)
@@ -62,11 +78,28 @@ async def _myskoda_scheduler_loop() -> None:
         await asyncio.sleep(MYSKODA_SCHEDULER_INTERVAL_SECONDS)
 
 
+async def _notification_scheduler_loop() -> None:
+    """Zeitgesteuerte Benachrichtigungen (Ablaufwarnung des MyŠkoda-API-Keys,
+    Sammelmeldung zu pruefender Ladevorgaenge, Monatsbericht).
+
+    Derselbe Takt wie beim WebDAV-Backup: die feinste Faelligkeit ist "einmal
+    taeglich", haeufiger nachzusehen bringt nichts. Was tatsaechlich faellig
+    ist, entscheidet `run_due_notifications()` anhand von Zeitstempeln in der
+    DB - der Takt hier verschickt fuer sich genommen gar nichts."""
+    while True:
+        try:
+            await asyncio.to_thread(run_due_notifications)
+        except Exception:
+            logger.exception("Benachrichtigungs-Scheduler-Durchlauf fehlgeschlagen")
+        await asyncio.sleep(NOTIFICATION_SCHEDULER_INTERVAL_SECONDS)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     tasks = [
         asyncio.create_task(_webdav_scheduler_loop()),
         asyncio.create_task(_myskoda_scheduler_loop()),
+        asyncio.create_task(_notification_scheduler_loop()),
     ]
     yield
     for task in tasks:
@@ -118,6 +151,9 @@ app.include_router(geocoding.router, dependencies=[Depends(get_current_user)])
 app.include_router(backup.router, dependencies=[Depends(get_current_user)])
 app.include_router(webdav_backup.router, dependencies=[Depends(get_current_user)])
 app.include_router(myskoda.router, dependencies=[Depends(get_current_user)])
+# email.router prueft pro Endpunkt selbst auf Admin (require_admin), braucht
+# hier also nur die allgemeine Anmeldepflicht wie die uebrigen Router.
+app.include_router(email.router, dependencies=[Depends(get_current_user)])
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
@@ -142,7 +178,7 @@ def _resolve_language(request: Request, user: models.User | None) -> str:
     return DEFAULT_LANGUAGE
 
 
-def _page(request: Request, db: Session, template_name: str):
+def _page(request: Request, db: Session, template_name: str, **extra):
     """Rendert eine geschuetzte HTML-Seite, oder leitet bei fehlendem/ungueltigem
     Cookie zum Login um. Eigene (nicht-werfende) Variante von auth.get_current_user,
     da Seiten umleiten statt mit 401 antworten sollen."""
@@ -159,6 +195,7 @@ def _page(request: Request, db: Session, template_name: str):
             "changelog": CHANGELOG,
             "lang": lang,
             "js_translations": translations_for(lang, prefix="filter."),
+            **extra,
         },
     )
 
@@ -180,7 +217,16 @@ def import_page(request: Request, db: Session = Depends(get_db)):
 
 @app.get("/settings", response_class=HTMLResponse)
 def settings_page(request: Request, db: Session = Depends(get_db)):
-    return _page(request, db, "settings.html")
+    # Die Einstellungen zeigen bei den Benachrichtigungen an, ob ueberhaupt ein
+    # SMTP-Zugang eingerichtet ist - sonst schaltet man dort Haken an, von denen
+    # nie etwas ankommt. Nur auf dieser einen Seite abgefragt, nicht in _page()
+    # fuer alle.
+    smtp = get_smtp_config(db)
+    return _page(
+        request, db, "settings.html",
+        smtp_ready=smtp.enabled and bool(smtp.host and smtp.from_address),
+        smtp_links_ready=are_links_available(smtp),
+    )
 
 
 # Unterseiten der Einstellungen (Backup, API/Debug). Die Pfade liegen bewusst
@@ -200,13 +246,27 @@ def api_debug_page(request: Request, db: Session = Depends(get_db)):
     return _page(request, db, "settings_api.html")
 
 
+@app.get("/email", response_class=HTMLResponse)
+def email_page(request: Request, db: Session = Depends(get_db)):
+    return _page(request, db, "settings_email.html")
+
+
 @app.get("/login", response_class=HTMLResponse)
 def login_page(request: Request, db: Session = Depends(get_db)):
     if get_user_from_request(request, db):
         return RedirectResponse(".", status_code=303)
     lang = set_current_language(_resolve_language(request, None))
     return templates.TemplateResponse(
-        "login.html", {"request": request, "lang": lang, "version": VERSION}
+        "login.html",
+        {
+            "request": request,
+            "lang": lang,
+            "version": VERSION,
+            # Der Link fuehrt sonst in eine Sackgasse: ohne eingerichteten
+            # SMTP-Zugang und ohne konfigurierte Basis-Adresse kann gar keine
+            # Reset-Mail entstehen (siehe models.SmtpConfig.base_url).
+            "reset_available": are_links_available(get_smtp_config(db)),
+        },
     )
 
 
@@ -218,6 +278,33 @@ def register_page(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse(
         "register.html", {"request": request, "lang": lang, "version": VERSION}
     )
+
+
+def _public_page(request: Request, db: Session, template_name: str, **extra):
+    """Seiten, die ohne Anmeldung erreichbar sein MUESSEN - wer sein Passwort
+    vergessen hat, kann sich per Definition nicht anmelden. Analog zu
+    /login und /register, aber mit der Moeglichkeit, zusaetzliche Werte in den
+    Kontext zu geben (z.B. den Token aus der Adresszeile)."""
+    lang = set_current_language(_resolve_language(request, None))
+    return templates.TemplateResponse(
+        template_name,
+        {"request": request, "lang": lang, "version": VERSION, **extra},
+    )
+
+
+@app.get("/forgot-password", response_class=HTMLResponse)
+def forgot_password_page(request: Request, db: Session = Depends(get_db)):
+    return _public_page(request, db, "forgot_password.html")
+
+
+@app.get("/reset-password", response_class=HTMLResponse)
+def reset_password_page(request: Request, db: Session = Depends(get_db)):
+    return _public_page(request, db, "reset_password.html")
+
+
+@app.get("/verify-email", response_class=HTMLResponse)
+def verify_email_page(request: Request, db: Session = Depends(get_db)):
+    return _public_page(request, db, "verify_email.html")
 
 
 @app.get("/health")

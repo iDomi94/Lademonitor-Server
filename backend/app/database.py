@@ -1,3 +1,4 @@
+import hashlib
 import os
 
 from sqlalchemy import create_engine, text
@@ -125,3 +126,116 @@ def run_light_migrations() -> None:
                         f"UNIQUE ({columns})"
                     )
                 )
+
+
+        # ------------------------------------------------------------------
+        # E-Mail-Funktionen (SMTP, Passwort-Reset, Benachrichtigungen)
+        # ------------------------------------------------------------------
+
+        # Der Postgres-Enum-Typ fuer users.review_digest muss von Hand angelegt
+        # werden: `Base.metadata.create_all()` erzeugt Enum-Typen nur beim
+        # Anlegen der zugehoerigen Tabelle, und `users` existiert laengst.
+        # (Fuer smtp_configs/user_tokens sind es neue Tabellen, dort erledigt
+        # create_all den Typ mit.) Postgres kennt kein
+        # "CREATE TYPE IF NOT EXISTS", daher der Ausnahme-Block.
+        conn.execute(
+            text(
+                "DO $$ BEGIN "
+                "CREATE TYPE reviewdigestfrequency AS ENUM ('OFF', 'DAILY', 'WEEKLY'); "
+                "EXCEPTION WHEN duplicate_object THEN NULL; END $$"
+            )
+        )
+
+        # E-Mail-Adresse und Benachrichtigungseinstellungen am Nutzer. Wie bei
+        # users.language weiter oben braucht jede Spalte mit DEFAULT ein
+        # nachgezogenes UPDATE - Postgres wendet den DEFAULT bei ADD COLUMN
+        # nicht rueckwirkend auf bestehende Zeilen an.
+        for column, ddl_type, default in (
+            ("email", "VARCHAR", None),
+            ("email_verified_at", "TIMESTAMP", None),
+            ("notify_backup_failed", "BOOLEAN", "TRUE"),
+            ("notify_myskoda_error", "BOOLEAN", "TRUE"),
+            ("notify_monthly_report", "BOOLEAN", "FALSE"),
+            ("notify_new_registration", "BOOLEAN", "TRUE"),
+            ("review_digest", "reviewdigestfrequency", "'OFF'"),
+            ("last_review_digest_at", "TIMESTAMP", None),
+            ("last_monthly_report_at", "TIMESTAMP", None),
+        ):
+            suffix = f" DEFAULT {default}" if default else ""
+            conn.execute(
+                text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {column} {ddl_type}{suffix}")
+            )
+            if default:
+                conn.execute(
+                    text(f"UPDATE users SET {column} = {default} WHERE {column} IS NULL")
+                )
+
+        # Eine Adresse darf nur einem Konto gehoeren, sonst waere beim
+        # Zuruecksetzen des Passworts nicht entscheidbar, welches gemeint ist.
+        # Funktionaler Index auf lower(): "Max@example.com" und
+        # "max@example.com" sind dieselbe Mailbox. Partiell, damit beliebig
+        # viele Konten ganz ohne Adresse moeglich bleiben (NULL ist in einem
+        # gewoehnlichen UNIQUE-Index zwar ohnehin mehrfach erlaubt, der
+        # WHERE-Zusatz macht die Absicht aber explizit und haelt den Index
+        # klein).
+        conn.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_users_email_lower "
+                "ON users (lower(email)) WHERE email IS NOT NULL"
+            )
+        )
+
+        # Auth-Tokens werden nur noch als SHA-256-Hash gespeichert (siehe
+        # models.AuthToken): ein Auth-Token ist eine fertige Anmeldung, im
+        # Klartext war die Tabelle also ein Generalschluessel fuer jedes Konto.
+        # Reihenfolge wichtig - erst die neue Spalte fuellen, dann die alte
+        # entfernen, damit niemand ausgeloggt wird (Browser-Cookie, iOS-App und
+        # der Home-Assistant-Header gelten unveraendert weiter).
+        conn.execute(
+            text("ALTER TABLE auth_tokens ADD COLUMN IF NOT EXISTS token_hash VARCHAR")
+        )
+        has_plaintext = conn.execute(
+            text(
+                "SELECT 1 FROM information_schema.columns "
+                "WHERE table_name = 'auth_tokens' AND column_name = 'token'"
+            )
+        ).first()
+        if has_plaintext:
+            # Bewusst in Python statt per SQL-`sha256()`: dieselbe Funktion,
+            # die auth.py beim Nachschlagen benutzt, statt einer zweiten
+            # Implementierung, die identisch bleiben muss.
+            rows = conn.execute(
+                text("SELECT id, token FROM auth_tokens WHERE token_hash IS NULL AND token IS NOT NULL")
+            ).all()
+            for token_id, token in rows:
+                conn.execute(
+                    text("UPDATE auth_tokens SET token_hash = :h WHERE id = :i"),
+                    {"h": hashlib.sha256(token.encode("utf-8")).hexdigest(), "i": token_id},
+                )
+            # Zeilen ohne Klartext-Token koennen nicht migriert werden (sollte
+            # es nicht geben) - die wuerden den Unique-Index sprengen.
+            conn.execute(text("DELETE FROM auth_tokens WHERE token_hash IS NULL"))
+            conn.execute(text("ALTER TABLE auth_tokens DROP COLUMN token"))
+        conn.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS ix_auth_tokens_token_hash "
+                "ON auth_tokens (token_hash)"
+            )
+        )
+
+        # Merker fuer die Benachrichtigungen (siehe notifications.py) - ohne
+        # sie wuerde der Scheduler dieselbe Warnung in jedem Durchlauf erneut
+        # verschicken. Kein UPDATE noetig: NULL ist hier der richtige
+        # Ausgangswert ("noch nie gemeldet").
+        conn.execute(
+            text(
+                "ALTER TABLE myskoda_configs "
+                "ADD COLUMN IF NOT EXISTS api_key_expiry_notified_days INTEGER"
+            )
+        )
+        conn.execute(
+            text(
+                "ALTER TABLE webdav_backup_configs "
+                "ADD COLUMN IF NOT EXISTS last_failure_notified_at TIMESTAMP"
+            )
+        )

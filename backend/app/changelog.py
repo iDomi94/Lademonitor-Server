@@ -5,6 +5,22 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.14.0",
+        "date": "2026-09-08",
+        "title": "E-Mail: Passwort vergessen, Einladungen und Benachrichtigungen",
+        "changes": [
+            "Neu: ein SMTP-Zugang, den ein Admin unter Einstellungen -> E-Mail einrichtet. Er gilt fuer die ganze Installation und nicht pro Nutzer - die \"Passwort vergessen\"-Mail muss ja gerade dann verschickt werden koennen, wenn niemand angemeldet ist. Mit Testmail-Knopf und Versandprotokoll, damit ein fehlgeschlagener Versand nicht unsichtbar bleibt.",
+            "Jeder Nutzer kann unter \"Mein Konto\" eine E-Mail-Adresse hinterlegen; Admins koennen fremde Adressen nachtragen oder korrigieren. Eine neue Adresse bekommt einen Bestaetigungslink - erst eine bestaetigte Adresse darf ein Passwort zuruecksetzen, sonst wuerde ein Tippfehler einem Fremden Zugriff verschaffen.",
+            "\"Passwort vergessen\" auf der Anmeldeseite: Link per Mail, eine Stunde gueltig, nur einmal verwendbar. Die Anfrage antwortet immer gleich, egal ob es das Konto gibt - sonst waere das Formular ein Verzeichnis aller Nutzernamen. Hoechstens drei Anfragen pro Konto und Stunde.",
+            "Wichtig: Beim Zuruecksetzen werden alle angemeldeten Geraete abgemeldet - waere das Konto uebernommen worden, liefe die fremde Sitzung sonst weiter. Home Assistant und die iOS-App muessen sich danach neu anmelden. Dasselbe gilt beim Aendern des eigenen Passworts, das es bisher ueberhaupt nicht gab.",
+            "Anmelden geht jetzt mit Nutzername ODER E-Mail-Adresse, Gross- und Kleinschreibung egal.",
+            "Admins koennen Konten anlegen und per Mail einladen: der Nutzer setzt sein Passwort selbst ueber einen Link. So kennt es niemand sonst - ein Admin kann es weder vergeben noch sehen.",
+            "Neue Benachrichtigungen, jede einzeln abschaltbar: fehlgeschlagenes WebDAV-Backup (das faellt sonst nur auf, wenn man zufaellig die Einstellungen oeffnet), abgelaufene MyŠkoda-Anmeldung samt Vorwarnung 14/7/1 Tage vor Ablauf des API-Keys, Sammelmeldung ueber zu pruefende Ladevorgaenge (aus/taeglich/woechentlich), Monatsbericht mit Kosten und Verbrauch, und eine Meldung an Admins, wenn sich jemand neu registriert.",
+            "Sicherheit: Anmelde-Tokens liegen nicht mehr im Klartext in der Datenbank, sondern nur noch als SHA-256-Hash - ein Auth-Token ist eine fertige Anmeldung, im Klartext war die Tabelle ein Generalschluessel fuer jedes Konto. Bestehende Anmeldungen bleiben beim Update erhalten, niemand wird ausgeloggt. Passwoerter waren und bleiben mit bcrypt gehasht.",
+            "Das SMTP-Passwort muss im Klartext gespeichert werden, weil SMTP es beim Anmelden uebertraegt - aus einem Hash liesse es sich nicht zurueckgewinnen. Es wird deshalb nie ueber die API zurueckgegeben und nicht in die Backup-ZIP exportiert; in den Einstellungen steht der Hinweis, ein App-spezifisches Passwort zu verwenden.",
+        ],
+    },
+    {
         "version": "0.13.0",
         "date": "2026-09-08",
         "title": "Ladevorgangs-Tabelle passt aufs Bild, Einstellungen aufgeraeumt",
