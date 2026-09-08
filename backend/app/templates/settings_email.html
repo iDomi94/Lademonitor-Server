@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+{% block content %}
+{# Unterseite der Einstellungen - Pfad eine Ebene unter der Basis (/email),
+   damit die relativen Pfade unter dem Home-Assistant-Ingress aufloesen; siehe
+   den Kommentar in settings_backup.html. #}
+<a class="backlink" href="settings">{{ t('nav.back_to_settings') }}</a>
+<h1>{{ t('email.page_heading') }}</h1>
+
+{% if not user.is_admin %}
+{# Die Kachel in den Einstellungen wird Nicht-Admins gar nicht erst angezeigt;
+   wer die Adresse direkt aufruft, bekommt hier eine Erklaerung statt eines
+   Formulars, dessen Endpunkte ohnehin mit 403 antworten. #}
+<p style="color:var(--muted)">{{ t('settings.users.description') }}</p>
+{% else %}
+
+<h2>{{ t('settings.smtp.heading') }}</h2>
+<details class="help">
+  <summary>{{ t('common.help') }}</summary>
+  <div class="inner">{{ t('settings.smtp.description')|safe }}</div>
+</details>
+
+<form class="inline-form" id="smtp-form">
+  <div>
+    <label><input type="checkbox" id="sm-enabled" style="width:auto; display:inline-block; margin-right:6px">{{ t('settings.smtp.enabled') }}</label>
+  </div>
+  <div><label>{{ t('settings.smtp.host') }}</label><input id="sm-host" placeholder="smtp.example.com" autocomplete="off"></div>
+  <div><label>{{ t('settings.smtp.port') }}</label><input type="number" id="sm-port" min="1" max="65535" value="587"></div>
+  <div>
+    <label>{{ t('settings.smtp.security') }}</label>
+    <select id="sm-security">
+      <option value="starttls">{{ t('settings.smtp.security_starttls') }}</option>
+      <option value="ssl">{{ t('settings.smtp.security_ssl') }}</option>
+      <option value="none">{{ t('settings.smtp.security_none') }}</option>
+    </select>
+  </div>
+  <div><label>{{ t('settings.smtp.username') }}</label><input id="sm-username" autocomplete="off"></div>
+  <div><label>{{ t('settings.smtp.password') }}</label><input type="password" id="sm-password" autocomplete="new-password"></div>
+  <div><label>{{ t('settings.smtp.from_address') }}</label><input id="sm-from" placeholder="lademonitor@example.com"></div>
+  <div><label>{{ t('settings.smtp.from_name') }}</label><input id="sm-from-name" value="Lademonitor"></div>
+  <div><label>{{ t('settings.smtp.base_url') }}</label><input id="sm-base-url" placeholder="https://lade.example.com"></div>
+  <div class="form-actions">
+    <button type="submit">{{ t('settings.smtp.save') }}</button>
+  </div>
+</form>
+<div id="smtp-status" style="margin-top:8px; font-size:0.9em"></div>
+
+<form class="inline-form" id="smtp-test-form" style="margin-top:16px">
+  <div>
+    <label>{{ t('settings.smtp.test_to') }}</label>
+    <input type="email" id="sm-test-to" placeholder="{{ user.email or '' }}">
+    <div style="color:var(--muted); font-size:0.85em; margin-top:4px">{{ t('settings.smtp.test_to_hint') }}</div>
+  </div>
+  <div class="form-actions">
+    <button type="submit" id="sm-test-btn" style="background:var(--accent2)">{{ t('settings.smtp.test') }}</button>
+  </div>
+</form>
+
+<details class="panel" id="email-log-panel" style="margin-top:24px">
+  <summary>{{ t('settings.emaillog.heading') }}</summary>
+  <div class="inner">
+    <p style="color:var(--muted); font-size:0.9em; margin-top:0">{{ t('settings.emaillog.description') }}</p>
+    <div class="form-actions" style="margin-bottom:12px">
+      <button type="button" id="log-refresh">{{ t('settings.emaillog.refresh') }}</button>
+      <button type="button" id="log-clear" style="background:var(--danger)">{{ t('settings.emaillog.clear') }}</button>
+    </div>
+    <div class="tablewrap"><table><thead><tr>
+      <th>{{ t('settings.emaillog.table.time') }}</th>
+      <th>{{ t('settings.emaillog.table.to') }}</th>
+      <th>{{ t('settings.emaillog.table.kind') }}</th>
+      <th>{{ t('settings.emaillog.table.subject') }}</th>
+      <th>{{ t('settings.emaillog.table.status') }}</th>
+    </tr></thead>
+    <tbody id="log-rows"></tbody></table></div>
+  </div>
+</details>
+
+<script>
+const LOCALE = {{ lang|default('de')|tojson }} === 'en' ? 'en-US' : 'de-DE';
+const T = {
+  passwordSet: {{ t('settings.smtp.password_set')|tojson }},
+  password: {{ t('settings.smtp.password')|tojson }},
+  statusNever: {{ t('settings.smtp.status_never')|tojson }},
+  statusOk: {{ t('settings.smtp.status_ok')|tojson }},
+  statusError: {{ t('settings.smtp.status_error')|tojson }},
+  noBaseUrl: {{ t('settings.smtp.no_base_url')|tojson }},
+  errorPrefix: {{ t('settings.smtp.error_prefix')|tojson }},
+  testing: {{ t('settings.smtp.testing')|tojson }},
+  test: {{ t('settings.smtp.test')|tojson }},
+  noEntries: {{ t('settings.emaillog.no_entries')|tojson }},
+  confirmClear: {{ t('settings.emaillog.confirm_clear')|tojson }},
+  sent: {{ t('settings.emaillog.status_sent')|tojson }},
+  failed: {{ t('settings.emaillog.status_failed')|tojson }},
+  skipped: {{ t('settings.emaillog.status_skipped')|tojson }},
+};
+
+function renderStatus(config) {
+  const el = document.getElementById('smtp-status');
+  const lines = [];
+  if (!config.last_test_at) {
+    lines.push(`<span style="color:var(--muted)">${T.statusNever}</span>`);
+  } else {
+    const when = new Date(config.last_test_at + 'Z').toLocaleString(LOCALE);
+    lines.push(config.last_status === 'ok'
+      ? `<span style="color:var(--accent)">${T.statusOk}${when}</span>`
+      : `<span style="color:var(--danger)">${T.statusError}${when}): ${config.last_error || ''}</span>`);
+  }
+  // Ohne Basis-Adresse laesst sich zwar senden, aber kein Link erzeugen -
+  // Reset, Bestaetigung und Einladung fallen dann still aus. Das gehoert
+  // sichtbar, nicht versteckt.
+  if (config.enabled && !config.base_url) {
+    lines.push(`<span style="color:var(--warn)">${T.noBaseUrl}</span>`);
+  }
+  el.innerHTML = lines.join('<br>');
+}
+
+function applyConfig(config) {
+  document.getElementById('sm-enabled').checked = config.enabled;
+  document.getElementById('sm-host').value = config.host || '';
+  document.getElementById('sm-port').value = config.port;
+  document.getElementById('sm-security').value = config.security;
+  document.getElementById('sm-username').value = config.username || '';
+  document.getElementById('sm-password').value = '';
+  document.getElementById('sm-password').placeholder = config.has_password ? T.passwordSet : T.password;
+  document.getElementById('sm-from').value = config.from_address || '';
+  document.getElementById('sm-from-name').value = config.from_name || 'Lademonitor';
+  document.getElementById('sm-base-url').value = config.base_url || '';
+  renderStatus(config);
+}
+
+async function loadConfig() {
+  applyConfig(await (await fetch('api/email/config')).json());
+}
+
+function buildPayload() {
+  return {
+    enabled: document.getElementById('sm-enabled').checked,
+    host: document.getElementById('sm-host').value.trim(),
+    port: parseInt(document.getElementById('sm-port').value || 587),
+    security: document.getElementById('sm-security').value,
+    username: document.getElementById('sm-username').value || null,
+    password: document.getElementById('sm-password').value || null,
+    from_address: document.getElementById('sm-from').value.trim(),
+    from_name: document.getElementById('sm-from-name').value.trim(),
+    base_url: document.getElementById('sm-base-url').value.trim(),
+  };
+}
+
+document.getElementById('smtp-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const res = await fetch('api/email/config', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(buildPayload())
+  });
+  if (!res.ok) { alert(T.errorPrefix + await res.text()); return; }
+  applyConfig(await res.json());
+});
+
+// Vor dem Test speichern - der Server testet die GESPEICHERTE Konfiguration,
+// nicht die gerade getippten Felder. Ohne das laeuft man beim Einrichten
+// zwangslaeufig in einen Test der alten Werte. Dieselbe Ueberlegung wie beim
+// MyŠkoda-Verbindungstest.
+document.getElementById('smtp-test-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('sm-test-btn');
+  btn.disabled = true;
+  btn.textContent = T.testing;
+  try {
+    const saved = await fetch('api/email/config', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildPayload())
+    });
+    if (!saved.ok) { alert(T.errorPrefix + await saved.text()); return; }
+    applyConfig(await saved.json());
+
+    const res = await fetch('api/email/test', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to_address: document.getElementById('sm-test-to').value || null })
+    });
+    if (!res.ok) { alert(T.errorPrefix + await res.text()); return; }
+    renderStatus(await res.json());
+    if (document.getElementById('email-log-panel').open) loadLog();
+  } finally {
+    btn.disabled = false;
+    btn.textContent = T.test;
+  }
+});
+
+// Wie beim MyŠkoda-Protokoll: zugeklappt entfaellt der Abruf ganz.
+async function loadLog() {
+  const rows = document.getElementById('log-rows');
+  if (!document.getElementById('email-log-panel').open) { rows.innerHTML = ''; return; }
+  const entries = await (await fetch('api/email/log?limit=100')).json();
+  if (!entries.length) {
+    rows.innerHTML = `<tr><td colspan="5" style="color:var(--muted)">${T.noEntries}</td></tr>`;
+    return;
+  }
+  const label = { sent: T.sent, failed: T.failed, skipped: T.skipped };
+  const color = { sent: 'var(--accent)', failed: 'var(--danger)', skipped: 'var(--muted)' };
+  rows.innerHTML = entries.map(e => `
+    <tr>
+      <td style="white-space:nowrap">${new Date(e.created_at + 'Z').toLocaleString(LOCALE)}</td>
+      <td>${e.to_address}</td>
+      <td><code>${e.kind}</code></td>
+      <td>${e.subject}</td>
+      <td style="color:${color[e.status] || 'inherit'}" title="${e.error || ''}">${label[e.status] || e.status}</td>
+    </tr>`).join('');
+}
+
+document.getElementById('log-refresh').addEventListener('click', loadLog);
+document.getElementById('email-log-panel').addEventListener('toggle', loadLog);
+document.getElementById('log-clear').addEventListener('click', async () => {
+  if (!confirm(T.confirmClear)) return;
+  await fetch('api/email/log', { method: 'DELETE' });
+  loadLog();
+});
+
+loadConfig();
+</script>
+{% endif %}
+{% endblock %}

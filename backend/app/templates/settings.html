@@ -107,7 +107,101 @@
     <span><strong>{{ t('settings.subpages.api.title') }}</strong>
       <small>{{ t('settings.subpages.api.desc') }}</small></span>
   </a>
+  {# Der SMTP-Zugang gilt fuer die ganze Installation, nicht pro Nutzer -
+     deshalb nur fuer Admins. #}
+  {% if user.is_admin %}
+  <a class="subpage" href="email">
+    <span class="ic">✉️</span>
+    <span><strong>{{ t('settings.subpages.email.title') }}</strong>
+      <small>{{ t('settings.subpages.email.desc') }}</small></span>
+  </a>
+  {% endif %}
 </div>
+
+<details class="panel" id="account-panel">
+  <summary>{{ t('settings.account.heading') }}</summary>
+  <div class="inner">
+
+    <h3 style="font-size:14px; color:var(--muted); margin:0 0 4px">{{ t('settings.account.email_heading') }}</h3>
+    <p style="color:var(--muted); font-size:0.9em; margin:0">{{ t('settings.account.email_description') }}</p>
+    <div id="email-state" style="font-size:0.9em; margin:8px 0"></div>
+    <form class="inline-form" id="email-form">
+      <div><label>{{ t('settings.account.email_label') }}</label><input type="email" id="a-email" autocomplete="email"></div>
+      <div>
+        <label>{{ t('settings.account.current_password') }}</label>
+        <input type="password" id="a-email-password" required autocomplete="current-password">
+        <div style="color:var(--muted); font-size:0.85em; margin-top:4px">{{ t('settings.account.current_password_hint') }}</div>
+      </div>
+      <div class="form-actions">
+        <button type="submit">{{ t('settings.account.email_save') }}</button>
+      </div>
+    </form>
+    <div id="email-status" style="font-size:0.9em; margin-bottom:16px"></div>
+
+    <h3 style="font-size:14px; color:var(--muted); margin:0 0 4px">{{ t('settings.account.password_heading') }}</h3>
+    <p style="color:var(--muted); font-size:0.9em; margin:0">{{ t('settings.account.password_note') }}</p>
+    <form class="inline-form" id="password-form">
+      <div>
+        <label>{{ t('settings.account.current_password') }}</label>
+        <input type="password" id="a-old-password" required autocomplete="current-password">
+      </div>
+      <div>
+        <label>{{ t('settings.account.new_password') }}</label>
+        <input type="password" id="a-new-password" required minlength="8" autocomplete="new-password">
+      </div>
+      <div>
+        <label>{{ t('settings.account.new_password_confirm') }}</label>
+        <input type="password" id="a-new-password-confirm" required minlength="8" autocomplete="new-password">
+      </div>
+      <div class="form-actions">
+        <button type="submit">{{ t('settings.account.password_save') }}</button>
+      </div>
+    </form>
+    <div id="password-status" style="font-size:0.9em"></div>
+  </div>
+</details>
+
+<details class="panel" id="notifications-panel">
+  <summary>{{ t('settings.notifications.heading') }}</summary>
+  <div class="inner">
+    <p style="color:var(--muted); font-size:0.9em; margin-top:0">{{ t('settings.notifications.description') }}</p>
+    {# Haken, von denen nie etwas ankommt, sind schlimmer als keine Haken -
+       deshalb steht die fehlende Voraussetzung direkt daneben. #}
+    {% if not smtp_ready %}
+    <p style="color:var(--warn); font-size:0.9em">{{ t('settings.notifications.no_smtp') }}</p>
+    {% endif %}
+    <p style="color:var(--warn); font-size:0.9em; display:none" id="notify-no-email">{{ t('settings.notifications.no_email') }}</p>
+
+    <form class="inline-form" id="notifications-form">
+      <div class="form-row-wide">
+        <label><input type="checkbox" id="n-backup" style="width:auto; display:inline-block; margin-right:6px">{{ t('settings.notifications.backup_failed') }}</label>
+      </div>
+      <div class="form-row-wide">
+        <label><input type="checkbox" id="n-myskoda" style="width:auto; display:inline-block; margin-right:6px">{{ t('settings.notifications.myskoda_error') }}</label>
+      </div>
+      <div class="form-row-wide">
+        <label><input type="checkbox" id="n-monthly" style="width:auto; display:inline-block; margin-right:6px">{{ t('settings.notifications.monthly_report') }}</label>
+      </div>
+      {% if user.is_admin %}
+      <div class="form-row-wide">
+        <label><input type="checkbox" id="n-registration" style="width:auto; display:inline-block; margin-right:6px">{{ t('settings.notifications.new_registration') }}</label>
+      </div>
+      {% endif %}
+      <div class="form-row-wide">
+        <label>{{ t('settings.notifications.review_digest') }}</label>
+        <select id="n-review" style="max-width:260px">
+          <option value="off">{{ t('settings.notifications.review_off') }}</option>
+          <option value="daily">{{ t('settings.notifications.review_daily') }}</option>
+          <option value="weekly">{{ t('settings.notifications.review_weekly') }}</option>
+        </select>
+      </div>
+      <div class="form-actions">
+        <button type="submit">{{ t('settings.notifications.save') }}</button>
+      </div>
+    </form>
+    <div id="notifications-status" style="font-size:0.9em"></div>
+  </div>
+</details>
 
 <details class="panel" id="language-panel">
   <summary>{{ t('settings.language.heading') }}</summary>
@@ -134,8 +228,28 @@
   <summary>{{ t('settings.users.heading') }}<span class="count" id="user-count"></span></summary>
   <div class="inner">
     <p style="color:var(--muted); font-size:0.9em; margin-top:0">{{ t('settings.users.description') }}</p>
-    <div class="tablewrap"><table><thead><tr><th>{{ t('settings.users.table.username') }}</th><th>{{ t('settings.users.table.role') }}</th><th>{{ t('settings.users.table.created_at') }}</th><th class="col-actions"></th></tr></thead>
+    <div class="tablewrap"><table><thead><tr><th>{{ t('settings.users.table.username') }}</th><th>{{ t('settings.users.table.email') }}</th><th>{{ t('settings.users.table.role') }}</th><th>{{ t('settings.users.table.created_at') }}</th><th class="col-actions"></th></tr></thead>
     <tbody id="user-rows"></tbody></table></div>
+
+    <details class="panel plain" id="user-form-panel">
+      <summary id="user-form-heading">{{ t('settings.users.add_heading') }}</summary>
+      <p style="color:var(--muted); font-size:0.9em; margin:0">{{ t('settings.users.add_description') }}</p>
+      {% if not smtp_links_ready %}
+      <p style="color:var(--warn); font-size:0.9em">{{ t('settings.users.needs_smtp') }}</p>
+      {% endif %}
+      <form class="inline-form" id="user-form">
+        <div><label>{{ t('settings.users.username') }}</label><input id="u-username" required minlength="3"></div>
+        <div><label>{{ t('settings.users.email') }}</label><input type="email" id="u-email" required></div>
+        <div>
+          <label><input type="checkbox" id="u-admin" style="width:auto; display:inline-block; margin-right:6px">{{ t('settings.users.is_admin') }}</label>
+        </div>
+        <div class="form-actions">
+          <button type="button" id="user-cancel-btn" style="background:var(--muted); display:none">{{ t('settings.users.cancel') }}</button>
+          <button type="submit" id="user-submit-btn">{{ t('settings.users.submit_new') }}</button>
+        </div>
+      </form>
+    </details>
+    <div id="user-status" style="font-size:0.9em"></div>
   </div>
 </details>
 {% endif %}
@@ -187,7 +301,31 @@ const T = {
   usersErrorPrefix: {{ t('settings.users.error_prefix')|tojson }},
 
   langError: {{ t('settings.language.error')|tojson }},
+
+  accountVerified: {{ t('settings.account.verified')|tojson }},
+  accountUnverified: {{ t('settings.account.unverified')|tojson }},
+  accountUnverifiedHint: {{ t('settings.account.unverified_hint')|tojson }},
+  accountResend: {{ t('settings.account.resend_verification')|tojson }},
+  accountVerificationSent: {{ t('settings.account.verification_sent')|tojson }},
+  accountSaved: {{ t('settings.account.saved')|tojson }},
+  accountPasswordChanged: {{ t('settings.account.password_changed')|tojson }},
+  accountPasswordMismatch: {{ t('settings.account.password_mismatch')|tojson }},
+
+  usersEditHeading: {{ t('settings.users.edit_heading')|tojson }},
+  usersAddHeading: {{ t('settings.users.add_heading')|tojson }},
+  usersSubmitNew: {{ t('settings.users.submit_new')|tojson }},
+  usersSubmitEdit: {{ t('settings.users.submit_edit')|tojson }},
+  usersResendInvite: {{ t('settings.users.resend_invite')|tojson }},
+  usersInviteSent: {{ t('settings.users.invite_sent')|tojson }},
+  usersEmailUnverified: {{ t('settings.users.email_unverified')|tojson }},
+
+  errorPrefix: {{ t('settings.smtp.error_prefix')|tojson }},
 };
+
+// Eigenes Konto - wird von mehreren Abschnitten gelesen (Adresse, Hinweis bei
+// den Benachrichtigungen), deshalb einmal geholt und hier gehalten.
+let me = null;
+const SMTP_LINKS_READY = {{ (smtp_links_ready|default(false))|tojson }};
 
 // Bearbeiten/Loeschen als Icon-Knoepfe (static/ui.js) - beschriftet waren sie
 // die breiteste Spalte jeder Tabelle.
@@ -470,27 +608,241 @@ document.getElementById('location-form').addEventListener('submit', async (e) =>
 
 // ---------- Benutzerverwaltung (nur fuer Admins gerendert) ----------
 
+let users = [];
+let editingUserId = null;
+
+// Ein Umschlag-Icon als dritte Aktion: Einladung erneut schicken. Nur sinnvoll,
+// wenn der Nutzer eine Adresse hat und ueberhaupt Links verschickt werden
+// koennen - sonst waere es ein Knopf, der garantiert nichts tut.
+const ICON_MAIL = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" ' +
+  'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+  '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>';
+
 async function loadUsers() {
   const rows = document.getElementById('user-rows');
   if (!rows) return; // Nicht-Admins sehen die Sektion gar nicht
-  const users = await (await fetch('api/auth/users')).json();
+  users = await (await fetch('api/auth/users')).json();
   setCount('user-count', users.length);
-  rows.innerHTML = users.map(u => `
+  rows.innerHTML = users.map(u => {
+    let email = '–';
+    if (u.email) {
+      email = u.email_verified_at
+        ? u.email
+        : `${u.email} <span style="color:var(--warn); font-size:0.85em">(${T.usersEmailUnverified})</span>`;
+    }
+    const invite = (u.email && SMTP_LINKS_READY)
+      ? iconButton(ICON_MAIL, T.usersResendInvite, `resendInvite('${u.id}')`, 'edit')
+      : '';
+    return `
     <tr>
       <td>${u.username}</td>
+      <td>${email}</td>
       <td>${u.is_admin ? T.usersRoleAdmin : T.usersRoleUser}</td>
       <td>${new Date(u.created_at).toLocaleDateString(LOCALE)}</td>
-      <td class="col-actions"><div class="row-actions">${iconButton(
+      <td class="col-actions"><div class="row-actions">${invite}${iconButton(
+        ICON_EDIT, T.edit, `startEditUser('${u.id}')`, 'edit')}${iconButton(
         ICON_DELETE, T.del, `deleteUser('${u.id}')`, 'danger')}</div></td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
+}
+
+function startEditUser(id) {
+  const u = users.find(x => x.id === id);
+  if (!u) return;
+  editingUserId = id;
+  document.getElementById('u-username').value = u.username;
+  // Der Nutzername ist die Identitaet und bleibt; geaendert wird nur die
+  // Adresse (siehe schemas.AdminUserUpdate).
+  document.getElementById('u-username').disabled = true;
+  document.getElementById('u-email').value = u.email || '';
+  document.getElementById('u-email').required = false;
+  document.getElementById('u-admin').checked = u.is_admin;
+  document.getElementById('u-admin').disabled = true;
+  document.getElementById('user-form-heading').textContent = T.usersEditHeading;
+  document.getElementById('user-submit-btn').textContent = T.usersSubmitEdit;
+  document.getElementById('user-cancel-btn').style.display = 'inline-block';
+  openForEdit('users-panel', 'user-form-panel');
+  document.getElementById('user-form').scrollIntoView({ behavior: 'smooth' });
+}
+
+function cancelEditUser() {
+  editingUserId = null;
+  document.getElementById('user-form').reset();
+  document.getElementById('u-username').disabled = false;
+  document.getElementById('u-email').required = true;
+  document.getElementById('u-admin').disabled = false;
+  document.getElementById('user-form-heading').textContent = T.usersAddHeading;
+  document.getElementById('user-submit-btn').textContent = T.usersSubmitNew;
+  document.getElementById('user-cancel-btn').style.display = 'none';
 }
 
 async function deleteUser(id) {
   if (!confirm(T.usersConfirmDelete)) return;
   const res = await fetch(`api/auth/users/${id}`, { method: 'DELETE' });
   if (!res.ok) { alert(T.usersErrorPrefix + await res.text()); return; }
+  if (editingUserId === id) cancelEditUser();
   loadUsers();
 }
+
+async function resendInvite(id) {
+  const res = await fetch(`api/auth/users/${id}/invite`, { method: 'POST' });
+  const el = document.getElementById('user-status');
+  if (!res.ok) {
+    el.textContent = T.usersErrorPrefix + await res.text();
+    el.style.color = 'var(--danger)';
+    return;
+  }
+  el.textContent = T.usersInviteSent;
+  el.style.color = 'var(--accent)';
+}
+
+if (document.getElementById('user-form')) {
+  document.getElementById('user-cancel-btn').addEventListener('click', cancelEditUser);
+  document.getElementById('user-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const el = document.getElementById('user-status');
+    const email = document.getElementById('u-email').value || null;
+    const res = editingUserId
+      ? await fetch(`api/auth/users/${editingUserId}`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email })
+        })
+      : await fetch('api/auth/users', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: document.getElementById('u-username').value,
+            email,
+            is_admin: document.getElementById('u-admin').checked,
+          })
+        });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      el.textContent = T.usersErrorPrefix + (data.detail || res.status);
+      el.style.color = 'var(--danger)';
+      return;
+    }
+    el.textContent = editingUserId ? T.accountSaved : T.usersInviteSent;
+    el.style.color = 'var(--accent)';
+    cancelEditUser();
+    loadUsers();
+  });
+}
+
+// ---------- Eigenes Konto ----------
+
+function renderEmailState() {
+  const el = document.getElementById('email-state');
+  document.getElementById('a-email').value = me.email || '';
+  const noEmailHint = document.getElementById('notify-no-email');
+  if (noEmailHint) noEmailHint.style.display = me.email ? 'none' : '';
+
+  if (!me.email) { el.textContent = ''; return; }
+  if (me.email_verified_at) {
+    el.innerHTML = `<span style="color:var(--accent)">✓ ${T.accountVerified}</span>`;
+    return;
+  }
+  el.innerHTML = `<span style="color:var(--warn)">${T.accountUnverified}</span> – ` +
+    `${T.accountUnverifiedHint} ` +
+    `<button type="button" id="resend-verify" style="background:var(--accent2); padding:4px 10px; font-size:12px">` +
+    `${T.accountResend}</button>`;
+  document.getElementById('resend-verify').addEventListener('click', async () => {
+    const res = await fetch('api/auth/email/verify/resend', { method: 'POST' });
+    const status = document.getElementById('email-status');
+    status.textContent = res.ok ? T.accountVerificationSent : T.errorPrefix + await res.text();
+    status.style.color = res.ok ? 'var(--accent)' : 'var(--danger)';
+  });
+}
+
+function renderNotifications() {
+  document.getElementById('n-backup').checked = me.notify_backup_failed;
+  document.getElementById('n-myskoda').checked = me.notify_myskoda_error;
+  document.getElementById('n-monthly').checked = me.notify_monthly_report;
+  const reg = document.getElementById('n-registration');
+  if (reg) reg.checked = me.notify_new_registration;
+  document.getElementById('n-review').value = me.review_digest;
+}
+
+async function loadMe() {
+  me = await (await fetch('api/auth/me')).json();
+  renderEmailState();
+  renderNotifications();
+}
+
+document.getElementById('email-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const status = document.getElementById('email-status');
+  const res = await fetch('api/auth/email', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: document.getElementById('a-email').value || null,
+      current_password: document.getElementById('a-email-password').value,
+    })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    status.textContent = T.errorPrefix + (data.detail || res.status);
+    status.style.color = 'var(--danger)';
+    return;
+  }
+  me = data;
+  document.getElementById('a-email-password').value = '';
+  status.textContent = T.accountSaved;
+  status.style.color = 'var(--accent)';
+  renderEmailState();
+});
+
+document.getElementById('password-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const status = document.getElementById('password-status');
+  const next = document.getElementById('a-new-password').value;
+  if (next !== document.getElementById('a-new-password-confirm').value) {
+    status.textContent = T.accountPasswordMismatch;
+    status.style.color = 'var(--danger)';
+    return;
+  }
+  const res = await fetch('api/auth/password', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      current_password: document.getElementById('a-old-password').value,
+      new_password: next,
+    })
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    status.textContent = T.errorPrefix + (data.detail || res.status);
+    status.style.color = 'var(--danger)';
+    return;
+  }
+  e.target.reset();
+  status.textContent = T.accountPasswordChanged;
+  status.style.color = 'var(--accent)';
+});
+
+document.getElementById('notifications-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const status = document.getElementById('notifications-status');
+  const reg = document.getElementById('n-registration');
+  const res = await fetch('api/auth/notifications', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      notify_backup_failed: document.getElementById('n-backup').checked,
+      notify_myskoda_error: document.getElementById('n-myskoda').checked,
+      notify_monthly_report: document.getElementById('n-monthly').checked,
+      // Nicht-Admins bekommen den Schalter gar nicht zu sehen - der
+      // gespeicherte Wert bleibt dann unveraendert.
+      notify_new_registration: reg ? reg.checked : me.notify_new_registration,
+      review_digest: document.getElementById('n-review').value,
+    })
+  });
+  if (!res.ok) {
+    status.textContent = T.errorPrefix + await res.text();
+    status.style.color = 'var(--danger)';
+    return;
+  }
+  me = await res.json();
+  status.textContent = T.accountSaved;
+  status.style.color = 'var(--accent)';
+});
 
 // ---------- Sprache ----------
 
@@ -514,6 +866,7 @@ document.getElementById('language-form').addEventListener('submit', async (e) =>
 });
 
 (async () => {
+  await loadMe();
   await loadVehicles();
   await loadProviders();
   await loadLocations();

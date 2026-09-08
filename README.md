@@ -34,8 +34,13 @@ Zugehörige iOS-App (SwiftUI, reiner REST-Client gegen dieses Backend):
 - Spritmonitor-CSV-Import mit Vorschau und Duplikat-Erkennung
 - Vollständiger Backup-Export/-Import als ZIP (alle Fahrzeuge, Anbieter,
   Ladeorte, Ladevorgänge), gedacht für Server-Neuaufsetzung
-- Mehrbenutzerfähig: Registrierung, Login, jeder Nutzer hat einen eigenen,
-  komplett isolierten Datensatz
+- Mehrbenutzerfähig: Registrierung, Login (mit Nutzername **oder**
+  E-Mail-Adresse), jeder Nutzer hat einen eigenen, komplett isolierten Datensatz
+- **E-Mail**: SMTP-Zugang in den Einstellungen hinterlegen, dann gibt es
+  „Passwort vergessen", Einladungen für neue Konten und Benachrichtigungen –
+  bei fehlgeschlagenem Backup, bei abgelaufenem MyŠkoda-API-Key, als
+  Sammelmeldung über zu prüfende Ladevorgänge und als Monatsbericht. Jede
+  Meldung ist pro Nutzer abschaltbar.
 - Server-rendertes Web-UI (kein separates Frontend-Build nötig), reine
   REST-API für Home Assistant und die
   [iOS-App](https://github.com/iDomi94/Lademonitor-App) (separates Repo)
@@ -206,10 +211,25 @@ Drei Ebenen:
 
 ## Sicherheitshinweis
 
-Auth ist eingebaut (Registrierung/Login, pro Nutzer isolierte Daten), aber
-es gibt bewusst noch **kein Rate-Limiting** auf Login/Registrierung – bei
+Auth ist eingebaut (Registrierung/Login, pro Nutzer isolierte Daten). Passwörter
+liegen bcrypt-gehasht in der Datenbank, Anmelde-Tokens als SHA-256-Hash.
+
+Es gibt bewusst noch **kein Rate-Limiting** auf Login/Registrierung – bei
 öffentlicher Erreichbarkeit über einen Reverse Proxy also auf ein starkes
-Passwort achten. Details und weitere bekannte Einschränkungen in `CLAUDE.md`.
+Passwort achten. („Passwort vergessen" ist begrenzt, weil es Mails auslöst.)
+
+**Zum SMTP-Passwort:** es muss im Klartext gespeichert werden, weil SMTP es beim
+Anmelden überträgt – aus einem Hash ließe es sich nicht zurückgewinnen. Verwende
+deshalb ein **app-spezifisches Passwort oder ein eigenes Absender-Konto**: wird
+es geleakt, kann jemand in deinem Namen Mails schicken, kommt aber nicht an dein
+Postfach. Über die API wird es nie zurückgegeben und in die Backup-ZIP kommt es
+ebenfalls nicht (wie der MyŠkoda-API-Key – nach einer Neuinstallation also neu
+eintragen).
+
+**Beim Zurücksetzen oder Ändern des Passworts werden alle Geräte abgemeldet.**
+Home Assistant und die iOS-App brauchen danach einen neuen Token.
+
+Details und weitere bekannte Einschränkungen in `CLAUDE.md`.
 
 ## Nach einem Update nicht erreichbar?
 

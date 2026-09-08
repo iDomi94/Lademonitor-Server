@@ -42,12 +42,16 @@ backend/app/
   schemas.py          - Pydantic Request/Response-Schemas
   routers/
     vehicles.py, providers.py, locations.py, sessions.py, stats.py, importer.py,
-    geocoding.py, backup.py, auth.py, webdav_backup.py, myskoda.py
+    geocoding.py, backup.py, auth.py, webdav_backup.py, myskoda.py, email.py
   auth.py            - Passwort-Hashing, Token-Handling, Auth-Dependencies
   myskoda.py         - Client fuer die offizielle MyŠkoda Public API (sync httpx)
   myskoda_poller.py  - Zustandsmaschine der automatischen Ladeerkennung + Debug-Log
+  mailer.py          - SMTP-Versand, Mail-Vorlagen, Versandprotokoll
+  notifications.py   - Benachrichtigungen (ereignisgetrieben + zeitgesteuert)
   templates/          - Jinja2 Web-UI (index=Dashboard, sessions, settings +
-                          die Unterseiten import, settings_backup, settings_api)
+                          die Unterseiten import, settings_backup, settings_api,
+                          settings_email; auth_base.html fuer die Seiten ohne
+                          Anmeldung; emails/ fuer die Mail-Vorlagen)
   static/style.css, static/filter.js, static/ui.js
 ios/Lademonitor/
   Models/Models.swift          - Swift-Pendant zu schemas.py
@@ -95,6 +99,10 @@ Ein Mechanismus fuer alle drei Clients (Web-UI, iOS-App, Home-Assistant-
 `rest_command`): opake, zufaellige Tokens (`secrets.token_urlsafe(32)`) in
 der DB-Tabelle `auth_tokens` (Modell `AuthToken`) statt JWT - einfacher zu
 widerrufen (Logout = Zeile loeschen), keine Signatur-/Ablauf-Logik noetig.
+**Seit v0.14.0 liegt dort nur noch der SHA-256-Hash** (`token_hash`), nicht
+mehr der Token selbst - Begruendung und Migration siehe den E-Mail-Abschnitt
+weiter unten. Ein Reset oder eine eigene Passwortaenderung loescht seitdem ALLE
+Tokens des Nutzers; HA und iOS muessen sich danach neu anmelden.
 Werden ausschliesslich als `Authorization: Bearer <token>`-Header ODER als
 httponly-Cookie (`session_token`) akzeptiert (`auth.get_current_user`, per
 `dependencies=[Depends(get_current_user)]` auf jeden bestehenden Router in
@@ -103,6 +111,9 @@ unangetastet zu lassen). Tokens laufen **bewusst nicht ab** - Home Assistant
 kann nicht interaktiv neu einloggen, ein ablaufendes Token wuerde die
 Automation regelmaessig kaputt machen. Widerruf nur ueber Logout oder
 Loeschen des Nutzers durch einen Admin (kaskadiert auf dessen Tokens).
+
+Angemeldet wird mit **Nutzername ODER E-Mail-Adresse** (seit v0.14.0, das
+API-Feld heisst der Kompatibilitaet wegen weiterhin `username`).
 
 Registrierung ist bewusst offen (jeder mit der URL kann sich ein Konto
 anlegen) - der **erste jemals registrierte Nutzer wird automatisch Admin**
@@ -492,7 +503,18 @@ Icon/Tooltip-Logik in der SessionsList-View.
   oeffentlich per Nginx erreichbar ist, kein Schutz gegen automatisiertes
   Passwort-Raten oder Spam-Registrierungen. Bewusst zurueckgestellt (starkes
   Passwort des Nutzers als aktuelle Absicherung), waere ein separater,
-  ueberschaubarer Zusatz (z.B. `slowapi` oder Nginx-seitig).
+  ueberschaubarer Zusatz (z.B. `slowapi` oder Nginx-seitig). **Der
+  Passwort-vergessen-Endpunkt hat seit v0.14.0 ein eigenes Limit** (3 pro Konto
+  und Stunde plus globale Obergrenze), weil er Mails ausloest - die beiden
+  anderen bleiben offen.
+- **Auth-Tokens ueberleben einen Passwort-Reset nicht** (siehe E-Mail-Abschnitt):
+  danach muessen der Home-Assistant-Token und die iOS-Anmeldung neu eingetragen
+  werden. Die saubere Loesung waeren typisierte, benannte API-Tokens
+  (`kind: session | api`) mit Widerruf pro Eintrag - noch nicht umgesetzt.
+- **Verschluesselung der gespeicherten Zugangsdaten** (SMTP-, WebDAV-Passwort,
+  MyŠkoda-Key) waere nur mit einem Schluessel ausserhalb von `/config` sinnvoll,
+  also ueber eine Env-Variable im Unraid-Template. Bewusst zurueckgestellt,
+  siehe Begruendung im E-Mail-Abschnitt.
 - **MyŠkoda-Poller: erledigt bis auf die Rueckdatierung selbst.** Das
   Debug-Log ist inzwischen ueber je einen echten AC- und zwei DC-Ladevorgaenge
   ausgewertet (Stand 06.09.2026, 355 Zeilen) - Zustandsfolge, Nachlauf von
@@ -681,6 +703,152 @@ liest sich schmaler besser. Seitdem ab 1100 px Fensterbreite kein horizontaler
 Ueberlauf mehr. Inline-SVG statt Emoji, weil Emoji je nach Plattform in Groesse
 und Farbe auseinanderlaufen; `currentColor` laesst die Icons der Textfarbe des
 Knopfes folgen.
+
+## E-Mail (`mailer.py`, `notifications.py`, `routers/email.py`, ab 2026-09-08, v0.14.0)
+
+### SMTP-Konfiguration ist GLOBAL, nicht pro Nutzer
+
+Bewusste Abweichung vom WebDAV-Muster: dort sichert jeder Nutzer seine eigenen
+Daten auf sein eigenes Ziel, hier verschickt der Server Mails im Namen der
+Anwendung. Entscheidend ist der Passwort-vergessen-Fall - **in dem Moment ist
+niemand angemeldet**, eine am Nutzer haengende Konfiguration waere also gar
+nicht erreichbar. Genau eine Zeile in `smtp_configs`, nur fuer Admins
+(`require_admin` pro Endpunkt in `routers/email.py`).
+
+Versand ueber die **Standardbibliothek** (`smtplib` + `email.message`), keine
+neue Abhaengigkeit. Synchron wie alles hier, Scheduler-Aufrufe ueber
+`asyncio.to_thread`.
+
+### `base_url` wird konfiguriert und NIEMALS aus dem Request abgeleitet
+
+Ein Reset-Link braucht eine absolute Adresse, die App kennt ihre eigene aber
+nicht (Unraid-IP, eigener Nginx, HA-Ingress - deshalb ist die ganze UI auf
+relative Pfade gebaut). Der naheliegende Weg, den `Host`-Header zu nehmen, ist
+ein Sicherheitsloch: der Header kommt vom Client, wer ihn beim
+Passwort-vergessen-POST faelscht, laesst dem Opfer eine Mail mit einem Link auf
+die eigene Domain zustellen (Host-Header-Poisoning). Ausserdem gibt es bei
+geplanten Mails ueberhaupt keinen Request. Ist `base_url` leer, sind alle
+Funktionen mit Link (Reset, Bestaetigung, Einladung) aus - sichtbar in den
+Einstellungen und am fehlenden "Passwort vergessen"-Link auf der Login-Seite.
+
+### Warum das SMTP-Passwort im Klartext liegt
+
+Es geht nicht anders: SMTP-AUTH **uebertraegt** das Passwort, aus einem Hash
+liesse es sich nicht zurueckgewinnen (beim Nutzer-Login wird dagegen nur
+verglichen - deshalb dort bcrypt). Gleiches gilt fuer das WebDAV-Passwort und
+den MyŠkoda-API-Key. Der wirksame Schutz ist nicht Verstecken, sondern den Wert
+begrenzen: die Einstellungen empfehlen ein app-spezifisches Passwort bzw. ein
+eigenes Absender-Konto (einzeln widerrufbar, kein Zugriff aufs Postfach).
+Zusaetzlich: nie ueber die API zurueckgeben (`has_password`), nicht in die
+Backup-ZIP.
+
+Eine Verschluesselung at rest waere nur mit einem Schluessel AUSSERHALB von
+`/config` sinnvoll (Env-Variable), weil `PGDATA` unter `/config/postgres` liegt
+und das CA-Template die Nutzer ausdruecklich auffordert, `/config` ins Backup
+zu nehmen - Schluessel und DB wuerden sonst immer gemeinsam abfliessen. Bewusst
+zurueckgestellt.
+
+### Wo Hashing sehr wohl richtig ist
+
+`auth_tokens.token` lag bis v0.14.0 im **Klartext** - ein Auth-Token IST eine
+fertige Anmeldung, wer die Tabelle lesen konnte, war sofort jeder Nutzer (und
+das wiegt schwerer als das SMTP-Passwort, das nur Mailversand erlaubt). Jetzt
+`token_hash` mit SHA-256. Bewusst **nicht bcrypt**: der Lookup geht ueber
+Gleichheit, ein gesalzener, absichtlich langsamer Hash liesse sich gar nicht
+nachschlagen - und noetig ist er nicht, weil `secrets.token_urlsafe(32)` bereits
+256 Bit Zufall sind. bcrypt schuetzt Passwoerter davor, kurz und
+menschengemacht zu sein; dieses Problem existiert hier nicht. Dieselbe
+Behandlung fuer `user_tokens` (Reset/Bestaetigung/Einladung).
+
+Die Migration hasht Bestandszeilen und entfernt danach die Klartextspalte -
+**niemand wird ausgeloggt**, Cookie, iOS-App und HA-Header gelten weiter
+(empirisch gegen echtes Postgres verifiziert).
+
+### Passwort-Reset
+
+`POST /api/auth/password-reset/request` antwortet **immer** 204 - auch bei
+unbekanntem Konto, fehlender/unbestaetigter Adresse, ausgeschaltetem SMTP oder
+Rate-Limit. Jede Unterscheidung waere ein Verzeichnis aller Nutzernamen und
+Adressen. Was wirklich passiert ist, steht im Versandprotokoll (nur fuer
+Admins). Rate-Limit: 3 Anfragen pro Konto und Stunde plus eine globale
+Obergrenze, ueber vorhandene Tabellen gezaehlt statt mit `slowapi` o.ae. Das
+offene Limit auf `/login` und `/register` bleibt davon unberuehrt.
+
+Nur eine **bestaetigte** Adresse darf zuruecksetzen - sonst haette ein
+Tippfehler einem Fremden einen gueltigen Token fuer ein fremdes Konto in die
+Hand gegeben.
+
+**Beim Einloesen werden ALLE `auth_tokens` des Nutzers geloescht** (ebenso beim
+eigenen Passwortwechsel). Waere das Konto uebernommen worden, liefe die fremde
+Sitzung sonst weiter. Konsequenz in genau dieser App: der
+HA-`rest_command`-Token und die iOS-Anmeldung sterben mit - darauf weisen Mail,
+Bestaetigungsseite und Einstellungen ausdruecklich hin. Die saubere Alternative
+waeren typisierte, benannte API-Tokens (`kind: session | api`), die einen Reset
+ueberleben - eine eigene Baustelle, bewusst nicht hier mit reingezogen.
+
+Reset- und Bestaetigungsseite loesen **nichts per GET aus**: der Link oeffnet
+eine Seite, gesetzt wird per POST. Mail-Scanner rufen Links beim Vorschauen
+automatisch ab und wuerden den Token sonst verbrauchen (deshalb unterscheidet
+`check_user_token` auch "bereits verwendet" von "ungueltig" - das ist der
+haeufigste Supportfall).
+
+### Anmeldung mit Nutzername ODER E-Mail
+
+`_find_user_by_login()`: Nutzername exakt zuerst (das ist die Identitaet), dann
+die Adresse ueber `lower()` - der Unique-Index laeuft ebenfalls ueber
+`lower(email)`, sonst scheitert die Anmeldung an einem grossgeschriebenen
+Anfangsbuchstaben aus der Autovervollstaendigung. Das API-Feld heisst weiterhin
+`username`, damit iOS-App und HA-Login unveraendert funktionieren.
+
+### Mail-Vorlagen: EINE statt neun
+
+`templates/emails/layout.html` + `.txt`; jede Mail liefert nur ein kleines
+Modell (`mailer.Mail`: Ueberschrift, Absaetze, optionaler Knopf, Wertetabelle,
+Schlusshinweis). Neun eigene Vorlagen mit je HTML- und Textfassung waeren
+achtzehn Dateien, die auseinanderlaufen. Immer **beide** Fassungen
+(`multipart/alternative`) - reiner HTML-Versand erhoeht die Spam-Bewertung
+deutlich.
+
+**Autoescaping nur fuer `.html`** (`select_autoescape(enabled_extensions=("html",))`):
+global eingeschaltet landen in der Textfassung HTML-Entities, aus einem
+Anfuehrungszeichen wird `&#34;`. Genau das ist im Test aufgefallen.
+
+Mails gehen in der Sprache des **Empfaengers** raus, nicht des Ausloesers -
+dafuer `i18n.language_context()`, ein Kontextmanager, der die ContextVar
+danach zurueckstellt (ohne das wuerde ein Versand mitten in einem Request die
+Sprache fuer den Rest der Antwort umstellen).
+
+### Benachrichtigungen (`notifications.py`)
+
+Zwei Ausloeserarten:
+
+* **Ereignisgetrieben** aus `webdav_backup.py` und `myskoda_poller.py` - beide
+  merken sich `previous_status` VOR dem Ueberschreiben und melden nur den
+  **Uebergang** nach "kaputt". Sonst kaeme bei einem dauerhaft falschen
+  Passwort taeglich dieselbe Mail. Beim MyŠkoda-Poller ausserdem nur
+  `auth_error`: ein einzelner Netzwerkfehler heilt beim naechsten Abruf von
+  selbst, `rate_limited` ist normal - beides waere reines Rauschen.
+* **Zeitgesteuert** ueber `run_due_notifications()` im Scheduler (Takt 15 min,
+  wie das WebDAV-Backup): Ablaufwarnung des API-Keys (14/7/1 Tage),
+  Prüf-Sammelmeldung (pro Nutzer aus/taeglich/woechentlich), Monatsbericht.
+
+Die Merkerspalten (`last_failure_notified_at`, `api_key_expiry_notified_days`,
+`last_review_digest_at`, `last_monthly_report_at`) sind nicht optional: ohne sie
+ginge dieselbe Mail viertelstuendlich erneut raus. Auch wenn nichts zu melden
+ist, wird der Zeitstempel fortgeschrieben.
+
+Der Monatsbericht ruft `routers/stats.py::stats_summary()` als gewoehnliche
+Funktion auf (Depends-Parameter explizit uebergeben), damit Mail und Dashboard
+nicht unterschiedliche Zahlen zeigen koennen.
+
+### Web-UI
+
+Neue Unterseite `/email` (Admin: SMTP, Testmail, Protokoll) als vierte Kachel.
+Neue Klappabschnitte "Mein Konto" (Adresse, Bestaetigungsstatus, **eigenes
+Passwort aendern** - gab es vorher gar nicht) und "Benachrichtigungen" in den
+Einstellungen. Benutzerverwaltung um E-Mail-Spalte, Bearbeiten und Einladen
+erweitert. Oeffentliche Seiten `/forgot-password`, `/reset-password`,
+`/verify-email` - wie alle Seiten genau eine Ebene unter der Basis (Ingress).
 
 ## Backup-Export/-Import (`routers/backup.py`)
 

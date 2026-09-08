@@ -15,6 +15,7 @@ Funktion `t(key)` zu registrieren, ohne bei jedem Template-Aufruf die Sprache
 mitgeben zu muessen.
 """
 
+import contextlib
 import contextvars
 import json
 from pathlib import Path
@@ -56,6 +57,25 @@ def set_current_language(lang: str | None) -> str:
 
 def get_current_language() -> str:
     return _current_language.get()
+
+
+@contextlib.contextmanager
+def language_context(lang: str | None):
+    """Setzt die aktive Sprache voruebergehend und stellt danach die vorherige
+    wieder her.
+
+    Gebraucht fuer den Mailversand: eine Mail wird in der Sprache des
+    EMPFAENGERS geschrieben, nicht in der des Ausloesers - ein deutscher Admin
+    kann eine Einladung an einen englischsprachigen Nutzer verschicken, und der
+    Scheduler hat ueberhaupt keine Request-Sprache. Ohne das Zuruecksetzen
+    wuerde ein Versand mitten in einem Request die Sprache fuer den Rest der
+    Antwort umstellen (die ContextVar ist pro Request/Thread, aber innerhalb
+    dessen global)."""
+    token = _current_language.set(lang if lang in SUPPORTED_LANGUAGES else DEFAULT_LANGUAGE)
+    try:
+        yield _current_language.get()
+    finally:
+        _current_language.reset(token)
 
 
 def translate(key: str, **kwargs: object) -> str:

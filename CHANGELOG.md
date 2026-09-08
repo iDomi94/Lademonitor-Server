@@ -6,6 +6,93 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.14.0] — 2026-09-08
+
+### Added
+- **SMTP-Zugang** (Einstellungen → E-Mail, nur für Admins). Gilt bewusst für
+  die **gesamte Installation und nicht pro Nutzer** wie das WebDAV-Backup: die
+  "Passwort vergessen"-Mail muss gerade dann verschickt werden können, wenn
+  niemand angemeldet ist – eine am Nutzer hängende Konfiguration wäre in dem
+  Moment nicht erreichbar. Mit Testmail (der einzige ehrliche Verbindungstest)
+  und einem Versandprotokoll, ohne das ein fehlgeschlagener Versand unsichtbar
+  bliebe.
+- **E-Mail-Adresse pro Nutzer**, selbst pflegbar unter "Mein Konto", von Admins
+  in der Benutzerverwaltung nachtragbar. Eine neue Adresse bekommt einen
+  Bestätigungslink; **nur eine bestätigte Adresse darf ein Passwort
+  zurücksetzen** – bei einem Tippfehler hielte sonst ein Fremder einen gültigen
+  Token für ein fremdes Konto in der Hand.
+- **"Passwort vergessen"**: Link per Mail, eine Stunde gültig, einmal
+  verwendbar. Der Endpunkt antwortet **immer** mit 204 – auch bei unbekanntem
+  Konto, fehlender Adresse oder erreichtem Limit; jede Unterscheidung wäre ein
+  Verzeichnis aller Nutzernamen und Adressen dieses Servers. Höchstens drei
+  Anfragen pro Konto und Stunde.
+- **Eigenes Passwort ändern** – gab es bisher überhaupt nicht, das Passwort war
+  nach der Registrierung unveränderbar.
+- **Einladungen**: Admins legen ein Konto an, der Nutzer setzt sein Passwort
+  über einen Link selbst. Kein vom Admin vergebenes Startpasswort, das über
+  einen zweiten Kanal übermittelt werden müsste und danach zwei Leuten bekannt
+  wäre. Das Einlösen bestätigt zugleich die Adresse.
+- **Benachrichtigungen**, einzeln pro Nutzer abschaltbar:
+  - fehlgeschlagenes WebDAV-Backup (Übergang "läuft" → "kaputt", danach
+    höchstens wöchentlich erinnert). Das ist die wertvollste davon: ein
+    nächtliches Backup, das seit Wochen scheitert, sieht man sonst nur beim
+    zufälligen Öffnen der Einstellungen – und ein Backup, das man fälschlich
+    für laufend hält, ist schlimmer als keins.
+  - MyŠkoda-Anmeldung fehlgeschlagen (`auth_error`) und Vorwarnung 14/7/1 Tage
+    vor Ablauf des API-Keys. Beides steht sonst still, bis jemand die fehlenden
+    Ladevorgänge bemerkt.
+  - Sammelmeldung über zu prüfende Ladevorgänge, pro Nutzer **aus / täglich /
+    wöchentlich**.
+  - Monatsbericht mit kWh, Kosten, Ø-Preis, Ø-Verbrauch, km und Anbietern –
+    berechnet über denselben Code wie das Dashboard, damit Mail und Web-UI
+    nicht auseinanderlaufen können.
+  - Meldung an Admins bei neuer Registrierung (die ist bewusst offen; bisher
+    fiel ein neues Konto nur beim Nachsehen auf).
+
+### Changed
+- **Anmeldung mit Nutzername ODER E-Mail-Adresse**, Groß-/Kleinschreibung der
+  Adresse egal. Das Feld heißt in der API weiterhin `username`, damit die
+  iOS-App und der Home-Assistant-Login unverändert funktionieren.
+- **Beim Zurücksetzen und beim Ändern des Passworts werden alle Sitzungen
+  beendet.** Wäre das Konto übernommen worden, liefe die Sitzung des Angreifers
+  sonst weiter. Konsequenz in genau dieser App: der
+  Home-Assistant-`rest_command`-Token und die iOS-Anmeldung sterben mit und
+  müssen neu eingetragen werden – Mail, Bestätigungsseite und Einstellungen
+  weisen darauf hin.
+- Die Anmeldeseiten (Login, Registrieren + die drei neuen) teilen sich ein
+  gemeinsames Grundgerüst `auth_base.html`. Vorher trugen Login und Registrieren
+  denselben Style-Block je einmal selbst; mit drei weiteren Seiten wären daraus
+  fünf Kopien geworden. Nebenbei haben sie jetzt ein Favicon (bisher `/favicon.ico`
+  → 404).
+
+### Security
+- **Anmelde-Tokens liegen nicht mehr im Klartext in der Datenbank**, sondern als
+  SHA-256-Hash. Ein Auth-Token *ist* eine fertige Anmeldung – wer die Tabelle
+  lesen konnte, war damit sofort jeder Nutzer. Bewusst SHA-256 statt bcrypt: der
+  Lookup geht über Gleichheit, ein gesalzener Hash ließe sich gar nicht suchen,
+  und ein `token_urlsafe(32)` ist bereits 256 Bit Zufall – es gibt nichts zu
+  erraten. Die Migration hasht bestehende Zeilen und entfernt danach die
+  Klartextspalte; **niemand wird ausgeloggt**.
+- Dieselbe Behandlung für die neuen Einmal-Tokens (Reset, Bestätigung,
+  Einladung).
+- Nutzer-Passwörter waren und bleiben bcrypt-gehasht; Klartext existiert nur im
+  Request-Objekt und wird weder gespeichert noch geloggt noch exportiert.
+- **Das SMTP-Passwort muss im Klartext liegen** – SMTP-AUTH überträgt es beim
+  Anmelden, aus einem Hash ließe es sich nicht zurückgewinnen (beim Nutzer-Login
+  wird dagegen nur *verglichen*). Der wirksame Schutz ist deshalb nicht
+  Verstecken, sondern den Wert begrenzen: die Einstellungen empfehlen ein
+  app-spezifisches Passwort bzw. ein eigenes Absender-Konto. Es wird über die
+  API nie zurückgegeben (nur `has_password`) und nicht in die Backup-ZIP
+  exportiert – dieselbe Linie wie beim MyŠkoda-API-Key.
+- Die **Basis-Adresse für Links in Mails wird konfiguriert, nicht aus dem
+  Request abgeleitet.** Der `Host`-Header kommt vom Client; wer ihn beim
+  "Passwort vergessen"-POST fälscht, ließe dem Opfer sonst eine Mail mit einem
+  Link auf seine eigene Domain zustellen (Host-Header-Poisoning). Außerdem gibt
+  es bei geplanten Mails gar keinen Request.
+- Reset- und Bestätigungslinks lösen **nichts per GET aus** – die Seiten zeigen
+  ein Formular, gesetzt wird per POST. Mail-Scanner rufen Links beim Vorschauen
+  automatisch ab und würden den Token sonst verbrauchen.
+
 ## [0.13.0] — 2026-09-08
 
 ### Fixed

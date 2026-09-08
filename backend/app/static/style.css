@@ -177,6 +177,12 @@ button:hover { opacity: 0.9; }
 
 .form-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; }
 
+/* Ein Feld ueber die volle Formularbreite. Die Rasterspalten sind auf kurze
+   Eingabefelder ausgelegt (min. 140 px); eine Auswahl, deren Beschriftung ein
+   ganzer Satz ist, bricht darin auf vier Zeilen um. */
+.form-row-wide { grid-column: 1 / -1; }
+.form-row-wide label { font-size: 14px; color: var(--text); margin-bottom: 0; }
+
 /* --------------------------------------------------------------------------
    Aktionsspalte der Tabellen
 

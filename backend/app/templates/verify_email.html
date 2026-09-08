@@ -1,0 +1,44 @@
+{% extends "auth_base.html" %}
+{% block page_title %}{{ t('verify.page_title') }}{% endblock %}
+{% block card %}
+      {# Bestaetigt wird per POST auf Knopfdruck, nicht schon beim Oeffnen des
+         Links: Mail-Scanner und Vorschaufunktionen rufen Links automatisch ab
+         und wuerden den Token sonst verbrauchen, bevor der Mensch ihn sieht. #}
+      <h1>{{ t('verify.heading') }}</h1>
+      <p class="auth-intro" id="verify-intro">{{ t('verify.description') }}</p>
+      <button type="button" id="verify-btn">{{ t('verify.submit') }}</button>
+      <div class="auth-note" id="verify-ok" style="display:none">{{ t('verify.done') }}</div>
+      <div class="auth-error" id="verify-error"></div>
+      <div class="auth-switch"><a href="login">{{ t('reset.to_login') }}</a></div>
+{% endblock %}
+{% block scripts %}
+  <script>
+    const T = {
+      failed: {{ t('verify.failed')|tojson }},
+      missing: {{ t('reset.missing_token')|tojson }},
+    };
+    const token = new URLSearchParams(window.location.search).get('token');
+    const btn = document.getElementById('verify-btn');
+
+    if (!token) {
+      btn.style.display = 'none';
+      document.getElementById('verify-error').textContent = T.missing;
+    }
+
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      const res = await fetch('api/auth/email/verify/confirm', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token })
+      });
+      if (res.ok) {
+        btn.style.display = 'none';
+        document.getElementById('verify-intro').style.display = 'none';
+        document.getElementById('verify-ok').style.display = '';
+      } else {
+        btn.disabled = false;
+        document.getElementById('verify-error').textContent = T.failed;
+      }
+    });
+  </script>
+{% endblock %}

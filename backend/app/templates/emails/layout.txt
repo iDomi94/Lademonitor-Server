@@ -1,0 +1,24 @@
+{#- Textfassung derselben Mail. Kein reiner HTML-Versand: das erhoeht die
+    Spam-Bewertung deutlich, und manche Clients zeigen ausschliesslich Text. -#}
+{{ mail.heading }}
+{{ '=' * mail.heading|length }}
+{% for paragraph in mail.intro %}
+{{ paragraph }}
+{% endfor %}
+{%- if mail.button %}
+
+{{ mail.button.label }}:
+{{ mail.button.url }}
+{%- endif %}
+{%- if mail.rows %}
+{% for label, value in mail.rows %}
+{{ label }}: {{ value }}
+{%- endfor %}
+{%- endif %}
+{%- if mail.note %}
+
+{{ mail.note }}
+{%- endif %}
+
+--
+{{ t('email.footer') }}

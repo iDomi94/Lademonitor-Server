@@ -1,0 +1,63 @@
+{#
+  EINE Vorlage fuer alle Mails dieser App. Jede Mail liefert nur ein kleines
+  Modell (Ueberschrift, Absaetze, optionaler Knopf, optionale Wertetabelle,
+  optionaler Schlusshinweis) - siehe mailer.Mail. Neun eigene Vorlagen mit je
+  einer HTML- und einer Textfassung waeren achtzehn Dateien, die
+  auseinanderlaufen; so sehen alle Mails gleich aus und es gibt genau eine
+  Stelle fuer Layoutfragen.
+
+  Stile stehen bewusst inline: viele Mail-Clients (Gmail-Web allen voran)
+  entfernen <style>-Bloecke im Kopf. Feste helle Farben statt der
+  CSS-Variablen der Web-UI - Mail-Clients kennen kein prefers-color-scheme
+  zuverlaessig, und dunkle Flaechen werden von manchen invertiert.
+#}
+<div style="background:#f4f5f7; padding:24px 12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <div style="max-width:560px; margin:0 auto; background:#ffffff; border:1px solid #e3e6ea; border-radius:12px; overflow:hidden;">
+
+    <div style="padding:18px 24px; border-bottom:1px solid #e3e6ea; font-weight:700; font-size:15px; color:#1c2330;">
+      ⚡ Lademonitor
+    </div>
+
+    <div style="padding:24px;">
+      <h1 style="margin:0 0 16px; font-size:19px; color:#1c2330;">{{ mail.heading }}</h1>
+
+      {% for paragraph in mail.intro %}
+      <p style="margin:0 0 12px; font-size:14px; line-height:1.55; color:#39414f;">{{ paragraph }}</p>
+      {% endfor %}
+
+      {% if mail.button %}
+      <p style="margin:22px 0;">
+        <a href="{{ mail.button.url }}"
+           style="display:inline-block; background:#2f8f6f; color:#ffffff; text-decoration:none;
+                  padding:11px 20px; border-radius:8px; font-size:14px; font-weight:600;">{{ mail.button.label }}</a>
+      </p>
+      {# Der Link nochmal als Text: manche Clients unterdruecken Knoepfe oder
+         zeigen sie als nackten Kasten ohne Ziel. #}
+      <p style="margin:0 0 12px; font-size:12px; line-height:1.5; color:#6b7484;">
+        {{ t('email.link_fallback') }}<br>
+        <span style="word-break:break-all; color:#2f6fbf;">{{ mail.button.url }}</span>
+      </p>
+      {% endif %}
+
+      {% if mail.rows %}
+      <table style="width:100%; border-collapse:collapse; margin:18px 0; font-size:14px;">
+        {% for label, value in mail.rows %}
+        <tr>
+          <td style="padding:7px 0; border-bottom:1px solid #eef0f3; color:#6b7484;">{{ label }}</td>
+          <td style="padding:7px 0; border-bottom:1px solid #eef0f3; color:#1c2330; text-align:right; font-weight:600;">{{ value }}</td>
+        </tr>
+        {% endfor %}
+      </table>
+      {% endif %}
+
+      {% if mail.note %}
+      <p style="margin:18px 0 0; padding:12px 14px; background:#f4f5f7; border-radius:8px;
+                font-size:13px; line-height:1.5; color:#39414f;">{{ mail.note }}</p>
+      {% endif %}
+    </div>
+
+    <div style="padding:14px 24px; border-top:1px solid #e3e6ea; font-size:12px; color:#8a919e;">
+      {{ t('email.footer') }}
+    </div>
+  </div>
+</div>
