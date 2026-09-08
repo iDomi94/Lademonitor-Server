@@ -20,6 +20,9 @@
     window.I18N_FILTER = {{ js_translations|default({})|tojson }};
   </script>
   <script src="static/filter.js?v={{ version|default('dev') }}"></script>
+  <!-- Icons/Knoepfe der Tabellen-Aktionsspalten, von sessions.html und
+       settings.html gemeinsam genutzt. -->
+  <script src="static/ui.js?v={{ version|default('dev') }}"></script>
 </head>
 <body>
   <nav class="topnav" id="topnav">
@@ -36,7 +39,9 @@
     <div class="navlinks" id="navlinks">
       <a href=".">{{ t('nav.dashboard') }}</a>
       <a href="sessions">{{ t('nav.sessions') }}</a>
-      <a href="import">{{ t('nav.import') }}</a>
+      <!-- Import liegt jetzt als Unterseite in den Einstellungen: er wird
+           einmal beim Umstieg von Spritmonitor gebraucht und dann nie wieder,
+           belegte in der Leiste aber dauerhaft einen von vier Plaetzen. -->
       <a href="settings">{{ t('nav.settings') }}</a>
       {% if user %}
       <span class="navuser" style="margin-left:auto; color:var(--muted); font-size:14px">
@@ -46,7 +51,9 @@
       {% endif %}
     </div>
   </nav>
-  <main class="container">
+  <!-- container_class: einzelne Seiten duerfen breiter werden als die
+       1100 px Standardbreite (siehe .container.wide in style.css). -->
+  <main class="container {% block container_class %}{% endblock %}">
     {% block content %}{% endblock %}
   </main>
 

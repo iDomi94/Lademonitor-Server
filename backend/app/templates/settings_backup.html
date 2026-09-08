@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% block content %}
+{# Unterseite der Einstellungen. Der Pfad bleibt bewusst EINE Ebene unter der
+   Basis (/backup, nicht /settings/backup): alle Links und fetch()-Aufrufe in
+   dieser App sind relativ, damit sie unter dem Home-Assistant-Ingress-
+   Unterpfad genauso aufloesen wie am Domain-Root - das funktioniert nur,
+   solange jede Seite genau eine Ebene tief liegt (siehe main.py::_page). #}
+<a class="backlink" href="settings">{{ t('nav.back_to_settings') }}</a>
+<h1>{{ t('backup.page_heading') }}</h1>
+
+<h2>{{ t('settings.backup.export_heading') }}</h2>
+<details class="help">
+  <summary>{{ t('common.help') }}</summary>
+  <div class="inner">{{ t('settings.backup.description') }}</div>
+</details>
+<div class="form-actions">
+  <a href="api/backup/export"><button type="button">{{ t('settings.backup.export_btn') }}</button></a>
+</div>
+
+<h2>{{ t('settings.backup.import_heading') }}</h2>
+<form class="inline-form" id="backup-import-form">
+  <div>
+    <label>{{ t('settings.backup.import_label') }}</label>
+    <input type="file" id="backup-file" accept=".zip" required>
+  </div>
+  <div class="form-actions">
+    <button type="submit">{{ t('settings.backup.import_btn') }}</button>
+  </div>
+</form>
+<div id="backup-import-result" style="display:none; margin-top:8px; font-size:0.9em"></div>
+
+<h2>{{ t('settings.webdav.heading') }}</h2>
+<details class="help">
+  <summary>{{ t('common.help') }}</summary>
+  <div class="inner">{{ t('settings.webdav.description')|safe }}</div>
+</details>
+<form class="inline-form" id="webdav-form">
+  <div>
+    <label><input type="checkbox" id="wd-enabled" style="width:auto; display:inline-block; margin-right:6px">{{ t('settings.webdav.enabled_label') }}</label>
+  </div>
+  <div>
+    <label>{{ t('settings.webdav.url_label') }}</label>
+    <input id="wd-url" placeholder="https://cloud.example.com/remote.php/dav/files/user/Backups">
+  </div>
+  <div><label>{{ t('settings.webdav.username') }}</label><input id="wd-username"></div>
+  <div><label>{{ t('settings.webdav.password') }}</label><input type="password" id="wd-password" placeholder="{{ t('settings.webdav.password') }}"></div>
+  <div>
+    <label>{{ t('settings.webdav.frequency') }}</label>
+    <select id="wd-frequency">
+      <option value="daily">{{ t('settings.webdav.freq.daily') }}</option>
+      <option value="weekly">{{ t('settings.webdav.freq.weekly') }}</option>
+      <option value="monthly">{{ t('settings.webdav.freq.monthly') }}</option>
+    </select>
+  </div>
+  <div><label>{{ t('settings.webdav.retention') }}</label><input type="number" id="wd-retention" value="30" min="1"></div>
+  <div class="form-actions">
+    <button type="button" id="wd-run-btn" style="background:var(--accent2)">{{ t('settings.webdav.run_now') }}</button>
+    <button type="submit">{{ t('settings.webdav.save') }}</button>
+  </div>
+</form>
+<div id="webdav-status" style="margin-top:8px; font-size:0.9em"></div>
+
+<script>
+// Locale fuer Datumsformatierung an die aktive UI-Sprache gekoppelt statt
+// fest auf 'de-DE'.
+const LOCALE = {{ lang|default('de')|tojson }} === 'en' ? 'en-US' : 'de-DE';
+
+const T = {
+  backupImporting: {{ t('settings.backup.importing')|tojson }},
+  backupErrorPrefix: {{ t('settings.backup.error_prefix')|tojson }},
+  backupErrorGeneric: {{ t('settings.backup.error_generic')|tojson }},
+  backupResultVehicles: {{ t('settings.backup.result.vehicles')|tojson }},
+  backupResultProviders: {{ t('settings.backup.result.providers')|tojson }},
+  backupResultLocations: {{ t('settings.backup.result.locations')|tojson }},
+  backupResultSessions: {{ t('settings.backup.result.sessions')|tojson }},
+  backupResultImported: {{ t('settings.backup.result.imported')|tojson }},
+  backupResultSkipped: {{ t('settings.backup.result.skipped')|tojson }},
+
+  webdavNeverRun: {{ t('settings.webdav.status.never_run')|tojson }},
+  webdavSuccessPrefix: {{ t('settings.webdav.status.success_prefix')|tojson }},
+  webdavFailurePrefix: {{ t('settings.webdav.status.failure_prefix')|tojson }},
+  webdavUnknownError: {{ t('settings.webdav.status.unknown_error')|tojson }},
+  webdavPasswordSet: {{ t('settings.webdav.password_placeholder_set')|tojson }},
+  webdavPassword: {{ t('settings.webdav.password')|tojson }},
+  webdavErrorPrefix: {{ t('settings.webdav.error_prefix')|tojson }},
+  webdavRunNow: {{ t('settings.webdav.run_now')|tojson }},
+  webdavRunRunning: {{ t('settings.webdav.run_running')|tojson }},
+};
+
+// ---------- Daten-Backup ----------
+
+document.getElementById('backup-import-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const file = document.getElementById('backup-file').files[0];
+  if (!file) return;
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const resultDiv = document.getElementById('backup-import-result');
+  resultDiv.style.display = 'block';
+  resultDiv.textContent = T.backupImporting;
+
+  try {
+    const res = await fetch('api/backup/import', { method: 'POST', body: formData });
+    if (!res.ok) {
+      resultDiv.textContent = T.backupErrorPrefix + await res.text();
+      return;
+    }
+    const r = await res.json();
+    resultDiv.textContent =
+      `${T.backupResultVehicles}: ${r.vehicles_imported} ${T.backupResultImported}, ${r.vehicles_skipped} ${T.backupResultSkipped}. ` +
+      `${T.backupResultProviders}: ${r.providers_imported} ${T.backupResultImported}, ${r.providers_skipped} ${T.backupResultSkipped}. ` +
+      `${T.backupResultLocations}: ${r.locations_imported} ${T.backupResultImported}, ${r.locations_skipped} ${T.backupResultSkipped}. ` +
+      `${T.backupResultSessions}: ${r.sessions_imported} ${T.backupResultImported}, ${r.sessions_skipped} ${T.backupResultSkipped}.`;
+    e.target.reset();
+  } catch (err) {
+    resultDiv.textContent = T.backupErrorGeneric;
+  }
+});
+
+// ---------- WebDAV-Backup ----------
+
+function renderWebdavStatus(config) {
+  const el = document.getElementById('webdav-status');
+  if (!config.last_run_at) {
+    el.textContent = T.webdavNeverRun;
+    el.style.color = 'var(--muted)';
+    return;
+  }
+  const when = new Date(config.last_run_at + 'Z').toLocaleString(LOCALE);
+  if (config.last_status === 'success') {
+    el.textContent = `${T.webdavSuccessPrefix}${when}`;
+    el.style.color = 'var(--accent)';
+  } else {
+    el.textContent = `${T.webdavFailurePrefix}${when}): ${config.last_error || T.webdavUnknownError}`;
+    el.style.color = 'var(--danger)';
+  }
+}
+
+async function loadWebdavConfig() {
+  const config = await (await fetch('api/backup/webdav')).json();
+  document.getElementById('wd-enabled').checked = config.enabled;
+  document.getElementById('wd-url').value = config.url;
+  document.getElementById('wd-username').value = config.username || '';
+  document.getElementById('wd-password').placeholder = config.has_password ? T.webdavPasswordSet : T.webdavPassword;
+  document.getElementById('wd-frequency').value = config.frequency;
+  document.getElementById('wd-retention').value = config.retention_days;
+  renderWebdavStatus(config);
+}
+
+document.getElementById('webdav-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const payload = {
+    enabled: document.getElementById('wd-enabled').checked,
+    url: document.getElementById('wd-url').value.trim(),
+    username: document.getElementById('wd-username').value || null,
+    password: document.getElementById('wd-password').value || null,
+    frequency: document.getElementById('wd-frequency').value,
+    retention_days: parseInt(document.getElementById('wd-retention').value || 30),
+  };
+  const res = await fetch('api/backup/webdav', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) { alert(T.webdavErrorPrefix + await res.text()); return; }
+  document.getElementById('wd-password').value = '';
+  const config = await res.json();
+  document.getElementById('wd-password').placeholder = config.has_password ? T.webdavPasswordSet : T.webdavPassword;
+  renderWebdavStatus(config);
+});
+
+document.getElementById('wd-run-btn').addEventListener('click', async () => {
+  const btn = document.getElementById('wd-run-btn');
+  btn.disabled = true;
+  btn.textContent = T.webdavRunRunning;
+  try {
+    const res = await fetch('api/backup/webdav/run', { method: 'POST' });
+    if (!res.ok) { alert(T.webdavErrorPrefix + await res.text()); return; }
+    renderWebdavStatus(await res.json());
+  } finally {
+    btn.disabled = false;
+    btn.textContent = T.webdavRunNow;
+  }
+});
+
+loadWebdavConfig();
+</script>
+{% endblock %}

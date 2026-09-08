@@ -1,5 +1,8 @@
 {% extends "base.html" %}
 {% block content %}
+{# Der Import ist eine Unterseite der Einstellungen und nicht mehr ueber die
+   Hauptleiste erreichbar - deshalb ein Rueckweg dorthin. #}
+<a class="backlink" href="settings">{{ t('nav.back_to_settings') }}</a>
 <h1>{{ t('import.heading') }}</h1>
 
 <form class="inline-form" id="import-form">

@@ -1,8 +1,8 @@
 {
   "nav.dashboard": "Dashboard",
   "nav.sessions": "Ladevorgänge",
-  "nav.import": "Import",
   "nav.settings": "Einstellungen",
+  "nav.back_to_settings": "← Einstellungen",
   "nav.version_title": "Was ist neu",
   "nav.admin_badge": "(Admin)",
   "nav.menu": "Menü",
@@ -118,8 +118,16 @@
   "common.none_option": "– keiner –",
 
   "settings.heading": "Einstellungen",
+  "settings.subpages.heading": "Weitere Bereiche",
+  "settings.subpages.import.title": "Import",
+  "settings.subpages.import.desc": "Ladevorgänge aus einem Spritmonitor-CSV-Export übernehmen.",
+  "settings.subpages.backup.title": "Backup",
+  "settings.subpages.backup.desc": "Daten-Backup exportieren oder einspielen und das automatische WebDAV-Backup einrichten.",
+  "settings.subpages.api.title": "API & Debug",
+  "settings.subpages.api.desc": "MyŠkoda Public API einrichten und das Debug-Protokoll einsehen.",
 
   "settings.vehicle.heading": "Fahrzeuge",
+  "settings.vehicle.add_heading": "Fahrzeug anlegen",
   "settings.vehicle.edit_heading": "Fahrzeug bearbeiten",
   "settings.vehicle.name": "Name",
   "settings.vehicle.external_id": "External ID (für HA)",
@@ -137,6 +145,7 @@
   "settings.vehicle.confirm_delete": "Fahrzeug wirklich löschen? Alle zugehörigen Ladevorgänge werden dabei mitgelöscht.",
 
   "settings.provider.heading": "Ladeanbieter",
+  "settings.provider.add_heading": "Anbieter anlegen",
   "settings.provider.edit_heading": "Ladeanbieter bearbeiten",
   "settings.provider.name": "Name",
   "settings.provider.ac_price": "Letzter AC-Preis (€/kWh)",
@@ -150,6 +159,7 @@
   "settings.provider.confirm_delete": "Anbieter wirklich löschen?",
 
   "settings.location.heading": "Bekannte Ladeorte",
+  "settings.location.add_heading": "Ladeort anlegen",
   "settings.location.edit_heading": "Ladeort bearbeiten",
   "settings.location.name": "Name",
   "settings.location.address_search": "Adresse suchen (optional)",
@@ -172,6 +182,9 @@
   "settings.location.applied_prefix": "Übernommen: ",
 
   "settings.backup.heading": "Daten-Backup",
+  "backup.page_heading": "Backup",
+  "settings.backup.export_heading": "Daten-Backup",
+  "settings.backup.import_heading": "Backup einspielen",
   "settings.backup.description": "Exportiert alle Fahrzeuge, Anbieter, Ladeorte und Ladevorgänge als ZIP mit CSV-Dateien (inkl. README) - z.B. für eine Neuinstallation des Servers. Der Import ist gefahrlos mehrfach ausführbar, bereits vorhandene Einträge werden übersprungen statt überschrieben.",
   "settings.backup.export_btn": "Backup exportieren",
   "settings.backup.import_label": "Backup-ZIP importieren",
@@ -208,6 +221,7 @@
   "settings.webdav.error_prefix": "Fehler: ",
 
   "settings.myskoda.heading": "Automatische Ladeerkennung (MyŠkoda Public API)",
+  "api.page_heading": "API & Debug",
   "settings.myskoda.description": "Zweite, von Home Assistant unabhängige Quelle für automatisch erfasste Ladevorgänge: der Server fragt die offizielle <a href=\"https://public.api.connect.skoda-auto.cz/docs\" target=\"_blank\" rel=\"noopener\">MyŠkoda Public API</a> selbst ab und legt erkannte Ladevorgänge an (immer mit \"zu prüfen\"-Markierung). Der bestehende Home-Assistant-Push läuft unverändert parallel weiter – beide Quellen erkennen sich gegenseitig nicht, doppelte Vorgänge müssen also vermieden werden, indem pro Fahrzeug nur ein Weg aktiv ist.<br><br>API-Key erzeugen unter <a href=\"https://go.skoda.eu/api-keys\" target=\"_blank\" rel=\"noopener\">go.skoda.eu/api-keys</a> (Link auf dem Handy öffnen, die MyŠkoda-App verwaltet die Keys). Der Key ist an die beim Erzeugen ausgewählten Fahrzeuge gebunden und läuft nach einiger Zeit ab – der Ablauftermin wird unten angezeigt, sobald einmal abgefragt wurde.<br><br><strong>Rate-Limit: 20 Anfragen pro Stunde und API-Key</strong>, geteilt über alle Fahrzeuge und alle Clients. Läuft parallel die Home-Assistant-Integration mit demselben Key, teilen sich beide dieses Kontingent – dann besser einen zweiten Key erzeugen. Die Standardintervalle (20 min im Leerlauf, 5 min während eines Ladevorgangs) bleiben mit Reserve darunter.<br><br><strong>Genauigkeit:</strong> Der Ladebeginn wird erst beim nächsten Abruf bemerkt – bei DC-Schnellladen fehlen so schnell zweistellige Prozentpunkte. Deshalb zählt standardmäßig der SoC des letzten Abrufs VOR dem Einstecken als Startwert (Fahren senkt den SoC, dieser Wert liegt also nie unter dem echten Startwert). Das greift nur, wenn dieser Abruf jung genug ist und der Zuwachs bei der beobachteten Ladeleistung überhaupt möglich war – die Akkukapazität des Fahrzeugs muss dafür hinterlegt sein. Jeder erkannte Vorgang bekommt eine Notiz mit beiden Rohwerten, damit sich die Korrektur nachvollziehen lässt.",
   "settings.myskoda.vehicle": "Fahrzeug",
   "settings.myskoda.polling_label": "Automatisches API-Polling",

@@ -1,0 +1,395 @@
+{% extends "base.html" %}
+{% block content %}
+{# Unterseite der Einstellungen - Pfad bewusst eine Ebene unter der Basis
+   (/api-debug), damit die relativen Pfade unter dem Home-Assistant-Ingress
+   aufloesen; siehe den Kommentar in settings_backup.html. #}
+<a class="backlink" href="settings">{{ t('nav.back_to_settings') }}</a>
+<h1>{{ t('api.page_heading') }}</h1>
+
+<div class="section-head">
+  <h2>{{ t('settings.myskoda.heading') }}</h2>
+  <label class="switch">
+    {{ t('settings.myskoda.polling_label') }}
+    <input type="checkbox" id="ms-enabled">
+    <span class="track"></span>
+    <span class="state" id="ms-enabled-state"></span>
+  </label>
+</div>
+<details class="help">
+  <summary>{{ t('common.help') }}</summary>
+  <div class="inner">{{ t('settings.myskoda.description')|safe }}</div>
+</details>
+<form class="inline-form" id="myskoda-form">
+  <div><label>{{ t('settings.myskoda.vehicle') }}</label><select id="ms-vehicle"></select></div>
+  <div><label>{{ t('settings.myskoda.apikey') }}</label><input type="password" id="ms-apikey" placeholder="{{ t('settings.myskoda.apikey') }}" autocomplete="off"></div>
+  <div><label>{{ t('settings.myskoda.vin') }}</label><input id="ms-vin" placeholder="TMB..." maxlength="17" autocomplete="off"></div>
+  <div><label>{{ t('settings.myskoda.idle_interval') }}</label><input type="number" id="ms-idle" min="3" max="1440" value="20"></div>
+  <div><label>{{ t('settings.myskoda.active_interval') }}</label><input type="number" id="ms-active" min="3" max="1440" value="5"></div>
+  <div>
+    <label><input type="checkbox" id="ms-missed" style="width:auto; display:inline-block; margin-right:6px">{{ t('settings.myskoda.missed') }}</label>
+  </div>
+  <div><label>{{ t('settings.myskoda.missed_delta') }}</label><input type="number" id="ms-missed-delta" min="1" max="100" value="5"></div>
+  <div>
+    <label><input type="checkbox" id="ms-backdate" style="width:auto; display:inline-block; margin-right:6px">{{ t('settings.myskoda.backdate') }}</label>
+  </div>
+  <div><label>{{ t('settings.myskoda.backdate_gap') }}</label><input type="number" id="ms-backdate-gap" min="0" max="1440" value="0"></div>
+  <div>
+    <label><input type="checkbox" id="ms-log" style="width:auto; display:inline-block; margin-right:6px">{{ t('settings.myskoda.log_checkbox') }}</label>
+  </div>
+  <div>
+    <label><input type="checkbox" id="ms-log-raw" style="width:auto; display:inline-block; margin-right:6px">{{ t('settings.myskoda.log_raw') }}</label>
+  </div>
+  <div class="form-actions">
+    <button type="button" id="ms-delete-btn" style="background:var(--danger); display:none">{{ t('settings.myskoda.delete_config') }}</button>
+    <button type="button" id="ms-test-btn" style="background:var(--accent2)">{{ t('settings.myskoda.test_connection') }}</button>
+    <button type="button" id="ms-poll-btn" style="background:var(--accent2)">{{ t('settings.myskoda.poll_now') }}</button>
+    <button type="submit">{{ t('settings.myskoda.save') }}</button>
+  </div>
+</form>
+<div id="myskoda-status" style="margin-top:8px; font-size:0.9em"></div>
+<pre id="myskoda-test-result" style="display:none; margin-top:12px; padding:12px; background:var(--card); border:1px solid var(--border); border-radius:12px; font-size:12px; overflow-x:auto"></pre>
+
+<!-- Das Protokoll ist 200 Zeilen mit sieben Spalten und wuerde die Seite
+     dominieren, obwohl es nur zur Fehlersuche gebraucht wird. Eingeklappt, und
+     die Zeilen werden erst beim Aufklappen geholt (siehe den toggle-Listener
+     unten) - das spart beim normalen Oeffnen der Seite einen API-Aufruf. -->
+<details class="panel" id="ms-log-panel" style="margin-top:24px">
+  <summary>{{ t('settings.myskoda.log_heading') }}</summary>
+  <div class="inner">
+    <p style="color:var(--muted); font-size:0.9em; margin-top:0">{{ t('settings.myskoda.log_description') }}</p>
+    <div class="form-actions" style="margin-bottom:12px">
+      <button type="button" id="ms-log-refresh">{{ t('settings.myskoda.log_refresh') }}</button>
+      <button type="button" id="ms-log-export" style="background:var(--accent2)">{{ t('settings.myskoda.log_export') }}</button>
+      <button type="button" id="ms-log-clear" style="background:var(--danger)">{{ t('settings.myskoda.log_clear') }}</button>
+    </div>
+<div class="tablewrap"><table><thead><tr><th>{{ t('settings.myskoda.log.table.time') }}</th><th>{{ t('settings.myskoda.log.table.event') }}</th><th>{{ t('settings.myskoda.log.table.state') }}</th><th>{{ t('settings.myskoda.log.table.soc') }}</th><th>{{ t('settings.myskoda.log.table.power') }}</th><th>{{ t('settings.myskoda.log.table.message') }}</th><th></th></tr></thead>
+<tbody id="ms-log-rows"></tbody></table></div>
+  </div>
+</details>
+
+<script>
+let vehicles = [];
+
+// Locale fuer Datumsformatierung an die aktive UI-Sprache gekoppelt statt
+// fest auf 'de-DE'.
+const LOCALE = {{ lang|default('de')|tojson }} === 'en' ? 'en-US' : 'de-DE';
+
+const T = {
+  msPollingOn: {{ t('settings.myskoda.polling_on')|tojson }},
+  msPollingOff: {{ t('settings.myskoda.polling_off')|tojson }},
+  msPleaseAddVehicle: {{ t('settings.myskoda.status.please_add_vehicle')|tojson }},
+  msStatusOk: {{ t('settings.myskoda.status.ok')|tojson }},
+  msStatusError: {{ t('settings.myskoda.status.error')|tojson }},
+  msStatusAuthError: {{ t('settings.myskoda.status.auth_error')|tojson }},
+  msStatusRateLimited: {{ t('settings.myskoda.status.rate_limited')|tojson }},
+  msStatusNever: {{ t('settings.myskoda.status.never')|tojson }},
+  msVehiclePrefix: {{ t('settings.myskoda.status.vehicle_prefix')|tojson }},
+  msCapturedPrefix: {{ t('settings.myskoda.status.captured_prefix')|tojson }},
+  msChargingRunning: {{ t('settings.myskoda.status.charging_running')|tojson }},
+  msSince: {{ t('settings.myskoda.status.since')|tojson }},
+  msChargeTypeUnknown: {{ t('settings.myskoda.status.charge_type_unknown')|tojson }},
+  msChargeTypePrefix: {{ t('settings.myskoda.status.charge_type_prefix')|tojson }},
+  msPollsSuffix: {{ t('settings.myskoda.status.polls_suffix')|tojson }},
+  msNextPollPrefix: {{ t('settings.myskoda.status.next_poll_prefix')|tojson }},
+  msNextPollSoon: {{ t('settings.myskoda.status.next_poll_soon')|tojson }},
+  msQuotaPrefix: {{ t('settings.myskoda.status.quota_prefix')|tojson }},
+  msQuotaOf: {{ t('settings.myskoda.status.quota_of')|tojson }},
+  msQuotaSuffix: {{ t('settings.myskoda.status.quota_suffix')|tojson }},
+  msQuotaReleasePrefix: {{ t('settings.myskoda.status.quota_release_prefix')|tojson }},
+  msExpiresPrefix: {{ t('settings.myskoda.status.expires_prefix')|tojson }},
+  msExpiresInDaysPrefix: {{ t('settings.myskoda.status.expires_in_days_prefix')|tojson }},
+  msExpiresInDaysSuffix: {{ t('settings.myskoda.status.expires_in_days_suffix')|tojson }},
+  msRelativeJustNow: {{ t('settings.myskoda.relative.just_now')|tojson }},
+  msRelativeMinutesPrefix: {{ t('settings.myskoda.relative.minutes_prefix')|tojson }},
+  msRelativeMinutesSuffix: {{ t('settings.myskoda.relative.minutes_suffix')|tojson }},
+  msRelativeHoursSuffix: {{ t('settings.myskoda.relative.hours_suffix')|tojson }},
+  msRelativeDaysSuffix: {{ t('settings.myskoda.relative.days_suffix')|tojson }},
+  msApikey: {{ t('settings.myskoda.apikey')|tojson }},
+  msApikeyPlaceholderSet: {{ t('settings.myskoda.apikey_placeholder_set')|tojson }},
+  msConfirmDelete: {{ t('settings.myskoda.confirm_delete')|tojson }},
+  msTestFailedPrefix: {{ t('settings.myskoda.test_failed_prefix')|tojson }},
+  msErrorPrefix: {{ t('settings.myskoda.error_prefix')|tojson }},
+  msTesting: {{ t('settings.myskoda.testing')|tojson }},
+  msPolling: {{ t('settings.myskoda.polling')|tojson }},
+  msLogNoEntries: {{ t('settings.myskoda.log.no_entries')|tojson }},
+  msLogRawLink: {{ t('settings.myskoda.log.raw_link')|tojson }},
+  msLogConfirmClear: {{ t('settings.myskoda.log_confirm_clear')|tojson }},
+};
+
+// ---------- MyŠkoda Public API ----------
+
+function msVehicleId() {
+  return document.getElementById('ms-vehicle').value;
+}
+
+// Der Server speichert naive UTC-Zeitstempel (wie ueberall in dieser App),
+// deshalb das angehaengte 'Z' vor der lokalen Formatierung.
+function msFmt(value) {
+  return value ? new Date(value + 'Z').toLocaleString(LOCALE) : '–';
+}
+
+function msFmtNum(value, digits = 1) {
+  if (value === null || value === undefined) return '–';
+  const formatted = value.toFixed(digits);
+  return LOCALE === 'de-DE' ? formatted.replace('.', ',') : formatted;
+}
+
+function msRelative(value) {
+  if (!value) return '';
+  const minutes = Math.round((Date.now() - new Date(value + 'Z').getTime()) / 60000);
+  if (minutes < 1) return T.msRelativeJustNow;
+  if (minutes < 60) return `${T.msRelativeMinutesPrefix}${minutes}${T.msRelativeMinutesSuffix}`;
+  const hours = Math.round(minutes / 60);
+  return hours < 48
+    ? `${T.msRelativeMinutesPrefix}${hours}${T.msRelativeHoursSuffix}`
+    : `${T.msRelativeMinutesPrefix}${Math.round(hours / 24)}${T.msRelativeDaysSuffix}`;
+}
+
+async function loadVehicles() {
+  vehicles = await (await fetch('api/vehicles')).json();
+  const select = document.getElementById('ms-vehicle');
+  const previous = select.value;
+  select.innerHTML = vehicles.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+  if (previous && vehicles.some(v => v.id === previous)) select.value = previous;
+}
+
+function renderMyskodaStatus(c) {
+  const el = document.getElementById('myskoda-status');
+  document.getElementById('ms-delete-btn').style.display = (c.has_api_key || c.vin) ? '' : 'none';
+
+  const labels = {
+    ok: T.msStatusOk,
+    error: T.msStatusError,
+    auth_error: T.msStatusAuthError,
+    rate_limited: T.msStatusRateLimited,
+  };
+  const colors = {
+    ok: 'var(--accent)', error: 'var(--danger)',
+    auth_error: 'var(--danger)', rate_limited: 'var(--warn)',
+  };
+  const lines = [];
+  const status = labels[c.last_status] || T.msStatusNever;
+  lines.push(`<strong style="color:${colors[c.last_status] || 'var(--muted)'}">${status}</strong>`
+    + (c.last_poll_at ? ` – ${msFmt(c.last_poll_at)} (${msRelative(c.last_poll_at)})` : ''));
+
+  if (c.last_error) lines.push(`<span style="color:var(--danger)">${c.last_error}</span>`);
+
+  if (c.last_charging_state) {
+    lines.push(`${T.msVehiclePrefix}<code>${c.last_charging_state}</code>`
+      + ` · SoC ${c.last_soc ?? '–'} %`
+      + `${T.msCapturedPrefix}${msFmt(c.last_captured_at)} (${msRelative(c.last_captured_at)})`);
+  }
+
+  if (c.open_start_time) {
+    lines.push(`<span style="color:var(--warn)">${T.msChargingRunning}</span>${T.msSince}${msFmt(c.open_start_time)}`
+      + ` · SoC ${c.open_soc_start ?? '–'} % → ${c.open_soc_last ?? '–'} %`
+      + ` · max. ${msFmtNum(c.open_max_power_kw)} kW`
+      + `${T.msChargeTypePrefix}${c.open_charging_type || T.msChargeTypeUnknown}`
+      + ` · ${c.open_poll_count}${T.msPollsSuffix}`);
+  }
+
+  if (c.enabled && c.next_poll_at) lines.push(`${T.msNextPollPrefix}${msFmt(c.next_poll_at)}`);
+  else if (c.enabled) lines.push(T.msNextPollSoon);
+
+  if (c.rate_limit_limit !== null || c.rate_limit_remaining !== null) {
+    const low = c.rate_limit_remaining !== null && c.rate_limit_remaining <= 3;
+    lines.push(`<span style="color:${low ? 'var(--warn)' : 'inherit'}">${T.msQuotaPrefix}`
+      + `${c.rate_limit_remaining ?? '?'}${T.msQuotaOf}${c.rate_limit_limit ?? '?'}${T.msQuotaSuffix}`
+      + (c.rate_limit_resets_at ? `${T.msQuotaReleasePrefix}${msFmt(c.rate_limit_resets_at)}` : '') + '</span>');
+  }
+
+  if (c.api_key_expires_at) {
+    const days = Math.round((new Date(c.api_key_expires_at + 'Z').getTime() - Date.now()) / 86400000);
+    const color = days <= 14 ? 'var(--danger)' : (days <= 30 ? 'var(--warn)' : 'inherit');
+    lines.push(`<span style="color:${color}">${T.msExpiresPrefix}${msFmt(c.api_key_expires_at)}`
+      + `${T.msExpiresInDaysPrefix}${days}${T.msExpiresInDaysSuffix}</span>`);
+  }
+
+  el.innerHTML = lines.join('<br>');
+  el.style.color = 'var(--muted)';
+}
+
+async function loadMyskodaConfig() {
+  const vehicleId = msVehicleId();
+  if (!vehicleId) {
+    document.getElementById('myskoda-status').textContent = T.msPleaseAddVehicle;
+    return;
+  }
+  const c = await (await fetch(`api/myskoda/configs/${vehicleId}`)).json();
+  document.getElementById('ms-enabled').checked = c.enabled;
+  msRenderEnabledState();
+  document.getElementById('ms-apikey').value = '';
+  document.getElementById('ms-apikey').placeholder = c.has_api_key
+    ? T.msApikeyPlaceholderSet : T.msApikey;
+  document.getElementById('ms-vin').value = c.vin || '';
+  document.getElementById('ms-idle').value = c.poll_interval_idle_minutes;
+  document.getElementById('ms-active').value = c.poll_interval_active_minutes;
+  document.getElementById('ms-missed').checked = c.detect_missed_sessions;
+  document.getElementById('ms-missed-delta').value = c.missed_session_min_soc_delta;
+  document.getElementById('ms-backdate').checked = c.backdate_session_start;
+  document.getElementById('ms-backdate-gap').value = c.backdate_max_gap_minutes;
+  document.getElementById('ms-log').checked = c.log_enabled;
+  document.getElementById('ms-log-raw').checked = c.log_raw_payload;
+  document.getElementById('myskoda-test-result').style.display = 'none';
+  renderMyskodaStatus(c);
+  await loadMyskodaLog();
+}
+
+// Zugeklappt kostet das Protokoll nichts: der Abruf entfaellt, bis jemand das
+// Panel oeffnet. Beim Fahrzeugwechsel wird der Inhalt geleert, damit nicht die
+// Zeilen des vorherigen Fahrzeugs stehenbleiben.
+async function loadMyskodaLog() {
+  const panel = document.getElementById('ms-log-panel');
+  const vehicleId = msVehicleId();
+  const rows = document.getElementById('ms-log-rows');
+  if (!vehicleId) { rows.innerHTML = ''; return; }
+  if (!panel.open) { rows.innerHTML = ''; return; }
+  const entries = await (await fetch(`api/myskoda/logs?vehicle_id=${vehicleId}&limit=200`)).json();
+  if (!entries.length) {
+    rows.innerHTML = `<tr><td colspan="7" style="color:var(--muted)">${T.msLogNoEntries}</td></tr>`;
+    return;
+  }
+  const levelColor = { error: 'var(--danger)', warning: 'var(--warn)' };
+  rows.innerHTML = entries.map(e => `
+    <tr>
+      <td style="white-space:nowrap">${msFmt(e.created_at)}</td>
+      <td><code>${e.event}</code></td>
+      <td>${e.charging_state || '–'}</td>
+      <td>${e.soc_percent ?? '–'}</td>
+      <td>${e.charge_power_kw === null ? '–' : msFmtNum(e.charge_power_kw) + ' kW'}</td>
+      <td style="color:${levelColor[e.level] || 'inherit'}">${e.message}</td>
+      <td>${e.has_payload
+        ? `<a href="api/myskoda/logs/${e.id}/payload" target="_blank" rel="noopener">${T.msLogRawLink}</a>`
+        : ''}</td>
+    </tr>`).join('');
+}
+
+function msRenderEnabledState() {
+  const on = document.getElementById('ms-enabled').checked;
+  document.getElementById('ms-enabled-state').textContent = on ? T.msPollingOn : T.msPollingOff;
+}
+
+// Der Schalter speichert sofort, statt wie die uebrigen Formularfelder auf
+// "Speichern" zu warten - er sieht aus wie ein Schalter, also soll er auch
+// wie einer wirken. Schlaegt das Speichern fehl (z.B. Aktivieren ohne
+// API-Key, was der Server mit 422 ablehnt), springt er in seine alte
+// Stellung zurueck.
+document.getElementById('ms-enabled').addEventListener('change', async (e) => {
+  msRenderEnabledState();
+  const config = await msSaveConfig();
+  if (!config) {
+    e.target.checked = !e.target.checked;
+    msRenderEnabledState();
+    return;
+  }
+  renderMyskodaStatus(config);
+});
+
+document.getElementById('ms-vehicle').addEventListener('change', loadMyskodaConfig);
+
+function msBuildPayload() {
+  return {
+    enabled: document.getElementById('ms-enabled').checked,
+    api_key: document.getElementById('ms-apikey').value || null,
+    vin: document.getElementById('ms-vin').value || null,
+    poll_interval_idle_minutes: parseInt(document.getElementById('ms-idle').value || 20),
+    poll_interval_active_minutes: parseInt(document.getElementById('ms-active').value || 5),
+    detect_missed_sessions: document.getElementById('ms-missed').checked,
+    missed_session_min_soc_delta: parseInt(document.getElementById('ms-missed-delta').value || 5),
+    backdate_session_start: document.getElementById('ms-backdate').checked,
+    // 0 = automatisch (2x Leerlaufintervall), deshalb || 0 statt eines Defaults
+    backdate_max_gap_minutes: parseInt(document.getElementById('ms-backdate-gap').value || 0),
+    log_enabled: document.getElementById('ms-log').checked,
+    log_raw_payload: document.getElementById('ms-log-raw').checked,
+  };
+}
+
+// Speichert die aktuell im Formular stehenden Werte - genutzt sowohl vom
+// Speichern-Button als auch VOR "Verbindung testen"/"Jetzt abfragen": beide
+// lesen serverseitig nur die bereits gespeicherte Konfiguration, nicht die
+// gerade getippten Formularfelder. Ohne dieses Auto-Speichern liefe man beim
+// erstmaligen Einrichten leicht in "Bitte zuerst API-Key und FIN eintragen
+// und speichern", weil Testen/Abfragen in der Button-Reihenfolge vor
+// Speichern stehen und naheliegend zuerst angeklickt werden.
+async function msSaveConfig() {
+  const res = await fetch(`api/myskoda/configs/${msVehicleId()}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(msBuildPayload())
+  });
+  if (!res.ok) { alert(T.msErrorPrefix + await res.text()); return null; }
+  return await res.json();
+}
+
+document.getElementById('myskoda-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!(await msSaveConfig())) return;
+  await loadMyskodaConfig();
+});
+
+async function msRunAction(btnId, url, label) {
+  const btn = document.getElementById(btnId);
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = label;
+  try {
+    const res = await fetch(url, { method: 'POST' });
+    if (!res.ok) { alert(T.msErrorPrefix + await res.text()); return null; }
+    return await res.json();
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+}
+
+document.getElementById('ms-test-btn').addEventListener('click', async () => {
+  if (!(await msSaveConfig())) return;
+  const result = await msRunAction('ms-test-btn', `api/myskoda/configs/${msVehicleId()}/test`, T.msTesting);
+  if (!result) return;
+  const box = document.getElementById('myskoda-test-result');
+  box.style.display = 'block';
+  box.textContent = result.ok
+    ? JSON.stringify(result.summary, null, 2)
+    : T.msTestFailedPrefix + result.error;
+  box.style.color = result.ok ? 'var(--text)' : 'var(--danger)';
+  renderMyskodaStatus(result.config);
+  await loadMyskodaLog();
+});
+
+document.getElementById('ms-poll-btn').addEventListener('click', async () => {
+  if (!(await msSaveConfig())) return;
+  const config = await msRunAction('ms-poll-btn', `api/myskoda/configs/${msVehicleId()}/poll`, T.msPolling);
+  if (!config) return;
+  renderMyskodaStatus(config);
+  await loadMyskodaLog();
+});
+
+document.getElementById('ms-delete-btn').addEventListener('click', async () => {
+  if (!confirm(T.msConfirmDelete)) return;
+  const res = await fetch(`api/myskoda/configs/${msVehicleId()}`, { method: 'DELETE' });
+  if (!res.ok) { alert(T.msErrorPrefix + await res.text()); return; }
+  await loadMyskodaConfig();
+});
+
+document.getElementById('ms-log-refresh').addEventListener('click', loadMyskodaLog);
+document.getElementById('ms-log-panel').addEventListener('toggle', () => {
+  if (document.getElementById('ms-log-panel').open) loadMyskodaLog();
+});
+
+document.getElementById('ms-log-export').addEventListener('click', () => {
+  window.location = `api/myskoda/logs/export?vehicle_id=${msVehicleId()}`;
+});
+
+document.getElementById('ms-log-clear').addEventListener('click', async () => {
+  if (!confirm(T.msLogConfirmClear)) return;
+  const res = await fetch(`api/myskoda/logs?vehicle_id=${msVehicleId()}`, { method: 'DELETE' });
+  if (!res.ok) { alert(T.msErrorPrefix + await res.text()); return; }
+  await loadMyskodaLog();
+});
+
+(async () => {
+  await loadVehicles();
+  msRenderEnabledState();
+  await loadMyskodaConfig();
+})();
+</script>
+{% endblock %}

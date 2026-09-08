@@ -46,8 +46,9 @@ backend/app/
   auth.py            - Passwort-Hashing, Token-Handling, Auth-Dependencies
   myskoda.py         - Client fuer die offizielle MyŠkoda Public API (sync httpx)
   myskoda_poller.py  - Zustandsmaschine der automatischen Ladeerkennung + Debug-Log
-  templates/          - Jinja2 Web-UI (index=Dashboard, sessions, import, settings)
-  static/style.css
+  templates/          - Jinja2 Web-UI (index=Dashboard, sessions, settings +
+                          die Unterseiten import, settings_backup, settings_api)
+  static/style.css, static/filter.js, static/ui.js
 ios/Lademonitor/
   Models/Models.swift          - Swift-Pendant zu schemas.py
   Networking/APIClient.swift, AppSettings.swift
@@ -565,7 +566,9 @@ Bis dahin gab es **keine einzige Media Query** - die Oberflaeche war rein fuer
 den Desktop gebaut und auf dem Handy praktisch unbenutzbar (Navigationsleiste
 zu breit, die zwoelfspaltige Ladevorgangs-Tabelle weit ausserhalb des
 Viewports). Ein Breakpoint bei **720 px**, mehr nicht - bewusst kein
-Framework und kein zweiter Breakpoint, die App hat vier Seiten.
+Framework und kein zweiter Breakpoint, die App hat eine Handvoll Seiten.
+(Aufbau und Navigation dieser Seiten haben sich mit v0.13.0 geaendert - siehe
+den Abschnitt "Web-UI: Seitenaufbau und Navigation" weiter unten.)
 
 **Navigation:** Die Links liegen in einem `.navlinks`-Container mit
 `display: contents`. Auf dem Desktop ist das ein No-op - die `.topnav` bleibt
@@ -600,11 +603,14 @@ Abschnitte. Zwei Muster:
 
 - `details.panel.plain` uebernimmt eine bestehende Abschnittsueberschrift als
   `<summary>` - in den Einstellungen tragen die `<h2 id="*-form-heading">`
-  ohnehin schon den Wechsel zwischen "Fahrzeuge" und "Fahrzeug bearbeiten",
-  sie wurden nur zu `<summary>`. Jede `startEdit*()`-Funktion setzt
-  `panel.open = true`, sonst scrollt das Bearbeiten ins Leere.
-- Das MyŠkoda-Debug-Protokoll laedt seine 200 Zeilen erst beim Aufklappen
-  (`toggle`-Listener); zugeklappt entfaellt der API-Aufruf ganz.
+  ohnehin schon den Wechsel zwischen "Fahrzeug anlegen" und "Fahrzeug
+  bearbeiten", sie wurden nur zu `<summary>`. Jede `startEdit*()`-Funktion
+  setzt `panel.open = true`, sonst scrollt das Bearbeiten ins Leere (seit
+  v0.13.0 liegt dieses Panel geschachtelt in einem Abschnitts-Panel, es
+  muessen also beide geoeffnet werden - siehe `openForEdit()`).
+- Das MyŠkoda-Debug-Protokoll (seit v0.13.0 auf der Unterseite `api-debug`)
+  laedt seine 200 Zeilen erst beim Aufklappen (`toggle`-Listener); zugeklappt
+  entfaellt der API-Aufruf ganz.
 
 Der Ausgangszustand des Ladevorgangs-Formulars haengt an der Breite
 (`setupFormPanel()`, nur beim Laden) - wer danach selbst auf- oder zuklappt,
@@ -631,6 +637,50 @@ Datei liefern.
 
 Messbar: Einstellungen auf 375 px von 4322 px auf 2568 px Seitenhoehe, keine
 horizontale Ueberlaeufe mehr auf irgendeiner Seite in beiden Sprachen.
+
+## Web-UI: Seitenaufbau und Navigation (ab 2026-09-08, v0.13.0)
+
+**Hauptleiste: Dashboard, Ladevorgaenge, Einstellungen.** Der Import ist von
+dort verschwunden - er wird einmal beim Umstieg von Spritmonitor gebraucht und
+belegte dauerhaft einen von vier Plaetzen.
+
+**Die Einstellungen sind eine Uebersichtsseite**, kein Fliesstext mehr. Jeder
+Bereich ist ein `details.panel`, das **Liste UND Anlege-Formular** enthaelt
+(vorher klappte nur das Formular, die Tabelle stand immer sichtbar darueber -
+allein die drei Tabellen fuellten die halbe Seite, auch wenn man nur die
+Sprache umstellen wollte). Innen liegt das Formular als zweites, geschachteltes
+`details.panel.plain`. Jede `startEdit*()`-Funktion muss deshalb **beide**
+Ebenen oeffnen (`openForEdit()`), sonst scrollt das Bearbeiten ins Leere. Der
+Zaehler im `<summary>` (`.count`) zeigt zugeklappt, wie viele Eintraege
+drinstehen. Messbar: Seitenhoehe von 2136 px auf 604 px (Desktop) bzw. von
+2774 px auf 783 px (375 px breit).
+
+**Drei Unterseiten** statt weiterer Klappabschnitte, weil jede fuer sich schon
+eine Seite ist (Vorschau-Tabelle, drei Formulare, Debug-Protokoll):
+`import` (Spritmonitor), `backup` (Daten-Backup + Backup-Import +
+WebDAV-Backup, `settings_backup.html`) und `api-debug`
+(MyŠkoda-Konfiguration + Debug-Protokoll, `settings_api.html`). Einstieg ueber
+`.subpage`-Kacheln in den Einstellungen, Rueckweg ueber einen `.backlink` oben
+auf jeder Unterseite.
+
+**Die Pfade liegen bewusst auf oberster Ebene und NICHT unter `/settings/...`**
+- alle Links und `fetch()`-Aufrufe sind relativ (siehe Ingress-Abschnitt oben),
+das loest nur richtig auf, solange jede Seite genau EINE Ebene unter der Basis
+liegt. `/backup` kollidiert nicht mit dem Backup-Router, der unter
+`/api/backup` haengt.
+
+**Aktionsspalten sind Icon-Knoepfe** (`static/ui.js`: `editDeleteButtons()`,
+`iconButton()`), Beschriftung nur noch als `title`/`aria-label`. Grund: die
+beschrifteten Knoepfe "Bearbeiten"/"Löschen" waren mit ~200 px die breiteste
+Spalte der zwoelfspaltigen Ladevorgangs-Tabelle; die lief dadurch bei JEDER
+Fensterbreite um ~130 px aus dem Container heraus, weil `.container` fest auf
+1100 px begrenzt ist. Zweiter Teil der Loesung: die Ladevorgangs-Seite darf
+ueber den neuen `container_class`-Block in `base.html` bis 1500 px breit werden
+(`.container.wide`) - nur diese eine Seite, auf Dashboard und Einstellungen
+liest sich schmaler besser. Seitdem ab 1100 px Fensterbreite kein horizontaler
+Ueberlauf mehr. Inline-SVG statt Emoji, weil Emoji je nach Plattform in Groesse
+und Farbe auseinanderlaufen; `currentColor` laesst die Icons der Textfarbe des
+Knopfes folgen.
 
 ## Backup-Export/-Import (`routers/backup.py`)
 
