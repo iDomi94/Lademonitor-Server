@@ -6,6 +6,24 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.14.1] — 2026-09-08
+
+### Changed
+- **`PUT /api/auth/password` gibt den neuen Token zurück** (`{token, user}` mit
+  Status 200) statt eines leeren 204.
+
+  Der Wechsel beendet weiterhin alle Sitzungen des Nutzers und stellt sofort
+  eine neue aus – die wurde bisher aber nur als Cookie gesetzt, half also
+  ausschließlich der Web-Oberfläche. Ein Client, der sich per
+  `Authorization: Bearer` anmeldet (die iOS-App, Home Assistant), hatte seinen
+  Token gerade selbst ungültig gemacht, bekam keinen neuen und war beim
+  nächsten Aufruf abgemeldet: er musste sich mit dem neuen Passwort ein zweites
+  Mal anmelden, obwohl der Server die Sitzung längst erzeugt hatte.
+
+  Für die Web-Oberfläche ändert sich nichts – sie liest nur den Status und
+  fährt mit dem Cookie weiter. Und weil 200 wie 204 ein Erfolg ist, läuft auch
+  ein Client weiter, der die Antwort gar nicht ausliest.
+
 ## [0.14.0] — 2026-09-08
 
 ### Added

@@ -286,7 +286,7 @@ def delete_user(
 # Eigenes Konto: Passwort, E-Mail-Adresse, Benachrichtigungen
 # ---------------------------------------------------------------------------
 
-@router.put("/password", status_code=204)
+@router.put("/password", response_model=schemas.LoginResponse)
 def change_own_password(
     payload: schemas.PasswordChange,
     request: Request,
@@ -300,8 +300,19 @@ def change_own_password(
     Danach werden alle anderen Sitzungen beendet und eine frische ausgestellt:
     ein Passwortwechsel erfolgt haeufig genau deshalb, weil eine fremde Sitzung
     im Verdacht steht. Achtung, dieselbe Konsequenz wie beim Zuruecksetzen -
-    der Home-Assistant-Token und die iOS-Anmeldung muessen neu eingetragen
-    werden."""
+    der Home-Assistant-Token muss neu eingetragen werden.
+
+    **Gibt den neuen Token zurueck** (wie Login und Registrierung), statt wie
+    bis 0.14.0 mit einem leeren 204 zu antworten. Der Grund: die frische
+    Sitzung wurde nur als Cookie ausgestellt, was allein der Web-Oberflaeche
+    hilft. Ein Bearer-Client (iOS-App, Home Assistant) hatte seinen Token
+    gerade selbst ungueltig gemacht, bekam keinen neuen und war beim naechsten
+    Aufruf abgemeldet - er musste sich mit dem neuen Passwort noch einmal
+    anmelden, obwohl der Server die Sitzung bereits erzeugt hatte.
+
+    Fuer die Web-Oberflaeche aendert sich nichts, die liest weiterhin nur den
+    Status und faehrt mit dem Cookie. Und weil 200 wie 204 ein Erfolg ist,
+    laeuft auch ein Client weiter, der die Antwort gar nicht ausliest."""
     if not verify_password(payload.current_password, user.password_hash):
         raise HTTPException(403, "Aktuelles Passwort ist falsch")
     if len(payload.new_password) < MIN_PASSWORD_LENGTH:
@@ -318,7 +329,9 @@ def change_own_password(
     ).update({models.UserToken.used_at: datetime.utcnow()}, synchronize_session=False)
     db.commit()
 
-    _issue_session(db, request, response, user)
+    token = _issue_session(db, request, response, user)
+    db.refresh(user)
+    return schemas.LoginResponse(token=token, user=user)
 
 
 @router.put("/email", response_model=schemas.UserOut)

@@ -5,6 +5,15 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.14.1",
+        "date": "2026-09-08",
+        "title": "Passwortwechsel gibt den neuen Zugang direkt zurueck",
+        "changes": [
+            "Beim Aendern des eigenen Passworts meldet der Server weiterhin alle Geraete ab und stellt sofort eine neue Sitzung aus - die gab es bisher aber nur als Cookie, also nur fuer die Web-Oberflaeche. Die iOS-App und andere Clients, die sich mit einem Token anmelden, standen danach ohne gueltigen Zugang da und mussten sich mit dem neuen Passwort ein zweites Mal anmelden, obwohl der Server die Sitzung schon erzeugt hatte.",
+            "Der Endpunkt gibt den neuen Token jetzt zurueck, genau wie Anmeldung und Registrierung. Fuer die Web-Oberflaeche aendert sich nichts.",
+        ],
+    },
+    {
         "version": "0.14.0",
         "date": "2026-09-08",
         "title": "E-Mail: Passwort vergessen, Einladungen und Benachrichtigungen",

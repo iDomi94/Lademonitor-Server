@@ -781,8 +781,17 @@ Hand gegeben.
 **Beim Einloesen werden ALLE `auth_tokens` des Nutzers geloescht** (ebenso beim
 eigenen Passwortwechsel). Waere das Konto uebernommen worden, liefe die fremde
 Sitzung sonst weiter. Konsequenz in genau dieser App: der
-HA-`rest_command`-Token und die iOS-Anmeldung sterben mit - darauf weisen Mail,
-Bestaetigungsseite und Einstellungen ausdruecklich hin. Die saubere Alternative
+HA-`rest_command`-Token stirbt mit - darauf weisen Mail, Bestaetigungsseite und
+Einstellungen ausdruecklich hin.
+
+**Seit 0.14.1 gibt `PUT /api/auth/password` den neuen Token zurueck** (200 mit
+`{token, user}` statt 204). Die frische Sitzung wurde vorher nur als Cookie
+ausgestellt, was allein der Web-Oberflaeche half; ein Bearer-Client hatte seinen
+Token gerade selbst entwertet, bekam keinen neuen und musste sich mit dem neuen
+Passwort ein zweites Mal anmelden, obwohl die Sitzung serverseitig schon
+existierte. Beim ZURUECKSETZEN bleibt es bewusst bei 204 ohne Token: dort ist
+der Aufrufer per Definition nicht angemeldet, ein Token in der Antwort wuerde
+den Reset-Link zu einem vollwertigen Anmeldeweg machen. Die saubere Alternative
 waeren typisierte, benannte API-Tokens (`kind: session | api`), die einen Reset
 ueberleben - eine eigene Baustelle, bewusst nicht hier mit reingezogen.
 
