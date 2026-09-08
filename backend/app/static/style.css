@@ -69,6 +69,13 @@ body {
   padding: 24px;
 }
 
+/* Die Ladevorgangs-Tabelle hat zwoelf Spalten und passte auch nach dem
+   Verschlanken der Aktionsspalte nicht in die 1100 px, die fuer Dashboard und
+   Einstellungen genau richtig sind - dort waere die volle Fensterbreite
+   dagegen unangenehm zu lesen. Deshalb nur diese eine Seite breiter, und auch
+   das nur so weit, wie das Fenster hergibt. */
+.container.wide { max-width: 1500px; }
+
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -169,6 +176,40 @@ button {
 button:hover { opacity: 0.9; }
 
 .form-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; }
+
+/* --------------------------------------------------------------------------
+   Aktionsspalte der Tabellen
+
+   Vorher zwei beschriftete Knoepfe ("Bearbeiten"/"Löschen") - zusammen gut
+   200 px und damit die breiteste Spalte der Ladevorgangs-Tabelle. Jetzt zwei
+   quadratische Icon-Knoepfe (~76 px inkl. Abstand): flaechig gefaerbt waeren
+   sie in einer langen Liste das auffaelligste Element, deshalb nur Rahmen und
+   Faerbung beim Draufzeigen - dieselbe Zurueckhaltung wie beim Loeschen auf
+   den Ladevorgangs-Karten.
+   -------------------------------------------------------------------------- */
+.row-actions { display: flex; gap: 6px; justify-content: flex-end; }
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.icon-btn:hover { opacity: 1; }
+.icon-btn.edit:hover { color: var(--accent2); border-color: var(--accent2); }
+.icon-btn.danger:hover { color: var(--danger); border-color: var(--danger); }
+.icon-btn:focus-visible { outline: 2px solid var(--accent2); outline-offset: 2px; }
+
+/* `width: 1%` zwingt die automatische Tabellenbreite, dieser Spalte nur so
+   viel zu geben, wie ihr Inhalt braucht - der uebrige Platz geht an die
+   Textspalten statt an eine Aktionsspalte, die ohnehin nur zwei Icons haelt. */
+th.col-actions, td.col-actions { width: 1%; white-space: nowrap; }
 
 h1 { font-size: 22px; margin-bottom: 20px; }
 h2 { font-size: 16px; color: var(--muted); margin: 24px 0 12px; }
@@ -385,6 +426,65 @@ details.help > .inner, details.panel > .inner {
 details.help > .inner { color: var(--muted); font-size: 0.9em; }
 details.panel > summary { font-size: 15px; color: var(--text); }
 
+/* Ein aufklappbarer Abschnitt kann jetzt einen ganzen Bereich der
+   Einstellungen enthalten (Liste UND Anlege-Formular). Das Formular ist darin
+   ein zweites, eigenes <details> - geschachtelt braucht es weniger Luft nach
+   oben als ein Abschnitt auf oberster Ebene. */
+details.panel > .inner > details.panel.plain > summary { padding: 4px 0 12px; font-size: 14px; }
+details.panel > .inner > details.panel.plain > summary::before { font-size: 9px; }
+/* Der Zaehler hinter dem Abschnittsnamen ("Fahrzeuge 3") - macht zugeklappt
+   sichtbar, ob ueberhaupt etwas drinsteht. */
+details.panel > summary .count {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --------------------------------------------------------------------------
+   Unterseiten-Kacheln (Einstellungen -> Import / Backup / API & Debug)
+
+   Diese drei Bereiche sind jeweils fuer sich schon eine Seite: der Import hat
+   eine Vorschau-Tabelle, das Backup drei Formulare, die API-Seite ein
+   Debug-Protokoll. Als weitere Klappabschnitte in den Einstellungen waeren sie
+   nur schwerer zu finden, deshalb echte Seiten mit einer Kachel als Einstieg.
+   -------------------------------------------------------------------------- */
+.subpages {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.subpage {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  text-decoration: none;
+  color: var(--text);
+}
+.subpage:hover { border-color: var(--accent2); }
+.subpage .ic { font-size: 20px; line-height: 1.2; }
+.subpage strong { display: block; font-size: 15px; }
+.subpage small { display: block; margin-top: 4px; color: var(--muted); font-size: 12px; }
+
+/* Rueckweg von einer Unterseite. Relativer Pfad wie ueberall sonst (siehe
+   main.py::_page) - alle Seiten liegen genau eine Ebene unter der Basis,
+   damit funktioniert das unter dem Home-Assistant-Ingress-Unterpfad genauso
+   wie am Domain-Root. */
+.backlink {
+  display: inline-block;
+  margin-bottom: 12px;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 13px;
+}
+.backlink:hover { color: var(--accent2); }
+
 /* Tabellen laufen sonst aus dem Viewport (die Ladeorte-Tabelle hat fuenf
    Spalten mit Koordinaten). Der Wrapper scrollt statt die Seite zu dehnen. */
 .tablewrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
@@ -453,11 +553,14 @@ details.panel > summary { font-size: 15px; color: var(--text); }
    beim Draufzeigen; die Sicherheitsabfrage haengt ohnehin davor. */
 .scard .sactions { margin-top: auto; padding-top: 6px; }
 .scard .sactions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: transparent;
   color: var(--muted);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 2px 8px;
+  padding: 5px 9px;
   font-size: 15px;
   font-weight: 400;
   line-height: 1.2;
@@ -558,6 +661,11 @@ details.panel > summary { font-size: 15px; color: var(--text); }
      Teil und schrumpfen mit. */
   .tablewrap th, .tablewrap td { padding: 8px 8px; }
   .tablewrap td button { padding: 6px 10px; font-size: 12px; }
+  /* Icon-Knoepfe bleiben quadratisch und fingergerecht - die Regel darueber
+     zielt auf beschriftete Knoepfe. */
+  .tablewrap td .icon-btn { width: 34px; height: 34px; padding: 0; }
+
+  .subpages { grid-template-columns: 1fr; }
 
   .filter-row input[type="date"] { flex: 1 1 45%; }
   .modal { padding: 12px; }

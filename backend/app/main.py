@@ -183,6 +183,23 @@ def settings_page(request: Request, db: Session = Depends(get_db)):
     return _page(request, db, "settings.html")
 
 
+# Unterseiten der Einstellungen (Backup, API/Debug). Die Pfade liegen bewusst
+# auf oberster Ebene und NICHT unter /settings/...: alle Links und
+# fetch()-Aufrufe der Templates sind relativ, damit sie unter dem
+# Home-Assistant-Ingress-Unterpfad genauso aufloesen wie am Domain-Root - das
+# funktioniert nur, solange jede Seite genau eine Ebene unter der Basis liegt
+# (siehe den Kommentar zur Ingress-Umstellung in CLAUDE.md). "/backup" kollidiert
+# nicht mit dem Backup-Router, der unter "/api/backup" haengt.
+@app.get("/backup", response_class=HTMLResponse)
+def backup_page(request: Request, db: Session = Depends(get_db)):
+    return _page(request, db, "settings_backup.html")
+
+
+@app.get("/api-debug", response_class=HTMLResponse)
+def api_debug_page(request: Request, db: Session = Depends(get_db)):
+    return _page(request, db, "settings_api.html")
+
+
 @app.get("/login", response_class=HTMLResponse)
 def login_page(request: Request, db: Session = Depends(get_db)):
     if get_user_from_request(request, db):

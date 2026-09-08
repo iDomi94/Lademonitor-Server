@@ -5,6 +5,18 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.13.0",
+        "date": "2026-09-08",
+        "title": "Ladevorgangs-Tabelle passt aufs Bild, Einstellungen aufgeraeumt",
+        "changes": [
+            "Die Ladevorgangs-Liste musste am Rechner seitlich geschoben werden, egal wie breit das Fenster war - der Seiteninhalt war fest auf 1100 px begrenzt, die zwoelfspaltige Tabelle brauchte rund 1180 px. Die Liste darf jetzt bis 1500 px breit werden (die uebrigen Seiten bleiben bei 1100 px, dort liest sich schmaler besser), und die Aktionsspalte ist deutlich schlanker: statt der beschrifteten Knoepfe \"Bearbeiten\"/\"Löschen\" stehen dort zwei Icon-Knoepfe (Stift und Papierkorb) mit Beschriftung als Tooltip. Zusammen passt die Tabelle ab 1100 px Fensterbreite vollstaendig ins Bild.",
+            "Dieselben Icon-Knoepfe gibt es jetzt auch in den Tabellen der Einstellungen (Fahrzeuge, Anbieter, Ladeorte, Benutzerverwaltung) und auf den Ladevorgangs-Karten der Handy-Ansicht.",
+            "Die Einstellungen sind eine Uebersichtsseite geworden: Fahrzeuge, Ladeanbieter, Bekannte Ladeorte, Sprache und Benutzerverwaltung sind aufklappbare Abschnitte, die jeweils LISTE UND ANLEGE-FORMULAR enthalten - vorher waren die drei Tabellen immer sichtbar. Der Zaehler am Abschnittsnamen zeigt zugeklappt, wie viele Eintraege drinstehen. Die Seite ist damit am Rechner von 2136 px auf 604 px und auf dem Handy von 2774 px auf 783 px Hoehe geschrumpft.",
+            "Import, Backup und die API-Einrichtung sind eigene Unterseiten und ueber Kacheln in den Einstellungen erreichbar. \"Backup\" fasst Daten-Backup, Backup-Import und das automatische WebDAV-Backup zusammen, \"API & Debug\" die MyŠkoda-Konfiguration samt Debug-Protokoll.",
+            "Der Import ist dafuer aus der Hauptleiste verschwunden - er wird einmal beim Umstieg von Spritmonitor gebraucht und belegte dauerhaft einen von vier Plaetzen. Jede Unterseite hat oben einen Rueckweg in die Einstellungen.",
+        ],
+    },
+    {
         "version": "0.12.1",
         "date": "2026-09-06",
         "title": "Handy-Ansicht kam nicht an (alte CSS aus dem Browser-Cache)",

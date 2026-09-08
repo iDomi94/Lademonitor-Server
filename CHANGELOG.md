@@ -6,6 +6,55 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.13.0] — 2026-09-08
+
+### Fixed
+- **Die Ladevorgangs-Tabelle musste am Rechner seitlich geschoben werden – bei
+  jeder Fensterbreite.** Der Seiteninhalt ist auf 1100 px begrenzt (`.container`),
+  die zwölf Spalten brauchten rund 1180 px; der `.tablewrap` scrollte also
+  konstant um ~130 px, auch auf einem 1920-px-Bildschirm. Zwei Ursachen, zwei
+  Gegenmaßnahmen:
+  - Die Ladevorgangs-Seite darf bis 1500 px breit werden (`.container.wide`).
+    Nur diese eine Seite – Dashboard und Einstellungen bleiben bei 1100 px,
+    dort ist die volle Fensterbreite unangenehm zu lesen.
+  - Die Aktionsspalte war mit den beschrifteten Knöpfen "Bearbeiten"/"Löschen"
+    die breiteste Spalte der Tabelle (~200 px). Jetzt zwei quadratische
+    Icon-Knöpfe (Stift/Papierkorb, ~76 px), Beschriftung als `title`/`aria-label`.
+
+  Ergebnis: ab 1100 px Fensterbreite kein horizontaler Überlauf mehr (vorher
+  128 px bei jeder Breite).
+
+### Changed
+- **Icon-Knöpfe in allen per JS gerenderten Tabellen** – Ladevorgänge,
+  Fahrzeuge, Anbieter, Ladeorte, Benutzerverwaltung – sowie auf den
+  Ladevorgangs-Karten der Handy-Ansicht. Inline-SVG statt Emoji
+  (`static/ui.js`), weil Emoji je nach Plattform in Größe und Farbe
+  auseinanderlaufen; `currentColor` lässt die Icons der Textfarbe des Knopfes
+  folgen. Flächig gefärbt wären sie in einer langen Liste das auffälligste
+  Element, deshalb nur Rahmen und Färbung beim Draufzeigen – dieselbe
+  Zurückhaltung wie beim Löschen auf den Karten.
+- **Die Einstellungen sind eine Übersichtsseite geworden.** Fahrzeuge,
+  Ladeanbieter, Bekannte Ladeorte, Sprache und Benutzerverwaltung sind
+  aufklappbare Abschnitte, die **Liste und Anlege-Formular gemeinsam**
+  enthalten – vorher klappte nur das Formular, die Tabelle stand immer
+  sichtbar darüber. Ein Zähler am Abschnittsnamen zeigt zugeklappt, wie viele
+  Einträge drinstehen. "Bearbeiten" öffnet beide Ebenen, sonst scrollt es ins
+  Leere.
+
+  Messbar: Seitenhöhe am Rechner von 2136 px auf 604 px, auf dem Handy
+  (375 px) von 2774 px auf 783 px.
+- **Import, Backup und API-Einrichtung sind eigene Unterseiten**, erreichbar
+  über Kacheln in den Einstellungen. "Backup" (`/backup`) fasst Daten-Backup,
+  Backup-Import und das automatische WebDAV-Backup zusammen, "API & Debug"
+  (`/api-debug`) die MyŠkoda-Konfiguration samt Debug-Protokoll. Die Pfade
+  liegen bewusst auf oberster Ebene und **nicht** unter `/settings/...`: alle
+  Links und `fetch()`-Aufrufe der App sind relativ, damit sie unter dem
+  Home-Assistant-Ingress-Unterpfad genauso auflösen wie am Domain-Root – das
+  funktioniert nur, solange jede Seite genau eine Ebene unter der Basis liegt.
+- **Der Import ist aus der Hauptleiste verschwunden.** Er wird einmal beim
+  Umstieg von Spritmonitor gebraucht und belegte dauerhaft einen von vier
+  Plätzen. Jede Unterseite trägt oben einen Rückweg in die Einstellungen.
+
 ## [0.12.1] — 2026-09-06
 
 ### Fixed

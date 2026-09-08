@@ -1,4 +1,7 @@
 {% extends "base.html" %}
+{# Zwoelf Spalten passen nicht in die 1100 px Standardbreite - diese eine
+   Seite darf breiter werden, siehe .container.wide in style.css. #}
+{% block container_class %}wide{% endblock %}
 {% block content %}
 <h1>{{ t('sessions.heading') }}</h1>
 
@@ -81,7 +84,7 @@
     <thead>
       <tr>
         <th class="col-datetime">{{ t('sessions.table.date') }}</th><th>{{ t('sessions.table.vehicle') }}</th><th>{{ t('sessions.table.provider') }}</th><th>{{ t('sessions.table.location') }}</th><th>{{ t('sessions.table.type') }}</th><th>{{ t('sessions.table.soc') }}</th><th>{{ t('sessions.table.kwh') }}</th>
-        <th>{{ t('sessions.table.price') }}</th><th>{{ t('sessions.table.odometer') }}</th><th>{{ t('sessions.table.consumption') }}</th><th>{{ t('sessions.table.source') }}</th><th></th>
+        <th>{{ t('sessions.table.price') }}</th><th>{{ t('sessions.table.odometer') }}</th><th>{{ t('sessions.table.consumption') }}</th><th>{{ t('sessions.table.source') }}</th><th class="col-actions"></th>
       </tr>
     </thead>
     <tbody id="session-rows"></tbody>
@@ -223,10 +226,8 @@ function sessionRowHtml(s) {
     <td>${v.odometer ?? '–'}</td>
     <td>${consumptionCell(s.consumption_kwh_per_100km, s.consumption_method)}</td>
     <td>${badgeFor(s.source)}</td>
-    <td style="white-space:nowrap">
-      <button onclick="startEdit('${s.id}')" style="background:var(--accent2)">${T.edit}</button>
-      <button onclick="deleteSession('${s.id}')" style="background:var(--danger)">${T.del}</button>
-    </td>
+    <td class="col-actions">${editDeleteButtons(
+      `startEdit('${s.id}')`, `deleteSession('${s.id}')`, T.edit, T.del)}</td>
   </tr>`;
 }
 
@@ -267,7 +268,7 @@ function sessionCardHtml(s) {
       ${v.pricePerKwh != null ? `<span class="smeta">${v.pricePerKwh} €/kWh</span>` : ''}
       <div class="sactions">
         <button type="button" title="${T.del}" aria-label="${T.del}"
-                onclick="event.stopPropagation(); deleteSession('${s.id}')">✕</button>
+                onclick="event.stopPropagation(); deleteSession('${s.id}')">${ICON_DELETE}</button>
       </div>
     </div>
   </div>`;
