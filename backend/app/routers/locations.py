@@ -34,12 +34,17 @@ def match_location(db: Session, user_id: str, lat: float, lon: float) -> models.
 
 @router.get("", response_model=list[schemas.LocationOut])
 def list_locations(db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
-    return (
+    # Sortierung in Python statt per SQL ORDER BY: name ist verschluesselt
+    # (siehe crypto.py/models.py) - Fernet-Ciphertext sortiert sich nicht
+    # alphabetisch, ORDER BY auf der DB-Spalte selbst wuerde eine zufaellige
+    # statt eine alphabetische Reihenfolge liefern. Unkritisch fuer die
+    # Groesse dieser Liste (Ladeorte eines einzelnen Nutzers).
+    locations = (
         db.query(models.ChargingLocation)
         .filter(models.ChargingLocation.user_id == user.id)
-        .order_by(models.ChargingLocation.name)
         .all()
     )
+    return sorted(locations, key=lambda loc: loc.name)
 
 
 @router.post("", response_model=schemas.LocationOut, status_code=201)

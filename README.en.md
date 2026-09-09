@@ -81,7 +81,10 @@ container instead of a stack:
 docker run -d -p 8111:8000 -v /pfad/zu/daten:/config ghcr.io/idomi94/lademonitor-server:latest
 ```
 `/config` contains the entire Postgres database – be sure to include it in
-your backup plan.
+your backup plan. Optionally add `-e FIELD_ENCRYPTION_KEY=...` to encrypt
+GPS coordinates/notes in the database – worthwhile once the server is
+publicly reachable, not needed for a pure home-network setup. Details in
+[Security note](#security-note).
 
 ### Docker Compose (local development/testing)
 
@@ -93,7 +96,8 @@ docker compose up -d --build
 The web UI is then reachable at `http://<host-ip>:8111`. Credentials for
 the internal Postgres instance can optionally be overridden via `.env`
 (see `.env.example`) – the Compose-internal default is not sensitive, since
-Postgres is not exposed externally.
+Postgres is not exposed externally. `FIELD_ENCRYPTION_KEY` in the same
+`.env` is optional too, see [Security note](#security-note).
 
 ---
 
@@ -213,8 +217,33 @@ Three levels:
 
 Auth is built in (registration/login, per-user isolated data), but there
 is deliberately **no rate limiting yet** on login/registration – if exposed
-publicly via a reverse proxy, make sure to use a strong password. Details
-and further known limitations in `CLAUDE.md`.
+publicly via a reverse proxy, make sure to use a strong password.
+
+**Encryption of personal data (optional):** setting `FIELD_ENCRYPTION_KEY`
+(see above) encrypts GPS coordinates (charging locations and sessions,
+including one currently in progress via the MyŠkoda poller), notes,
+vehicle/location names, the vehicle identification number (VIN), the raw
+MyŠkoda API responses (debug log), and stored credentials (SMTP/WebDAV
+address/username/password, MyŠkoda API key) at rest instead of storing them
+in plain text.
+**Off by default** – not needed for a server that only runs on your home
+network; worthwhile once it's publicly reachable (e.g. your own reverse
+proxy). A badge at the bottom of Settings shows whether it's currently
+active. Protects against theft of a DB dump/backup/disk. **This is not
+zero-knowledge:** the key lives in the server's environment and the server
+still decrypts transparently on every request – whoever controls the
+running server process can technically access the data. The built-in CSV
+export and the automatic WebDAV backup deliberately still contain all
+encrypted values in plain text (portable, human-readable format) – if that
+backup ends up on infrastructure you don't control, encryption doesn't help
+there. **Deliberately not encrypted** (SQL equality lookups or uniqueness
+checks need plain text for these): vehicle `external_id` (HA push),
+provider name, username, and email address. **Once enabled and used, don't
+disable it again** (removing the key) – the values it encrypted become
+unreadable without it, and the server then deliberately refuses to start.
+Details in `CLAUDE.md`, section "Verschluesselung personenbezogener Daten".
+
+Details and further known limitations in `CLAUDE.md`.
 
 ## Unreachable after an update?
 

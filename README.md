@@ -84,7 +84,10 @@ Container statt Stack:
 docker run -d -p 8111:8000 -v /pfad/zu/daten:/config ghcr.io/idomi94/lademonitor-server:latest
 ```
 `/config` enthält die komplette Postgres-Datenbank – unbedingt in den
-Backup-Plan aufnehmen.
+Backup-Plan aufnehmen. Optional zusätzlich `-e FIELD_ENCRYPTION_KEY=...`
+setzen, um GPS-Koordinaten/Notizen in der Datenbank zu verschlüsseln –
+sinnvoll, sobald der Server öffentlich erreichbar ist, fürs reine Heimnetz
+nicht nötig. Details siehe [Sicherheitshinweis](#sicherheitshinweis).
 
 ### Docker Compose (lokale Entwicklung/Tests)
 
@@ -96,7 +99,8 @@ docker compose up -d --build
 Web-UI danach unter `http://<host-ip>:8111`. Zugangsdaten für die interne
 Postgres-Instanz lassen sich optional per `.env` überschreiben (siehe
 `.env.example`) – der Compose-interne Standard ist unkritisch, da Postgres
-nicht nach außen exponiert wird.
+nicht nach außen exponiert wird. `FIELD_ENCRYPTION_KEY` in derselben `.env`
+ist ebenfalls optional, siehe [Sicherheitshinweis](#sicherheitshinweis).
 
 ---
 
@@ -228,6 +232,32 @@ eintragen).
 
 **Beim Zurücksetzen oder Ändern des Passworts werden alle Geräte abgemeldet.**
 Home Assistant und die iOS-App brauchen danach einen neuen Token.
+
+**Verschlüsselung personenbezogener Daten (optional):** Wird
+`FIELD_ENCRYPTION_KEY` gesetzt (siehe oben), liegen GPS-Koordinaten (Ladeorte
+und Ladevorgänge, inkl. eines evtl. gerade laufenden, noch nicht
+abgeschlossenen MyŠkoda-Ladevorgangs), Notizen, Fahrzeug-/Ladeort-Namen, die
+Fahrzeug-Identifizierungsnummer (VIN), die kompletten Rohantworten der
+MyŠkoda-API (Debug-Protokoll) sowie die gespeicherten Zugangsdaten (SMTP-,
+WebDAV-Adresse/-Nutzername/-Passwort, MyŠkoda-API-Key) verschlüsselt in der
+Datenbank statt im Klartext. Standardmäßig **aus** – wer den Server nur im
+eigenen Heimnetz betreibt, braucht das nicht; sinnvoll, sobald er öffentlich
+erreichbar ist (z.B. eigener Reverse Proxy). Ob sie gerade aktiv ist, zeigt
+ein Badge unten in den Einstellungen. Schützt gegen Diebstahl von
+DB-Dump/Backup/Datenträger. **Kein Zero-Knowledge-Schutz:** Der Schlüssel
+liegt im Server-Environment, der Server entschlüsselt weiterhin transparent
+bei jedem Request – wer den laufenden Server-Prozess kontrolliert, kommt
+technisch an die Daten. Der eingebaute CSV-Export und das automatische
+WebDAV-Backup liefern alle verschlüsselten Werte bewusst weiterhin im
+Klartext (portables, menschenlesbares Format) – landet dieses Backup auf
+fremder Infrastruktur, greift die Verschlüsselung dort nicht.
+**Bewusst NICHT verschlüsselt** (SQL-Gleichheitsvergleiche bzw.
+Eindeutigkeits-Prüfungen brauchen dafür Klartext): Fahrzeug-`external_id`
+(HA-Push), Anbieter-Name, Nutzername und E-Mail-Adresse. **Einmal aktiviert
+und benutzt nicht mehr deaktivieren** (Schlüssel entfernen) – ohne ihn sind
+die damit verschlüsselten Werte nicht mehr lesbar, der Server startet dann
+absichtlich nicht mehr. Details in `CLAUDE.md`, Abschnitt "Verschlüsselung
+personenbezogener Daten".
 
 Details und weitere bekannte Einschränkungen in `CLAUDE.md`.
 

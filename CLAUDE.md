@@ -299,7 +299,15 @@ betreibt, faehrt mit dem Push weiter besser (Push statt Polling, kein
 Rate-Limit); der Server-Weg existiert fuer alle ohne HA. **Beide Quellen
 wissen nichts voneinander** - pro Fahrzeug darf nur eine aktiv sein, sonst
 entstehen Dubletten (die `external_session_id`-Praefixe unterscheiden sich:
-HA liefert eine eigene, der Poller nutzt `myskoda-<FIN>-<Startzeit>`).
+HA liefert eine eigene, der Poller nutzt `myskoda-<Vehicle.id>-<Startzeit>` -
+**Update 2026-09-09:** urspruenglich `myskoda-<FIN>-<Startzeit>`, auf die
+interne Fahrzeug-UUID umgestellt, als die VIN im Zuge der DSGVO-Pruefung
+verschluesselt wurde (siehe Abschnitt "Verschluesselung personenbezogener
+Daten") - `external_session_id` braucht fuer den Dublettencheck einen
+exakten SQL-Gleichheitsvergleich und kann deshalb selbst nicht verschluesselt
+werden, hier waere die VIN sonst trotz verschluesselter `vin`-Spalte wieder
+im Klartext gelandet. `Vehicle.id` ist ebenso pro Fahrzeug eindeutig, aber
+kein personenbezogenes Datum).
 
 Vorerst nur ueber die Web-UI konfigurierbar (Einstellungen), die Endpunkte
 sind aber regulaerer Teil der REST-API, damit die iOS-App das ohne
@@ -438,8 +446,10 @@ zum Weiterreichen.
 
 ### Secrets
 
-`api_key` liegt im Klartext in der DB wie alle uebrigen Zugangsdaten dieser
-App (Auth-Tokens, WebDAV-Passwort) - kein Vault vorhanden, Postgres ist nur
+`api_key` liegt in der DB wie alle uebrigen Zugangsdaten dieser App
+(Auth-Tokens, WebDAV-Passwort) - optional verschluesselt seit 2026-09-09
+(`FIELD_ENCRYPTION_KEY`, siehe Abschnitt "Verschluesselung personenbezogener
+Daten"), sonst Klartext; kein Secrets-Vault vorhanden, Postgres ist nur
 containerlokal erreichbar. **Er wird aber NICHT in die Backup-ZIP exportiert**
 (siehe `routers/backup.py`), weil die ZIP typischerweise auf fremdem Speicher
 (WebDAV/Nextcloud) landet. Nach einer Neuinstallation muss der Key also neu
@@ -514,7 +524,18 @@ Icon/Tooltip-Logik in der SessionsList-View.
 - **Verschluesselung der gespeicherten Zugangsdaten** (SMTP-, WebDAV-Passwort,
   MyŠkoda-Key) waere nur mit einem Schluessel ausserhalb von `/config` sinnvoll,
   also ueber eine Env-Variable im Unraid-Template. Bewusst zurueckgestellt,
-  siehe Begruendung im E-Mail-Abschnitt.
+  siehe Begruendung im E-Mail-Abschnitt. **Erledigt seit 2026-09-09** (noch am
+  selben Tag wie die GPS-/Notizen-Verschluesselung): alle drei Secrets nutzen
+  jetzt denselben `FIELD_ENCRYPTION_KEY`-Mechanismus (siehe Abschnitt
+  "Verschluesselung personenbezogener Daten") - unproblematisch, weil keines
+  davon per SQL gefiltert oder als Unique-Constraint gebraucht wird.
+- **Feld-Verschluesselung deckt noch nicht alles ab:** `Vehicle.external_id`,
+  `Provider.name`, `User.email` und `User.username` sind mangels
+  Blind-Index-Loesung noch Klartext (haengen an SQL-Gleichheitsvergleichen
+  und/oder DB-Unique-Constraints, siehe Abschnitt "Verschluesselung
+  personenbezogener Daten" fuer die Details je Feld), und der eingebaute
+  CSV-Export/das WebDAV-Backup liefern alle verschluesselten Felder
+  weiterhin bewusst unverschluesselt (menschenlesbares Format).
 - **MyŠkoda-Poller: erledigt bis auf die Rueckdatierung selbst.** Das
   Debug-Log ist inzwischen ueber je einen echten AC- und zwei DC-Ladevorgaenge
   ausgewertet (Stand 06.09.2026, 355 Zeilen) - Zustandsfolge, Nachlauf von
@@ -745,8 +766,15 @@ Backup-ZIP.
 Eine Verschluesselung at rest waere nur mit einem Schluessel AUSSERHALB von
 `/config` sinnvoll (Env-Variable), weil `PGDATA` unter `/config/postgres` liegt
 und das CA-Template die Nutzer ausdruecklich auffordert, `/config` ins Backup
-zu nehmen - Schluessel und DB wuerden sonst immer gemeinsam abfliessen. Bewusst
-zurueckgestellt.
+zu nehmen - Schluessel und DB wuerden sonst immer gemeinsam abfliessen.
+
+**Update 2026-09-09: umgesetzt.** Genau dieser Mechanismus
+(`FIELD_ENCRYPTION_KEY`, siehe Abschnitt "Verschluesselung personenbezogener
+Daten") deckt inzwischen auch SMTP-/WebDAV-Passwort und MyŠkoda-API-Key ab -
+optional, wie der Rest der Feld-Verschluesselung. Am Grund, warum das
+Passwort ueberhaupt im Klartext VORLIEGEN muss (bevor es ggf. verschluesselt
+gespeichert wird), aendert das nichts: SMTP-AUTH braucht das Passwort selbst,
+nicht nur einen Hash-Vergleich.
 
 ### Wo Hashing sehr wohl richtig ist
 
@@ -859,6 +887,198 @@ Einstellungen. Benutzerverwaltung um E-Mail-Spalte, Bearbeiten und Einladen
 erweitert. Oeffentliche Seiten `/forgot-password`, `/reset-password`,
 `/verify-email` - wie alle Seiten genau eine Ebene unter der Basis (Ingress).
 
+## Verschluesselung personenbezogener Daten (`crypto.py`, ab 2026-09-09)
+
+Ausloeser: der Nutzer will den Server oeffentlich (Nginx-Reverse-Proxy statt
+nur Heimnetz) erreichbar machen und wollte dafuer DSGVO-konform absichern,
+idealerweise so, dass er selbst als Betreiber keinen Zugriff auf die
+personenbezogenen Daten anderer/eigener Nutzer hat. Echtes Zero-Knowledge
+(clientseitige Verschluesselung, Schluessel verlaesst nie das Nutzergeraet)
+wurde bewusst VERWORFEN, weil es die Kern-Architektur der App sprengen wuerde:
+Geo-Matching (`match_location`), die komplette Statistik-Aggregation
+(`stats.py`, `consumption.py`), das server-seitige Offline-Reverse-Geocoding
+und vor allem der Home-Assistant-Push sowie der MyŠkoda-Poller (beide senden
+rohes JSON direkt an die API, ohne verschluesselnden Client dazwischen)
+brauchen Klartext-Zugriff auf dem Server. Umgesetzt ist stattdessen
+**Verschluesselung at rest gegen Diebstahl von DB-Dump/Backup/Datentraeger**
+(z.B. wenn der Hoster/VPS-Anbieter oder wer auch immer ein Backup abgreift) -
+**ausdruecklich NICHT** ein Schutz davor, dass der Betreiber (wer den
+laufenden Server-Prozess kontrolliert) die Daten technisch einsehen koennte,
+denn der Schluessel liegt im Server-Environment und der Server entschluesselt
+noch waehrend jedes Requests transparent. Diese Grenze steht auch als
+Docstring in `crypto.py`, damit sie nicht in Vergessenheit geraet.
+
+**Umfang (bewusst NICHT alles auf einmal):** verschluesselt sind die
+GPS-Koordinaten (`ChargingSession.latitude/longitude`,
+`ChargingLocation.latitude/longitude` - der schaerfste Fall ist ein Ladeort
+namens "Zuhause"), `ChargingSession.notes` und `.geocoded_place`,
+`ChargingLocation.name` und `Vehicle.name` (reine Anzeigelabels), sowie die
+drei bisher als Klartext-Secrets dokumentierten Zugangsdaten
+`SmtpConfig.password`, `WebdavBackupConfig.password` und
+`MySkodaConfig.api_key` (**Update 2026-09-09, spaeter am selben Tag:**
+urspruenglich als eigener, spaeterer Schritt vorgesehen - inzwischen erledigt,
+da keine SQL-Filterung/Unique-Constraint auf diesen Feldern liegt, also
+keinen Blind-Index braucht, genau wie die GPS-Spalten).
+
+**NICHT verschluesselt, bewusst, wegen SQL-Gleichheitsvergleich/
+Unique-Constraint:** `Vehicle.external_id` (HA-Push in `routers/sessions.py`
+UND Dublettencheck in `routers/vehicles.py` fragen exakt per SQL danach ab,
+zusaetzlich eindeutig pro Nutzer), `Provider.name` (Dublettencheck in
+`routers/providers.py::create_provider` sowie eindeutig pro Nutzer, siehe
+Abschnitt "Pro-Nutzer-Datentrennung" weiter oben), `User.email` (haengt am
+funktionalen `lower(email)`-Unique-Index fuer den Login/Reset-Lookup, siehe
+Abschnitt "Authentifizierung") und `User.username` (Login-Lookup, global
+eindeutig). Fernet ist NICHT deterministisch (Zufalls-IV) - zwei
+Verschluesselungen desselben Klartexts ergeben unterschiedlichen Ciphertext,
+also wuerden sowohl ein `WHERE spalte = :wert`-Vergleich als auch ein
+DB-Unique-Constraint auf der verschluesselten Spalte einfach aufhoeren zu
+funktionieren (der Login wuerde bei jedem Versuch fehlschlagen bzw. der
+HA-Push jedes Fahrzeug mit 404 quittieren). Eine Loesung dafuer waere ein
+zusaetzlicher, DETERMINISTISCHER Blind-Index (z.B. HMAC-SHA256 mit einem aus
+`FIELD_ENCRYPTION_KEY` abgeleiteten Schluessel, in einer eigenen Spalte
+`*_lookup_hash`, Unique-Constraint/WHERE-Abfragen laufen dann ueber diese
+Hash-Spalte statt ueber den Klartext) - eigenstaendige, groessere
+Baustelle, noch nicht umgesetzt.
+
+**`ChargingLocation.name`/`Provider.name` und SQL `ORDER BY`:** beide Listen
+waren vorher per SQL `ORDER BY name` sortiert - Ciphertext sortiert sich
+nicht alphabetisch. `Provider.name` bleibt unverschluesselt (siehe oben),
+`routers/providers.py::list_providers` sortiert also weiterhin per SQL.
+`ChargingLocation.name` ist jetzt verschluesselt, `routers/locations.py::
+list_locations` sortiert deshalb seither in Python nach dem Laden
+(`sorted(locations, key=lambda loc: loc.name)`) - bei der ueblichen
+Groessenordnung (Ladeorte eines einzelnen Nutzers) unkritisch.
+
+**Update 2026-09-09, DSGVO-Vollpruefung (dritte Runde am selben Tag):** Auf
+Nutzeranfrage alle verbliebenen Klartextfelder systematisch durchgegangen -
+zwei Kategorien gefunden, die beim zweiten Schritt (Secrets) uebersehen
+wurden, plus eine bewusst wieder verworfene dritte:
+
+- **Uebersehen, jetzt nachgezogen:** `Provider.notes` (Freitext, gleiches
+  Risiko wie `ChargingSession.notes`), `WebdavBackupConfig.url`/`.username`
+  (Cloud-Adressen wie Nextcloud enthalten oft den eigenen Kontonamen im Pfad,
+  z.B. `.../files/<username>/...`), `MySkodaConfig.vin` (die
+  Fahrzeug-Identifizierungsnummer - ein weltweit eindeutiger, ueber
+  Zulassungs-/Versicherungsdaten auf eine Person rueckfuehrbarer
+  Identifikator), `MySkodaConfig.open_latitude/open_longitude` (dieselbe
+  GPS-Position wie `ChargingSession.latitude/longitude`, nur als
+  Zwischenspeicher fuer den noch laufenden Vorgang - eine Inkonsistenz: der
+  fertige Datensatz war geschuetzt, die Kopie im Zwischenzustand nicht) und
+  `MySkodaLogEntry.payload` (komplette Rohantwort der MyŠkoda-API inkl. GPS/
+  VIN/SoC, Standard `log_raw_payload=True`, bis zu `LOG_MAX_ENTRIES` Zeilen
+  pro Fahrzeug - der mit Abstand groesste zusammenhaengende Bestand an
+  Rohdaten in der App und vermutlich die groesste Einzel-Angriffsflaeche vor
+  dieser Aenderung).
+
+  **Versteckte Nebenwirkung beim VIN gefunden und mitkorrigiert:**
+  `myskoda_poller.py::_create_session()` baute die
+  `external_session_id` als `f"myskoda-{config.vin}-{start_time}"` - waere
+  die VIN trotz verschluesselter `vin`-Spalte ueber dieses zweite, fuer den
+  Dublettencheck zwingend unverschluesselte Feld wieder im Klartext gelandet
+  (dieselbe Kategorie wie `Vehicle.external_id`/`Provider.name` oben - ein
+  exakter SQL-Gleichheitsvergleich braucht Klartext bzw. deterministischen
+  Wert). Umgestellt auf `f"myskoda-{vehicle.id}-{start_time}"` -
+  `Vehicle.id` ist ebenso pro Fahrzeug eindeutig, aber die interne UUID ist
+  kein personenbezogenes Datum. Format vorher `myskoda-<FIN>-<Startzeit>`,
+  siehe Abschnitt "MyŠkoda Public API" weiter oben. Rein additive Aenderung
+  fuer neu angelegte Sessions - Bestandszeilen mit dem alten Format bleiben
+  unangetastet und kollidieren nicht mit dem neuen Schema.
+
+- **Bewusst NICHT verschluesselt, obwohl technisch moeglich gewesen waere:**
+  `UserToken.email` (bei `EMAIL_VERIFY`) und `EmailLogEntry.to_address` -
+  beide sind zum Zeitpunkt des Schreibens IMMER eine exakte Kopie eines
+  bereits existierenden `User.email`-Werts (verifiziert im Code:
+  `routers/auth.py` setzt `user.email = payload.email` bzw. legt den
+  `User`-Datensatz mit `email=payload.email` an, JEWEILS bevor der
+  zugehoerige Token/die Mail erzeugt wird - `UserToken.email`/
+  `EmailLogEntry.to_address` sind also nie ein GEGENUEBER `User.email`
+  unabhaengiger Wert). Da `User.email` selbst aus den oben genannten
+  Login-/Reset-Lookup-Gruenden zwingend Klartext bleiben muss, wuerde das
+  Verschluesseln der beiden Kopien keinen zusaetzlichen Schutz bringen - die
+  Adresse waere ueber `users.email` ohnehin trivial einsehbar. Reiner
+  Mehraufwand ohne Sicherheitsgewinn, deshalb bewusst ausgelassen.
+
+**Mechanik:** `crypto.py` haelt Fernet (`cryptography`-Paket, AES-128-CBC +
+HMAC, inkl. Zeitstempel und Authentifizierung) als `EncryptedString`/
+`EncryptedFloat` (`TypeDecorator`, impl `Text`) - Router/Schemas/ORM-Code
+sehen weiterhin normale Python-`str`/`float`, in der DB liegt nur Ciphertext.
+Dadurch war praktisch **kein Code ausserhalb von `models.py` zu aendern**:
+`match_location()` (Haversine) rechnet schon in Python nach dem ORM-Load,
+`backup.py` liest/schreibt ausschliesslich ueber die ORM-Objekte - beides
+transparent weiter funktionsfaehig.
+
+**Schluessel:** `FIELD_ENCRYPTION_KEY`, ausschliesslich Umgebungsvariable,
+NIEMALS in der DB oder unter `/config` - genau das waere sonst im selben
+Backup wie die verschluesselten Daten und der Schutz waere wirkungslos.
+
+**Update 2026-09-09 (kippt einen Teil der urspruenglichen Entscheidung, noch
+am selben Tag): Verschluesselung ist bewusst OPT-IN, keine Pflicht.**
+Urspruenglich verweigerte die App den Start komplett ohne gesetzten
+Schluessel (`crypto.require_key()`) - das wurde noch am selben Tag revidiert,
+weil ein grosser Teil der Nutzer den Server rein im eigenen Heimnetz betreibt
+und dort weder das DSGVO-Thema noch den Aufwand (Schluessel generieren,
+sicher verwahren, bei Verlust sind die Felder futsch) braucht. Jetzt: fehlt
+`FIELD_ENCRYPTION_KEY` komplett, verhalten sich `EncryptedString`/
+`EncryptedFloat` (`crypto.py`) wie ganz normale String/Float-Spalten -
+`crypto.is_enabled()` haelt diesen Zustand fest, `encrypt_str()`/
+`decrypt_str()` verzweigen intern darauf (No-Op-Passthrough ohne Schluessel).
+`main.py` ruft dafuer nur noch `crypto.check_configured()` auf - validiert
+das FORMAT eines GESETZTEN Schluessels (verweigert den Start bei einem
+kaputten Wert), verlangt aber keine Anwesenheit mehr.
+
+**Einmal aktiviert, bleibt es aktiviert** - genau das ist der Haken am
+Opt-in: wird der Schluessel NACH bereits erfolgter Verschluesselung wieder
+entfernt, waeren die betroffenen Werte ohne ihn nicht mehr lesbar. Dagegen
+prueft `database.py::_check_no_orphaned_ciphertext()` bei JEDEM
+Migrationslauf (nicht nur beim ersten): findet sich in einer der sechs
+betroffenen Spalten ein Wert mit dem Fernet-Praefix `gAAAAA` (siehe
+`crypto.FERNET_PREFIX`, rein String-basiert per `LIKE`, damit der Check auch
+OHNE Schluessel funktioniert) WAEHREND kein Schluessel gesetzt ist, verweigert
+die App den Start mit einer klaren Fehlermeldung, statt kaputte/falsche Werte
+durch API oder Web-UI auszuliefern. Web-UI zeigt den aktuellen Zustand als
+Badge unten in den Einstellungen (🔒/🔓, `encryption_enabled` im
+Template-Kontext von `main.py::_page()`), `/health` liefert ihn zusaetzlich
+als `field_encryption` im JSON.
+
+**Migration Bestandsdaten** (`database.py::run_light_migrations()`): laeuft
+wie alle anderen leichten Migrationen bei jedem Container-Start und ist
+idempotent, in zwei getrennten Schritten. **Schritt 1** (immer, unabhaengig
+vom Schluessel): fuer die GPS-Spalten (bisher `DOUBLE PRECISION`) wird der
+Spaltentyp per Umbenennungs-Trick (neue VARCHAR-Spalte, Python-seitig pro
+Zeile befuellen ueber `crypto.encrypt_str()` - verschluesselt NUR, wenn
+`is_enabled()`, sonst reiner Passthrough -, alte Spalte droppen, neue
+umbenennen - gleiches Muster wie schon bei der
+`auth_tokens.token`->`token_hash`-Migration) auf Text umgestellt, WEIL das
+Modell (`models.py`) so oder so eine Text-Spalte erwartet, ob verschluesselt
+oder nicht; `not_null=True` bei `ChargingLocation.latitude/longitude` haelt
+die urspruengliche NOT-NULL-Eigenschaft ueber den Umbau hinweg aufrecht.
+**Schritt 2** (`_encrypt_pending_plaintext()`, No-Op ohne Schluessel): fuer
+alle sechs Spalten (die vier GPS- plus `notes`/`geocoded_place`, die schon
+vorher VARCHAR/TEXT waren) werden noch unverschluesselte Bestandswerte
+nachtraeglich verschluesselt, erkannt ueber `crypto.is_encrypted()`
+(Praefix-Check) statt Entschluesselungsversuch. Das deckt auch den Fall
+"Schluessel wird ERST NACH einer Weile aktiviert" ab: bis dahin angesammelte
+Klartextwerte (inkl. GPS, das laengst zu VARCHAR migriert war) werden beim
+naechsten Start mit gesetztem Schluessel automatisch nachverschluesselt. Auf
+einer komplett neuen Installation legt `create_all()` die GPS-Spalten direkt
+als VARCHAR an, Schritt 1 ist dort ein No-Op. **Vor dem Einsatz auf der
+echten Installation unbedingt gegen eine Kopie der Produktiv-DB testen** -
+eine fehlgeschlagene Verschluesselung von Bestandsdaten ist nicht trivial
+rueckgaengig zu machen.
+
+**Bekannte Einschraenkung, unbedingt beachten:** Der eingebaute Export
+(`routers/backup.py`) und das automatische WebDAV-Backup liefern weiterhin
+**Klartext-CSV** - die ORM-Objekte werden beim Export ganz normal entschluesselt
+gelesen (das ist fuer das dokumentierte Ziel "portables, menschenlesbares
+Backup" auch richtig so). Landet dieses Backup auf fremder Infrastruktur
+(z.B. WebDAV auf einer nicht selbst kontrollierten Nextcloud-Instanz), liegen
+GPS-Koordinaten und Notizen dort wieder im Klartext - die
+Feld-Verschluesselung schuetzt nur die laufende Datenbank/deren
+Rohdatentraeger, nicht das CSV-Backup. Bewusst nicht in diesem ersten Schritt
+geloest (wuerde das dokumentierte, restore-faehige CSV-Format aendern);
+Kandidat fuer einen spaeteren Schritt waere ein optional verschluesseltes
+ZIP (z.B. Passwort-geschuetzt) speziell fuer den WebDAV-Weg.
+
 ## Backup-Export/-Import (`routers/backup.py`)
 
 Reiner Backup/Restore-Mechanismus (z.B. Server-Neuaufsetzung), bewusst KEIN
@@ -914,9 +1134,11 @@ auf ein Nutzer-Ziel hoch (z.B. Nextcloud).
 
 - **Ein `WebdavBackupConfig` pro Nutzer** (nicht global) - konsistent mit der
   Pro-Nutzer-Datentrennung im Rest der App: jeder sichert nur seine eigenen
-  Daten auf sein eigenes Ziel. `password` liegt im Klartext in der DB, wie
-  auch die Auth-Tokens - kein Secrets-Vault vorhanden, Postgres ist ohnehin
-  nur via localhost im Container erreichbar. GET/PUT `/api/backup/webdav`
+  Daten auf sein eigenes Ziel. `password` liegt optional verschluesselt in
+  der DB (seit 2026-09-09, `FIELD_ENCRYPTION_KEY`, siehe Abschnitt
+  "Verschluesselung personenbezogener Daten"), sonst Klartext - kein
+  Secrets-Vault vorhanden, Postgres ist ohnehin nur via localhost im
+  Container erreichbar. GET/PUT `/api/backup/webdav`
   geben das Passwort nie zurueck (nur `has_password: bool`) - ein leeres
   Passwort-Feld beim Speichern laesst ein bereits gesetztes Passwort
   unveraendert.

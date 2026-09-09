@@ -6,6 +6,51 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.15.0] — 2026-09-09
+
+### Added
+- **Optional: GPS-Koordinaten (Ladeorte und Ladevorgänge, auch ein gerade
+  laufender MyŠkoda-Ladevorgang), Notizen (Ladevorgänge und Anbieter),
+  automatisch ermittelte Ortsnamen, Fahrzeug-/Ladeort-Namen, die
+  Fahrzeug-Identifizierungsnummer (VIN), das MyŠkoda-Debug-Protokoll sowie
+  gespeicherte Zugangsdaten (SMTP-Passwort, WebDAV-Adresse/-Nutzername/
+  -Passwort, MyŠkoda-API-Key) können jetzt verschlüsselt in der Datenbank
+  gespeichert werden** statt im Klartext – relevant, sobald der Server
+  öffentlich erreichbar ist statt nur im eigenen Heimnetz. Standardmäßig
+  AUS, keine Aktion nötig für einen reinen Heimnetz-Betrieb.
+
+  Aktivieren über die neue optionale Umgebungsvariable
+  `FIELD_ENCRYPTION_KEY`:
+  ```bash
+  python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+  ```
+  und sicher aufbewahren (z.B. Passwort-Manager) – **nicht** im Datenverzeichnis
+  (`/config`) ablegen, sonst landet er im selben Backup wie die damit
+  verschlüsselten Daten. Einmal gesetzt und benutzt nicht mehr entfernen – ein
+  verlorener oder entfernter Schlüssel macht die betroffenen Felder dauerhaft
+  unlesbar, der Server verweigert dann bewusst den Start. Bestehende
+  Klartextwerte werden beim nächsten Start mit gesetztem Schlüssel automatisch
+  migriert, auch wenn er erst später gesetzt wird. Der aktuelle Stand steht
+  als Badge unten in den Einstellungen.
+
+  Kein Zero-Knowledge-Schutz: der Schlüssel liegt im Server-Environment, der
+  Server entschlüsselt weiterhin transparent bei jedem Request. Schützt gegen
+  Diebstahl von Datenbank/Backup/Datenträger, nicht gegen Einsicht durch, wer
+  auch immer den laufenden Server-Prozess kontrolliert. Bewusst NICHT
+  verschlüsselt (an SQL-Gleichheitsvergleiche bzw. Eindeutigkeits-Prüfungen pro
+  Nutzer gebunden): Fahrzeug-Kurzschlüssel (`external_id`, Home-Assistant-Push),
+  Anbieter-Name, Nutzername, E-Mail-Adresse. Der CSV-Export und das
+  automatische WebDAV-Backup bleiben bewusst menschenlesbar und damit
+  unverschlüsselt.
+
+  Bei einer eigenen DSGVO-Prüfung (systematisch alle Datenbankfelder
+  durchgegangen) gefunden und mitkorrigiert: der MyŠkoda-Poller baute die
+  interne Dubletten-Kennung eines Ladevorgangs aus der VIN
+  (`myskoda-<VIN>-<Startzeit>`) – die wäre trotz verschlüsselter VIN-Spalte
+  über dieses zweite, für den Dublettencheck zwingend unverschlüsselte Feld
+  wieder im Klartext gelandet. Läuft jetzt über die interne, nicht
+  personenbezogene Fahrzeug-ID statt der VIN.
+
 ## [0.14.1] — 2026-09-08
 
 ### Changed

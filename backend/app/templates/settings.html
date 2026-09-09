@@ -118,6 +118,16 @@
   {% endif %}
 </div>
 
+<div style="display:flex; align-items:center; gap:10px; margin:0 0 16px; padding:10px 14px; border:1px solid var(--border); border-radius:8px; font-size:0.9em">
+  {% if encryption_enabled %}
+    <span class="badge badge-manual">{{ t('settings.encryption.badge_on') }}</span>
+    <span style="color:var(--muted)">{{ t('settings.encryption.hint_on') }}</span>
+  {% else %}
+    <span class="badge badge-import">{{ t('settings.encryption.badge_off') }}</span>
+    <span style="color:var(--muted)">{{ t('settings.encryption.hint_off') }}</span>
+  {% endif %}
+</div>
+
 <details class="panel" id="account-panel">
   <summary>{{ t('settings.account.heading') }}</summary>
   <div class="inner">
