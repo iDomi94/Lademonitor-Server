@@ -584,6 +584,15 @@ details.panel > summary .count {
 .type-ac { background: rgba(91, 141, 239, 0.15); color: var(--accent2); }
 .type-dc { background: rgba(242, 184, 75, 0.15); color: var(--warn); }
 
+.sitefoot {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 8px 24px 24px;
+  font-size: 12px;
+}
+.sitefoot a { color: var(--muted); }
+.sitefoot a:hover { color: var(--text); }
+
 /* --------------------------------------------------------------------------
    Schmale Schirme
    -------------------------------------------------------------------------- */

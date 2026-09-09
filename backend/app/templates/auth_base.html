@@ -36,12 +36,18 @@
     .auth-intro { font-size: 13px; color: var(--muted); line-height: 1.5; margin: 0 0 16px; }
     .auth-switch { margin-top: 16px; font-size: 13px; color: var(--muted); text-align: center; }
     .auth-switch a { color: var(--accent2); }
+    .auth-foot { margin-top: 20px; text-align: center; font-size: 12px; }
+    .auth-foot a { color: var(--muted); }
+    .auth-foot a:hover { color: var(--text); }
   </style>
 </head>
 <body>
   <div class="auth-wrap">
-    <div class="card auth-card">
-      {% block card %}{% endblock %}
+    <div>
+      <div class="card auth-card">
+        {% block card %}{% endblock %}
+      </div>
+      <div class="auth-foot"><a href="privacy">{{ t('footer.privacy') }}</a></div>
     </div>
   </div>
   {% block scripts %}{% endblock %}

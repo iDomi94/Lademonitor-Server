@@ -29,5 +29,11 @@ services:
       # dann bleibt die Variable einfach leer und die App laeuft unverschluesselt
       # weiter. In .env eintragen (siehe .env.example), um sie zu aktivieren.
       FIELD_ENCRYPTION_KEY: ${FIELD_ENCRYPTION_KEY:-}
+      # Kontaktdaten des datenschutzrechtlich Verantwortlichen fuer /privacy
+      # (siehe .env.example) - leer laesst die Seite mit einem deutlichen
+      # Hinweis statt stillschweigend unvollstaendigen Angaben laufen.
+      PRIVACY_CONTROLLER_NAME: ${PRIVACY_CONTROLLER_NAME:-}
+      PRIVACY_CONTROLLER_ADDRESS: ${PRIVACY_CONTROLLER_ADDRESS:-}
+      PRIVACY_CONTROLLER_EMAIL: ${PRIVACY_CONTROLLER_EMAIL:-}
     ports:
       - "8111:8000"

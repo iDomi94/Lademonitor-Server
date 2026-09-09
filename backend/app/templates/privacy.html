@@ -1,0 +1,301 @@
+<!--
+  Eigenstaendiges Grundgeruest wie auth_base.html, aber bewusst NICHT davon
+  geerbt: die Karte dort ist auf 360px Login-Formulare zugeschnitten, ein
+  Fliesstext-Dokument braucht die normale .container-Breite (siehe base.html).
+
+  Text bewusst NICHT ueber einzelne t()-Keys pro Satz uebersetzt (anders als
+  der Rest der App) - ein Rechtstext lebt von zusammenhaengenden Absaetzen,
+  keine der 500 Kurzstrings anderswo. Gleiches Vorgehen wie beim CHANGELOG
+  (siehe changelog.py), das ebenfalls am Stueck steht statt Key-fuer-Key.
+
+  Verantwortlicher (Name/Anschrift/E-Mail) kommt bewusst NICHT aus dem Code,
+  sondern aus optionalen Umgebungsvariablen (PRIVACY_CONTROLLER_*, siehe
+  .env.example und main.py::_privacy_controller) - diese Seite ist eine
+  Vorlage fuer JEDE Installation dieses selbstgehosteten Servers, der
+  Betreiber (nicht der Autor der Software) ist datenschutzrechtlich
+  verantwortlich und muss seine eigenen Angaben eintragen.
+-->
+<!DOCTYPE html>
+<html lang="{{ lang|default('de') }}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ 'Datenschutzerklärung' if lang == 'de' else 'Privacy Policy' }} · Lademonitor</title>
+  <link rel="icon" href="static/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="static/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="static/favicon-16.png">
+  <link rel="apple-touch-icon" href="static/apple-touch-icon.png">
+  <link rel="stylesheet" href="static/style.css?v={{ version|default('dev') }}">
+  <style>
+    .privacy-card { line-height: 1.6; }
+    .privacy-card h1 { margin-bottom: 4px; }
+    .privacy-card .updated { color: var(--muted); font-size: 13px; margin-bottom: 24px; }
+    .privacy-card h2 { color: var(--text); font-size: 17px; margin: 28px 0 8px; }
+    .privacy-card p { margin: 0 0 12px; }
+    .privacy-card ul { margin: 0 0 12px; padding-left: 20px; }
+    .privacy-card li { margin-bottom: 6px; }
+    .privacy-card a { color: var(--accent2); }
+    .privacy-back { display: inline-block; margin-bottom: 20px; color: var(--muted); font-size: 14px; }
+    .privacy-back:hover { color: var(--text); }
+    .privacy-warning {
+      background: rgba(239, 100, 97, 0.12);
+      border: 1px solid var(--danger);
+      color: var(--text);
+      border-radius: 10px;
+      padding: 12px 16px;
+      margin-bottom: 24px;
+      font-size: 14px;
+    }
+    .privacy-controller {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+      margin: 12px 0 20px;
+      font-size: 14px;
+    }
+    .privacy-controller div { margin-bottom: 2px; }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <a class="privacy-back" href="javascript:history.back()">{{ '← Zurück' if lang == 'de' else '← Back' }}</a>
+    <div class="card privacy-card">
+
+      {% if lang == 'de' %}
+      <h1>Datenschutzerklärung</h1>
+      <p class="updated">Stand: 9. September 2026</p>
+
+      {% if not controller_configured %}
+      <div class="privacy-warning">
+        ⚠️ Diese Installation hat noch keine Kontaktdaten für den datenschutzrechtlich
+        Verantwortlichen hinterlegt. Der Betreiber dieses Servers muss
+        <code>PRIVACY_CONTROLLER_NAME</code>, <code>PRIVACY_CONTROLLER_ADDRESS</code> und
+        <code>PRIVACY_CONTROLLER_EMAIL</code> setzen (siehe <code>.env.example</code>) –
+        diese Seite ist bis dahin unvollständig.
+      </div>
+      {% endif %}
+
+      <h2>1. Verantwortlicher</h2>
+      <p>
+        Verantwortlich für die Datenverarbeitung auf <strong>dieser</strong> Installation von
+        Lademonitor ist nicht die Autorin/der Autor der Software, sondern wer den Server
+        betreibt:
+      </p>
+      <div class="privacy-controller">
+        <div><strong>{{ controller.name or '[Name/Firma des Betreibers noch nicht eingetragen]' }}</strong></div>
+        <div>{{ controller.address or '[Anschrift noch nicht eingetragen]' }}</div>
+        <div>{{ controller.email or '[Kontakt-E-Mail noch nicht eingetragen]' }}</div>
+      </div>
+
+      <h2>2. Überblick</h2>
+      <p>
+        Lademonitor läuft auf dieser Adresse selbstgehostet und ohne Werbung, Tracking oder
+        Analyse-Dienste Dritter – die Web-Oberfläche lädt bewusst kein einziges externes
+        Skript oder Stylesheet nach. Es werden ausschließlich die Daten verarbeitet, die für
+        das Führen deines Ladeprotokolls nötig sind, plus die optionalen Funktionen, die du
+        selbst aktivierst (automatische Ladeerkennung, Backup, E-Mail-Benachrichtigungen).
+      </p>
+
+      <h2>3. Welche Daten werden verarbeitet</h2>
+      <p><strong>Konto:</strong> Nutzername, Passwort (nur als bcrypt-Hash gespeichert, nie
+        im Klartext), optional eine E-Mail-Adresse samt Bestätigungsstatus, Spracheinstellung,
+        Erstellungsdatum.</p>
+      <p><strong>Ladeorte &amp; Ladevorgänge:</strong> GPS-Koordinaten selbst angelegter
+        Ladeorte sowie – falls erfasst – des jeweiligen Ladevorgangs, Zeitpunkte, Akkustand,
+        geladene Energie (kWh), Kilometerstand, Preis, sowie frei eingegebene Notizen. Diese
+        Felder können vom Betreiber serverseitig zusätzlich verschlüsselt werden
+        (Feld-Verschlüsselung, standardmäßig aus).</p>
+      <p><strong>Fahrzeug:</strong> Name, Marke, Modell, Akkukapazität und – nur bei
+        aktivierter MyŠkoda-Anbindung – die Fahrzeug-Identifizierungsnummer (VIN).</p>
+      <p><strong>Anmeldung:</strong> Sitzungs- und Einmal-Tokens (Passwort-Reset,
+        Bestätigungslinks) werden nur als Hash gespeichert, nicht im Klartext.</p>
+      <p><strong>Technische Protokolle:</strong> ein Versandprotokoll ausgehender E-Mails
+        (Empfängeradresse, Betreff, Status) sowie – nur falls die MyŠkoda-Anbindung aktiv ist
+        – ein Debug-Protokoll der Abfragen (u. a. Akkustand, Ladeleistung, Position), das sich
+        in den Einstellungen abschalten lässt.</p>
+
+      <h2>4. Zwecke und Rechtsgrundlagen</h2>
+      <ul>
+        <li>Bereitstellung des Kontos und deines Ladeprotokolls – Art. 6 Abs. 1 lit. b DSGVO
+          (Erfüllung des Nutzungsverhältnisses)</li>
+        <li>Optionale Funktionen, die du selbst einschaltest (automatische Ladeerkennung über
+          MyŠkoda, WebDAV-Backup, Standortzugriff in der App, E-Mail-Benachrichtigungen) –
+          Art. 6 Abs. 1 lit. a DSGVO (Einwilligung durch aktives Einschalten)</li>
+        <li>Betriebssicherheit (z. B. Anmeldeprotokoll) – Art. 6 Abs. 1 lit. f DSGVO
+          (berechtigtes Interesse an einem funktionierenden, sicheren Betrieb)</li>
+      </ul>
+
+      <h2>5. Empfänger und Drittanbieter</h2>
+      <p>Es gibt keine Werbe- oder Analyse-Dienste. Daten verlassen diesen Server nur in
+        diesen drei, jeweils optionalen Fällen:</p>
+      <ul>
+        <li><strong>OpenStreetMap Nominatim</strong> – nur wenn du im Formular für einen
+          Ladeort eine Adresse suchst, wird dein Suchtext an die öffentliche
+          Nominatim-API von OpenStreetMap übermittelt. Ohne Suche keine Übermittlung; die
+          automatische Orts-Anzeige an Ladevorgängen läuft dagegen offline, ganz ohne
+          Internetzugriff.</li>
+        <li><strong>MyŠkoda Public API (Škoda Auto)</strong> – nur wenn du in den
+          Einstellungen einen eigenen API-Key hinterlegst, fragt der Server dort
+          regelmäßig den Lade-/Akkustatus deines Fahrzeugs ab (VIN, Akkustand, ggf.
+          Fahrzeugposition).</li>
+        <li><strong>E-Mail-Versand (SMTP)</strong> – nur wenn der Betreiber einen
+          SMTP-Zugang eingerichtet hat, laufen Bestätigungs-, Reset- und
+          Benachrichtigungsmails über den dort hinterlegten Anbieter.</li>
+        <li><strong>WebDAV-Backup</strong> – nur wenn du es selbst in deinen Einstellungen
+          aktivierst und ein Ziel (z. B. deine eigene Nextcloud) einträgst, lädt der Server
+          dorthin ein Backup deiner eigenen Daten hoch.</li>
+      </ul>
+
+      <h2>6. Speicherdauer</h2>
+      <p>Deine Daten bleiben gespeichert, solange dein Konto besteht. Du kannst dein Konto
+        jederzeit selbst und vollständig löschen (in der App/Web-Oberfläche unter „Mein
+        Konto“) – dabei werden auch alle Fahrzeuge, Ladevorgänge, Anbieter, Ladeorte sowie
+        deine MyŠkoda- und Backup-Konfiguration entfernt. Selbst hochgeladene WebDAV-Backups
+        werden nach der eingestellten Aufbewahrungsfrist automatisch von dir selbst wieder
+        entfernt (Retention), unabhängig vom Konto.</p>
+
+      <h2>7. Deine Rechte</h2>
+      <ul>
+        <li>Auskunft über die zu dir gespeicherten Daten (Art. 15 DSGVO)</li>
+        <li>Berichtigung unrichtiger Daten (Art. 16 DSGVO) – die meisten Felder kannst du
+          direkt in der App bearbeiten</li>
+        <li>Löschung (Art. 17 DSGVO) – siehe Abschnitt 6, sofortige Selbstbedienung</li>
+        <li>Einschränkung der Verarbeitung (Art. 18 DSGVO)</li>
+        <li>Datenübertragbarkeit (Art. 20 DSGVO) – vollständiger Export deiner Daten als
+          ZIP/CSV über die Backup-Funktion</li>
+        <li>Widerspruch (Art. 21 DSGVO) und Widerruf erteilter Einwilligungen (z. B. durch
+          Deaktivieren einer optionalen Funktion)</li>
+        <li>Beschwerde bei einer Datenschutz-Aufsichtsbehörde</li>
+      </ul>
+      <p>Anfragen dazu richtest du an die oben genannte Kontaktadresse des Betreibers.</p>
+
+      <h2>8. Sicherheit</h2>
+      <p>Passwörter werden ausschließlich als bcrypt-Hash gespeichert, Sitzungs- und
+        Einmal-Tokens nur als SHA-256-Hash. Besonders sensible Felder (u. a. GPS-Koordinaten,
+        Notizen, Fahrzeug-Identifizierungsnummer, hinterlegte Zugangsdaten für SMTP/WebDAV/
+        MyŠkoda) können vom Betreiber zusätzlich mit Feld-Verschlüsselung gesichert werden.</p>
+
+      <h2>9. Cookies</h2>
+      <p>Es werden ausschließlich technisch notwendige Cookies gesetzt: ein
+        Sitzungs-Cookie für die Anmeldung (nicht per JavaScript auslesbar) sowie ein
+        Cookie für die gewählte Sprache. Beide dienen nur dem Betrieb dieser Seite, keinem
+        Tracking.</p>
+      {% else %}
+      <h1>Privacy Policy</h1>
+      <p class="updated">Last updated: September 9, 2026</p>
+
+      {% if not controller_configured %}
+      <div class="privacy-warning">
+        ⚠️ This installation has not set contact details for its data controller yet.
+        The operator of this server needs to set <code>PRIVACY_CONTROLLER_NAME</code>,
+        <code>PRIVACY_CONTROLLER_ADDRESS</code> and <code>PRIVACY_CONTROLLER_EMAIL</code>
+        (see <code>.env.example</code>) – until then, this page is incomplete.
+      </div>
+      {% endif %}
+
+      <h2>1. Data Controller</h2>
+      <p>
+        The party responsible for data processing on <strong>this</strong> Lademonitor
+        installation is not the software's author, but whoever operates this server:
+      </p>
+      <div class="privacy-controller">
+        <div><strong>{{ controller.name or '[Operator name not set yet]' }}</strong></div>
+        <div>{{ controller.address or '[Address not set yet]' }}</div>
+        <div>{{ controller.email or '[Contact email not set yet]' }}</div>
+      </div>
+
+      <h2>2. Overview</h2>
+      <p>
+        Lademonitor runs self-hosted at this address, with no advertising, tracking, or
+        third-party analytics – the web UI deliberately loads no external script or
+        stylesheet. Only the data needed to keep your charging log is processed, plus
+        whatever optional features you choose to turn on yourself (automatic charge
+        detection, backup, email notifications).
+      </p>
+
+      <h2>3. What data is processed</h2>
+      <p><strong>Account:</strong> username, password (stored only as a bcrypt hash, never
+        in plain text), an optional email address with its verification status, language
+        preference, account creation date.</p>
+      <p><strong>Charging locations &amp; sessions:</strong> GPS coordinates of locations
+        you save and, where recorded, of individual charging sessions, timestamps, state of
+        charge, energy charged (kWh), odometer reading, price, and any free-text notes. The
+        operator can additionally encrypt these fields at rest (field-level encryption,
+        off by default).</p>
+      <p><strong>Vehicle:</strong> name, brand, model, battery capacity, and – only if the
+        MyŠkoda integration is enabled – the Vehicle Identification Number (VIN).</p>
+      <p><strong>Sign-in:</strong> session and one-time tokens (password reset, verification
+        links) are stored only as hashes, never in plain text.</p>
+      <p><strong>Technical logs:</strong> a log of outgoing emails (recipient address,
+        subject, status), and – only while the MyŠkoda integration is active – a debug log
+        of the API polls (e.g. battery level, charging power, position), which can be turned
+        off in settings.</p>
+
+      <h2>4. Purposes and legal basis</h2>
+      <ul>
+        <li>Providing your account and charging log – Art. 6(1)(b) GDPR (performance of the
+          usage agreement)</li>
+        <li>Optional features you turn on yourself (automatic charge detection via MyŠkoda,
+          WebDAV backup, location access in the app, email notifications) –
+          Art. 6(1)(a) GDPR (consent through actively enabling them)</li>
+        <li>Operational security (e.g. sign-in log) – Art. 6(1)(f) GDPR (legitimate interest
+          in a secure, working service)</li>
+      </ul>
+
+      <h2>5. Recipients and third parties</h2>
+      <p>There are no advertising or analytics services. Data leaves this server only in
+        these three, each optional, cases:</p>
+      <ul>
+        <li><strong>OpenStreetMap Nominatim</strong> – only when you search for an address
+          in the "add location" form is your search text sent to OpenStreetMap's public
+          Nominatim API. No search, no transmission; the automatic place name shown on a
+          charging session, by contrast, runs fully offline.</li>
+        <li><strong>MyŠkoda Public API (Škoda Auto)</strong> – only if you add your own API
+          key in settings, the server periodically polls your vehicle's charging/battery
+          state there (VIN, battery level, possibly vehicle position).</li>
+        <li><strong>Email delivery (SMTP)</strong> – only if the operator has configured an
+          SMTP account, verification, reset, and notification emails are sent through that
+          provider.</li>
+        <li><strong>WebDAV backup</strong> – only if you enable it yourself in your settings
+          and enter a destination (e.g. your own Nextcloud), the server uploads a backup of
+          your own data there.</li>
+      </ul>
+
+      <h2>6. Retention</h2>
+      <p>Your data is kept for as long as your account exists. You can delete your account
+        yourself, completely, at any time (in the app/web UI under "My Account") – this also
+        removes all vehicles, charging sessions, providers, locations, and your MyŠkoda and
+        backup configuration. Self-uploaded WebDAV backups are removed automatically once
+        they pass your configured retention period, independent of the account.</p>
+
+      <h2>7. Your rights</h2>
+      <ul>
+        <li>Access to the data stored about you (Art. 15 GDPR)</li>
+        <li>Correction of inaccurate data (Art. 16 GDPR) – most fields can be edited
+          directly in the app</li>
+        <li>Erasure (Art. 17 GDPR) – see section 6, immediate self-service</li>
+        <li>Restriction of processing (Art. 18 GDPR)</li>
+        <li>Data portability (Art. 20 GDPR) – a full export of your data as a ZIP/CSV via
+          the backup feature</li>
+        <li>Objection (Art. 21 GDPR) and withdrawal of consent (e.g. by turning an optional
+          feature off again)</li>
+        <li>Lodging a complaint with a data protection supervisory authority</li>
+      </ul>
+      <p>Send requests about any of this to the operator's contact address above.</p>
+
+      <h2>8. Security</h2>
+      <p>Passwords are stored only as bcrypt hashes, session and one-time tokens only as
+        SHA-256 hashes. Particularly sensitive fields (GPS coordinates, notes, vehicle
+        identification number, stored SMTP/WebDAV/MyŠkoda credentials) can additionally be
+        secured with field-level encryption by the operator.</p>
+
+      <h2>9. Cookies</h2>
+      <p>Only strictly necessary cookies are set: a session cookie for sign-in (not
+        readable via JavaScript) and a cookie for your chosen language. Both exist only to
+        run this site, not for tracking.</p>
+      {% endif %}
+    </div>
+  </main>
+</body>
+</html>

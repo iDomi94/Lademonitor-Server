@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, Request
@@ -313,6 +314,33 @@ def reset_password_page(request: Request, db: Session = Depends(get_db)):
 @app.get("/verify-email", response_class=HTMLResponse)
 def verify_email_page(request: Request, db: Session = Depends(get_db)):
     return _public_page(request, db, "verify_email.html")
+
+
+def _privacy_controller() -> dict[str, str | None]:
+    """Kontaktdaten des datenschutzrechtlich Verantwortlichen dieser
+    Installation - bewusst NICHT im Code, sondern optional per Umgebungs-
+    variable gesetzt (siehe .env.example): der Betreiber einer selbst-
+    gehosteten Instanz ist der Verantwortliche, nicht die Autorin/der Autor
+    der Software. Ungesetzt zeigt privacy.html einen deutlichen Hinweis
+    statt stillschweigend falsche/fehlende Angaben zu verstecken."""
+    return {
+        "name": os.getenv("PRIVACY_CONTROLLER_NAME"),
+        "address": os.getenv("PRIVACY_CONTROLLER_ADDRESS"),
+        "email": os.getenv("PRIVACY_CONTROLLER_EMAIL"),
+    }
+
+
+@app.get("/privacy", response_class=HTMLResponse)
+def privacy_page(request: Request, db: Session = Depends(get_db)):
+    """Oeffentlich erreichbar wie /login - eine Datenschutzerklaerung, die
+    erst nach einer Anmeldung zu lesen ist, waere fuer die Registrierung und
+    fuer die App-Store-Privacy-URL wertlos."""
+    controller = _privacy_controller()
+    return _public_page(
+        request, db, "privacy.html",
+        controller=controller,
+        controller_configured=bool(controller["name"] and controller["email"]),
+    )
 
 
 @app.get("/health")

@@ -8,6 +8,8 @@
   "nav.menu": "Menü",
   "nav.logout": "Logout",
 
+  "footer.privacy": "Datenschutz",
+
   "changelog.title": "Was ist neu",
   "changelog.your_version": "Deine Version",
 
@@ -424,6 +426,7 @@
   "login.forgot_link": "Passwort vergessen?",
   "register.email_label": "E-Mail-Adresse (optional)",
   "register.email_hint": "Ohne Adresse funktioniert alles wie bisher - nur \"Passwort vergessen\" und Benachrichtigungen dann nicht.",
+  "register.privacy_note": "Mit der Registrierung akzeptierst du die <a href=\"privacy\">Datenschutzerklärung</a>.",
 
   "settings.subpages.email.title": "E-Mail",
   "settings.subpages.email.desc": "SMTP-Zugang einrichten, Testmail verschicken und den Versand nachvollziehen.",

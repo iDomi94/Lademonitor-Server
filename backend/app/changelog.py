@@ -5,6 +5,15 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.17.0",
+        "date": "2026-09-09",
+        "title": "Datenschutzerklärung",
+        "changes": [
+            "Neue, öffentlich erreichbare Seite /privacy (verlinkt im Footer jeder Seite sowie beim Registrieren) - beschreibt konkret, welche Daten diese Installation verarbeitet: Konto, Ladeorte/-vorgänge, Fahrzeug, sowie die drei einzigen Fälle, in denen Daten den Server überhaupt verlassen (Adresssuche über OpenStreetMap Nominatim, die selbst aktivierte MyŠkoda-Anbindung, selbst konfiguriertes WebDAV-Backup) - jeweils klar als optional gekennzeichnet. Verweist auf die bestehende Konto-Löschung und den Backup-Export für Löschung/Datenübertragbarkeit nach Art. 17/20 DSGVO.",
+            "Verantwortlicher (Name/Anschrift/Kontakt-E-Mail) kommt bewusst NICHT aus dem Code, sondern aus den neuen, optionalen Umgebungsvariablen PRIVACY_CONTROLLER_NAME/_ADDRESS/_EMAIL (siehe .env.example) - datenschutzrechtlich verantwortlich ist, wer die eigene Installation betreibt, nicht die Autorin/der Autor der Software. Ohne gesetzte Variablen zeigt die Seite einen deutlichen Hinweis statt stillschweigend unvollständige Angaben zu machen.",
+        ],
+    },
+    {
         "version": "0.16.0",
         "date": "2026-09-09",
         "title": "Eigenes Konto löschen",
