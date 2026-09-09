@@ -259,6 +259,14 @@ die damit verschlüsselten Werte nicht mehr lesbar, der Server startet dann
 absichtlich nicht mehr. Details in `CLAUDE.md`, Abschnitt "Verschlüsselung
 personenbezogener Daten".
 
+**Datenschutzerklärung:** liegt unter `/privacy`, öffentlich erreichbar und
+im Footer verlinkt. Verantwortlich im Sinne der DSGVO ist der Betreiber der
+jeweiligen Installation – trage dafür `PRIVACY_CONTROLLER_NAME`,
+`PRIVACY_CONTROLLER_ADDRESS` und `PRIVACY_CONTROLLER_EMAIL` ein (siehe
+`.env.example`). Ohne diese Angaben zeigt die Seite einen deutlichen
+Warnhinweis statt unvollständiger Angaben – spätestens vor einer öffentlichen
+Erreichbarkeit nachtragen.
+
 Details und weitere bekannte Einschränkungen in `CLAUDE.md`.
 
 ## Nach einem Update nicht erreichbar?

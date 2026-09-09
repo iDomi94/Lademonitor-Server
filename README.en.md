@@ -243,6 +243,13 @@ disable it again** (removing the key) – the values it encrypted become
 unreadable without it, and the server then deliberately refuses to start.
 Details in `CLAUDE.md`, section "Verschluesselung personenbezogener Daten".
 
+**Privacy policy:** lives at `/privacy`, publicly reachable and linked in the
+footer. The operator of each installation is the party responsible under
+GDPR – set `PRIVACY_CONTROLLER_NAME`, `PRIVACY_CONTROLLER_ADDRESS`, and
+`PRIVACY_CONTROLLER_EMAIL` accordingly (see `.env.example`). Without these,
+the page shows a clear warning instead of incomplete information – fill
+them in at the latest before making the server publicly reachable.
+
 Details and further known limitations in `CLAUDE.md`.
 
 ## Unreachable after an update?
