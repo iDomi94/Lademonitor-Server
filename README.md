@@ -87,9 +87,10 @@ docker run -d -p 8111:8000 -v /pfad/zu/daten:/config ghcr.io/idomi94/lademonitor
 Backup-Plan aufnehmen. Optional zusätzlich `-e FIELD_ENCRYPTION_KEY=...`
 setzen, um GPS-Koordinaten/Notizen in der Datenbank zu verschlüsseln –
 sinnvoll, sobald der Server öffentlich erreichbar ist, fürs reine Heimnetz
-nicht nötig. Erzeugen lässt sich ein gültiger Schlüssel z.B. mit:
+nicht nötig. Erzeugen lässt sich ein gültiger Schlüssel z.B. mit (reine
+Python-Standardbibliothek, kein `pip install` nötig):
 ```bash
-python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+python3 -c "import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())"
 ```
 Details siehe [Sicherheitshinweis](#sicherheitshinweis).
 

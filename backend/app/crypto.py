@@ -17,9 +17,12 @@ betreibt, braucht den zusaetzlichen Aufwand (Schluessel generieren, sicher
 verwahren, bei Verlust sind die Felder futsch) nicht - siehe is_enabled()
 weiter unten. Ist FIELD_ENCRYPTION_KEY nicht gesetzt, verhalten sich
 EncryptedString/EncryptedFloat wie ganz normale String/Float-Spalten (nur mit
-Text als DB-Typ). Erzeugen, falls gewuenscht:
+Text als DB-Typ). Erzeugen, falls gewuenscht - reine Python-Standardbibliothek
+reicht, ein Fernet-Schluessel ist einfach 32 zufaellige Bytes, urlsafe-
+base64-kodiert (kein `pip install cryptography` fuer die Erzeugung selbst
+noetig, nur zur Laufzeit hier im Backend):
 
-    python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    python3 -c "import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())"
 
 Der Schluessel kommt AUSSCHLIESSLICH aus der Umgebungsvariable
 FIELD_ENCRYPTION_KEY, NIEMALS aus der DB oder aus /config - genau das waere
@@ -64,8 +67,8 @@ def _fernet_or_none() -> Fernet | None:
         raise RuntimeError(
             f"{ENV_VAR} ist gesetzt, aber kein gueltiger Fernet-Schluessel (32 "
             "zufaellige Bytes, urlsafe-base64-kodiert). Erzeugen mit: python3 -c "
-            "\"from cryptography.fernet import Fernet; "
-            "print(Fernet.generate_key().decode())\""
+            "\"import base64, os; "
+            "print(base64.urlsafe_b64encode(os.urandom(32)).decode())\""
         ) from exc
 
 
