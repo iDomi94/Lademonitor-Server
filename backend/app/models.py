@@ -196,8 +196,19 @@ class Vehicle(Base):
     # Kurzer, stabiler Schluessel z.B. fuer HA-Automations ("enyaq"), getrennt von der DB-ID.
     # Eindeutig PRO NUTZER (siehe __table_args__), nicht global - zwei Nutzer
     # koennen also beide ein Fahrzeug "enyaq" haben.
+    # NICHT verschluesselt (siehe crypto.py) - wird exakt per SQL abgefragt
+    # (HA-Push in routers/sessions.py, Dublettencheck in routers/vehicles.py)
+    # und ist per __table_args__ eindeutig pro Nutzer; Fernet ist nicht
+    # deterministisch (Zufalls-IV), zwei Verschluesselungen desselben Werts
+    # ergeben unterschiedlichen Ciphertext - ein SQL-Gleichheitsvergleich UND
+    # der DB-Unique-Constraint wuerden beide sang- und klanglos aufhoeren zu
+    # funktionieren. Ohne Blind-Index (deterministischer Zweit-Hash als
+    # eigene Spalte) nicht sinnvoll verschluesselbar - siehe CLAUDE.md.
     external_id: Mapped[str] = mapped_column(String, index=True)
-    name: Mapped[str] = mapped_column(String)
+    # Verschluesselt (siehe crypto.py) - reines Anzeigelabel, keine
+    # Unique-Constraint und keine SQL-Filterung darauf (im Gegensatz zu
+    # external_id oben).
+    name: Mapped[str] = mapped_column(EncryptedString)
     brand: Mapped[str | None] = mapped_column(String, nullable=True)
     model: Mapped[str | None] = mapped_column(String, nullable=True)
     battery_capacity_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -215,7 +226,13 @@ class Provider(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_uuid)
     user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
-    # Eindeutig PRO NUTZER (siehe __table_args__), nicht global
+    # NICHT verschluesselt (siehe crypto.py) - eindeutig PRO NUTZER
+    # (__table_args__ oben) UND per SQL-Gleichheitsvergleich beim Anlegen auf
+    # Dubletten geprueft (routers/providers.py::create_provider). Fernet ist
+    # nicht deterministisch, ein Ciphertext-Vergleich wuerde nie treffen und
+    # der DB-Unique-Constraint waere wirkungslos - ohne Blind-Index nicht
+    # sinnvoll verschluesselbar, siehe CLAUDE.md. Ausserdem eher ein
+    # Anbietername ("EnBW") als personenbezogenes Datum.
     name: Mapped[str] = mapped_column(String)
     last_price_ac_per_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
     last_price_dc_per_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -231,9 +248,13 @@ class ChargingLocation(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_uuid)
     user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
-    name: Mapped[str] = mapped_column(String)
     # Verschluesselt (siehe crypto.py) - der schaerfste Fall personenbezogener
-    # Daten dieser App ist ein Ladeort mit dem Namen "Zuhause".
+    # Daten dieser App ist ein Ladeort mit dem Namen "Zuhause". Keine
+    # Unique-Constraint und keine SQL-Filterung darauf (nur order_by, siehe
+    # routers/locations.py - sortiert deshalb seit hier in Python), im
+    # Gegensatz zu Vehicle.external_id/Provider.name.
+    name: Mapped[str] = mapped_column(EncryptedString)
+    # Verschluesselt (siehe crypto.py), aus demselben Grund wie name oben.
     latitude: Mapped[float] = mapped_column(EncryptedFloat)
     longitude: Mapped[float] = mapped_column(EncryptedFloat)
     radius_m: Mapped[int] = mapped_column(Integer, default=100)
@@ -320,7 +341,9 @@ class WebdavBackupConfig(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     url: Mapped[str] = mapped_column(String, default="")
     username: Mapped[str | None] = mapped_column(String, nullable=True)
-    password: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Verschluesselt (siehe crypto.py) - kein API-Zugriff/keine Unique-
+    # Constraint darauf, wird nur an httpx fuer den WebDAV-PUT weitergereicht.
+    password: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
     frequency: Mapped[WebdavBackupFrequency] = mapped_column(
         Enum(WebdavBackupFrequency), default=WebdavBackupFrequency.DAILY
     )
@@ -378,7 +401,9 @@ class MySkodaConfig(Base):
     vehicle_id: Mapped[str] = mapped_column(ForeignKey("vehicles.id"), unique=True, index=True)
 
     enabled: Mapped[bool] = mapped_column(Boolean, default=False)
-    api_key: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Verschluesselt (siehe crypto.py) - keine SQL-Filterung/Unique-Constraint
+    # darauf, wird nur an httpx fuer den MyŠkoda-API-Aufruf weitergereicht.
+    api_key: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
     vin: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # Adaptives Polling: das Kontingent von 20 Anfragen/Stunde pro API-Key
@@ -520,7 +545,9 @@ class SmtpConfig(Base):
         Enum(SmtpSecurity), default=SmtpSecurity.STARTTLS
     )
     username: Mapped[str | None] = mapped_column(String, nullable=True)
-    password: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Verschluesselt (siehe crypto.py) - keine SQL-Filterung/Unique-Constraint
+    # darauf, wird nur an smtplib fuer SMTP-AUTH weitergereicht.
+    password: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
     from_address: Mapped[str] = mapped_column(String, default="")
     from_name: Mapped[str] = mapped_column(String, default="Lademonitor")
 

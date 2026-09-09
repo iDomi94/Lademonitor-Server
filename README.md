@@ -235,21 +235,24 @@ Home Assistant und die iOS-App brauchen danach einen neuen Token.
 
 **Verschlüsselung personenbezogener Daten (optional):** Wird
 `FIELD_ENCRYPTION_KEY` gesetzt (siehe oben), liegen GPS-Koordinaten (Ladeorte
-und Ladevorgänge) sowie Notizen verschlüsselt in der Datenbank statt im
-Klartext. Standardmäßig **aus** – wer den Server nur im eigenen Heimnetz
-betreibt, braucht das nicht; sinnvoll, sobald er öffentlich erreichbar ist
-(z.B. eigener Reverse Proxy). Ob sie gerade aktiv ist, zeigt ein Badge unten
-in den Einstellungen. Schützt gegen Diebstahl von DB-Dump/Backup/Datenträger.
-**Kein Zero-Knowledge-Schutz:** Der Schlüssel liegt im Server-Environment,
-der Server entschlüsselt weiterhin transparent bei jedem Request – wer den
-laufenden Server-Prozess kontrolliert, kommt technisch an die Daten. Der
-eingebaute CSV-Export und das automatische WebDAV-Backup liefern
-GPS-Koordinaten/Notizen bewusst weiterhin im Klartext (portables,
-menschenlesbares Format) – landet dieses Backup auf fremder Infrastruktur,
-greift die Verschlüsselung dort nicht. Namen (Fahrzeug/Anbieter/Ladeort) und
-die E-Mail-Adresse sind noch nicht verschlüsselt. **Einmal aktiviert und
-benutzt nicht mehr deaktivieren** (Schlüssel entfernen) – ohne ihn sind die
-damit verschlüsselten Werte nicht mehr lesbar, der Server startet dann
+und Ladevorgänge), Notizen, Fahrzeug-/Ladeort-Namen sowie die gespeicherten
+Zugangsdaten (SMTP-, WebDAV-Passwort, MyŠkoda-API-Key) verschlüsselt in der
+Datenbank statt im Klartext. Standardmäßig **aus** – wer den Server nur im
+eigenen Heimnetz betreibt, braucht das nicht; sinnvoll, sobald er öffentlich
+erreichbar ist (z.B. eigener Reverse Proxy). Ob sie gerade aktiv ist, zeigt
+ein Badge unten in den Einstellungen. Schützt gegen Diebstahl von
+DB-Dump/Backup/Datenträger. **Kein Zero-Knowledge-Schutz:** Der Schlüssel
+liegt im Server-Environment, der Server entschlüsselt weiterhin transparent
+bei jedem Request – wer den laufenden Server-Prozess kontrolliert, kommt
+technisch an die Daten. Der eingebaute CSV-Export und das automatische
+WebDAV-Backup liefern alle verschlüsselten Werte bewusst weiterhin im
+Klartext (portables, menschenlesbares Format) – landet dieses Backup auf
+fremder Infrastruktur, greift die Verschlüsselung dort nicht.
+**Bewusst NICHT verschlüsselt** (SQL-Gleichheitsvergleiche bzw.
+Eindeutigkeits-Prüfungen brauchen dafür Klartext): Fahrzeug-`external_id`
+(HA-Push), Anbieter-Name, Nutzername und E-Mail-Adresse. **Einmal aktiviert
+und benutzt nicht mehr deaktivieren** (Schlüssel entfernen) – ohne ihn sind
+die damit verschlüsselten Werte nicht mehr lesbar, der Server startet dann
 absichtlich nicht mehr. Details in `CLAUDE.md`, Abschnitt "Verschlüsselung
 personenbezogener Daten".
 

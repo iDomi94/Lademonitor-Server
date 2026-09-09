@@ -9,11 +9,13 @@ folgen [Semantic Versioning](https://semver.org/).
 ## [0.15.0] — 2026-09-09
 
 ### Added
-- **Optional: GPS-Koordinaten (Ladeorte und Ladevorgänge), Notizen und
-  automatisch ermittelte Ortsnamen können jetzt verschlüsselt in der
-  Datenbank gespeichert werden** statt im Klartext – relevant, sobald der
-  Server öffentlich erreichbar ist statt nur im eigenen Heimnetz.
-  Standardmäßig AUS, keine Aktion nötig für einen reinen Heimnetz-Betrieb.
+- **Optional: GPS-Koordinaten (Ladeorte und Ladevorgänge), Notizen,
+  automatisch ermittelte Ortsnamen, Fahrzeug-/Ladeort-Namen sowie gespeicherte
+  Zugangsdaten (SMTP-/WebDAV-Passwort, MyŠkoda-API-Key) können jetzt
+  verschlüsselt in der Datenbank gespeichert werden** statt im Klartext –
+  relevant, sobald der Server öffentlich erreichbar ist statt nur im eigenen
+  Heimnetz. Standardmäßig AUS, keine Aktion nötig für einen reinen
+  Heimnetz-Betrieb.
 
   Aktivieren über die neue optionale Umgebungsvariable
   `FIELD_ENCRYPTION_KEY`:
@@ -32,11 +34,12 @@ folgen [Semantic Versioning](https://semver.org/).
   Kein Zero-Knowledge-Schutz: der Schlüssel liegt im Server-Environment, der
   Server entschlüsselt weiterhin transparent bei jedem Request. Schützt gegen
   Diebstahl von Datenbank/Backup/Datenträger, nicht gegen Einsicht durch, wer
-  auch immer den laufenden Server-Prozess kontrolliert. Noch nicht
-  verschlüsselt: Namen (Fahrzeug/Anbieter/Ladeort), E-Mail-Adresse, sowie die
-  schon vorher bekannten Klartext-Zugangsdaten (SMTP/WebDAV/MyŠkoda). Der
-  CSV-Export und das automatische WebDAV-Backup bleiben bewusst
-  menschenlesbar und damit unverschlüsselt.
+  auch immer den laufenden Server-Prozess kontrolliert. Bewusst NICHT
+  verschlüsselt (an SQL-Gleichheitsvergleiche bzw. Eindeutigkeits-Prüfungen pro
+  Nutzer gebunden): Fahrzeug-Kurzschlüssel (`external_id`, Home-Assistant-Push),
+  Anbieter-Name, Nutzername, E-Mail-Adresse. Der CSV-Export und das
+  automatische WebDAV-Backup bleiben bewusst menschenlesbar und damit
+  unverschlüsselt.
 
 ## [0.14.1] — 2026-09-08
 

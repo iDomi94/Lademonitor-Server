@@ -49,6 +49,11 @@ _ENCRYPTABLE_COORDINATE_COLUMNS = (
 _ENCRYPTABLE_TEXT_COLUMNS = (
     ("charging_sessions", "notes"),
     ("charging_sessions", "geocoded_place"),
+    ("vehicles", "name"),
+    ("charging_locations", "name"),
+    ("smtp_configs", "password"),
+    ("webdav_backup_configs", "password"),
+    ("myskoda_configs", "api_key"),
 )
 
 

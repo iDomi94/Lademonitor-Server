@@ -220,23 +220,25 @@ is deliberately **no rate limiting yet** on login/registration – if exposed
 publicly via a reverse proxy, make sure to use a strong password.
 
 **Encryption of personal data (optional):** setting `FIELD_ENCRYPTION_KEY`
-(see above) encrypts GPS coordinates (charging locations and sessions) and
-notes at rest instead of storing them in plain text. **Off by default** –
-not needed for a server that only runs on your home network; worthwhile
-once it's publicly reachable (e.g. your own reverse proxy). A badge at the
-bottom of Settings shows whether it's currently active. Protects against
-theft of a DB dump/backup/disk. **This is not zero-knowledge:** the key
-lives in the server's environment and the server still decrypts
-transparently on every request – whoever controls the running server
-process can technically access the data. The built-in CSV export and the
-automatic WebDAV backup deliberately still contain GPS coordinates/notes in
-plain text (portable, human-readable format) – if that backup ends up on
-infrastructure you don't control, encryption doesn't help there. Names
-(vehicle/provider/location) and the email address are not yet encrypted.
-**Once enabled and used, don't disable it again** (removing the key) – the
-values it encrypted become unreadable without it, and the server then
-deliberately refuses to start. Details in `CLAUDE.md`, section
-"Verschluesselung personenbezogener Daten".
+(see above) encrypts GPS coordinates (charging locations and sessions),
+notes, vehicle/location names, and stored credentials (SMTP/WebDAV
+passwords, MyŠkoda API key) at rest instead of storing them in plain text.
+**Off by default** – not needed for a server that only runs on your home
+network; worthwhile once it's publicly reachable (e.g. your own reverse
+proxy). A badge at the bottom of Settings shows whether it's currently
+active. Protects against theft of a DB dump/backup/disk. **This is not
+zero-knowledge:** the key lives in the server's environment and the server
+still decrypts transparently on every request – whoever controls the
+running server process can technically access the data. The built-in CSV
+export and the automatic WebDAV backup deliberately still contain all
+encrypted values in plain text (portable, human-readable format) – if that
+backup ends up on infrastructure you don't control, encryption doesn't help
+there. **Deliberately not encrypted** (SQL equality lookups or uniqueness
+checks need plain text for these): vehicle `external_id` (HA push),
+provider name, username, and email address. **Once enabled and used, don't
+disable it again** (removing the key) – the values it encrypted become
+unreadable without it, and the server then deliberately refuses to start.
+Details in `CLAUDE.md`, section "Verschluesselung personenbezogener Daten".
 
 Details and further known limitations in `CLAUDE.md`.
 
