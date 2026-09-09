@@ -22,11 +22,12 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-charging}:${POSTGRES_PASSWORD:-charging}@db:5432/${POSTGRES_DB:-charging}
-      # Schluessel fuer die Feld-Verschluesselung (GPS-Koordinaten, Notizen,
-      # siehe backend/app/crypto.py) - bewusst OHNE Default wie bei den
-      # Postgres-Zugangsdaten oben: ein stillschweigend erratbarer
-      # Verschluesselungsschluessel waere wirkungslos. In .env eintragen
-      # (siehe .env.example), sonst startet der Container nicht.
-      FIELD_ENCRYPTION_KEY: ${FIELD_ENCRYPTION_KEY:?FIELD_ENCRYPTION_KEY fehlt - siehe .env.example}
+      # Optionaler Schluessel fuer die Feld-Verschluesselung (GPS-Koordinaten,
+      # Notizen, siehe backend/app/crypto.py) - ohne Default wie bei den
+      # Postgres-Zugangsdaten oben, aber NICHT mit `:?` erzwungen: wer nur im
+      # eigenen Heimnetz unterwegs ist, braucht die Verschluesselung nicht,
+      # dann bleibt die Variable einfach leer und die App laeuft unverschluesselt
+      # weiter. In .env eintragen (siehe .env.example), um sie zu aktivieren.
+      FIELD_ENCRYPTION_KEY: ${FIELD_ENCRYPTION_KEY:-}
     ports:
       - "8111:8000"

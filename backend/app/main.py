@@ -41,11 +41,12 @@ from .routers import (
 )
 from .webdav_backup import run_due_backups
 
-# Vor JEDEM DB-Zugriff pruefen, ob FIELD_ENCRYPTION_KEY gesetzt und gueltig
-# ist (siehe crypto.py) - sonst startet die App bewusst gar nicht erst, statt
-# still unverschluesselt weiterzulaufen oder erst mitten in der Migration
-# unten mit einem schwer einzuordnenden Fehler abzubrechen.
-crypto.require_key()
+# Feld-Verschluesselung ist opt-in (siehe crypto.py) - hier wird nur das
+# FORMAT eines GESETZTEN Schluessels vor jedem DB-Zugriff geprueft, nicht
+# seine Anwesenheit. run_light_migrations() unten prueft zusaetzlich, ob
+# trotz fehlenden Schluessels bereits verschluesselte Bestandsdaten
+# existieren (verweigert dann den Start, statt kaputte Werte auszuliefern).
+crypto.check_configured()
 
 Base.metadata.create_all(bind=engine)
 run_light_migrations()
@@ -199,6 +200,7 @@ def _page(request: Request, db: Session, template_name: str, **extra):
             "user": user,
             "version": VERSION,
             "changelog": CHANGELOG,
+            "encryption_enabled": crypto.is_enabled(),
             "lang": lang,
             "js_translations": translations_for(lang, prefix="filter."),
             **extra,
@@ -315,4 +317,4 @@ def verify_email_page(request: Request, db: Session = Depends(get_db)):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "version": VERSION}
+    return {"status": "ok", "version": VERSION, "field_encryption": crypto.is_enabled()}

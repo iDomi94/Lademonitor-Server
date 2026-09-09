@@ -9,21 +9,25 @@ folgen [Semantic Versioning](https://semver.org/).
 ## [0.15.0] — 2026-09-09
 
 ### Added
-- **GPS-Koordinaten (Ladeorte und Ladevorgänge), Notizen und automatisch
-  ermittelte Ortsnamen werden jetzt verschlüsselt in der Datenbank
-  gespeichert** statt im Klartext – relevant, sobald der Server öffentlich
-  erreichbar ist statt nur im eigenen Heimnetz.
+- **Optional: GPS-Koordinaten (Ladeorte und Ladevorgänge), Notizen und
+  automatisch ermittelte Ortsnamen können jetzt verschlüsselt in der
+  Datenbank gespeichert werden** statt im Klartext – relevant, sobald der
+  Server öffentlich erreichbar ist statt nur im eigenen Heimnetz.
+  Standardmäßig AUS, keine Aktion nötig für einen reinen Heimnetz-Betrieb.
 
-  **Breaking:** erfordert die neue Pflicht-Umgebungsvariable
-  `FIELD_ENCRYPTION_KEY` – ohne sie startet der Server nicht mehr. Vor dem
-  Update erzeugen:
+  Aktivieren über die neue optionale Umgebungsvariable
+  `FIELD_ENCRYPTION_KEY`:
   ```bash
   python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
   ```
   und sicher aufbewahren (z.B. Passwort-Manager) – **nicht** im Datenverzeichnis
   (`/config`) ablegen, sonst landet er im selben Backup wie die damit
-  verschlüsselten Daten. Bestehende Klartextwerte werden beim ersten Start mit
-  gesetztem Schlüssel automatisch migriert.
+  verschlüsselten Daten. Einmal gesetzt und benutzt nicht mehr entfernen – ein
+  verlorener oder entfernter Schlüssel macht die betroffenen Felder dauerhaft
+  unlesbar, der Server verweigert dann bewusst den Start. Bestehende
+  Klartextwerte werden beim nächsten Start mit gesetztem Schlüssel automatisch
+  migriert, auch wenn er erst später gesetzt wird. Der aktuelle Stand steht
+  als Badge unten in den Einstellungen.
 
   Kein Zero-Knowledge-Schutz: der Schlüssel liegt im Server-Environment, der
   Server entschlüsselt weiterhin transparent bei jedem Request. Schützt gegen

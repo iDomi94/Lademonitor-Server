@@ -914,30 +914,61 @@ transparent weiter funktionsfaehig.
 **Schluessel:** `FIELD_ENCRYPTION_KEY`, ausschliesslich Umgebungsvariable,
 NIEMALS in der DB oder unter `/config` - genau das waere sonst im selben
 Backup wie die verschluesselten Daten und der Schutz waere wirkungslos.
-`main.py` ruft `crypto.require_key()` vor jedem DB-Zugriff auf: fehlt die
-Variable oder ist sie kein gueltiger Fernet-Schluessel, startet die App
-bewusst gar nicht erst statt still unverschluesselt weiterzulaufen. **Das ist
-ein Breaking-Update** - bestehende Installationen (Unraid-Template, Docker
-Compose) muessen den Schluessel VOR dem Update setzen, sonst startet der
-Container nach dem Update nicht mehr (Unraid-Template hat dafuer ein neues
-Pflichtfeld, `.env.example` fuer Compose entsprechend ergaenzt).
+
+**Update 2026-09-09 (kippt einen Teil der urspruenglichen Entscheidung, noch
+am selben Tag): Verschluesselung ist bewusst OPT-IN, keine Pflicht.**
+Urspruenglich verweigerte die App den Start komplett ohne gesetzten
+Schluessel (`crypto.require_key()`) - das wurde noch am selben Tag revidiert,
+weil ein grosser Teil der Nutzer den Server rein im eigenen Heimnetz betreibt
+und dort weder das DSGVO-Thema noch den Aufwand (Schluessel generieren,
+sicher verwahren, bei Verlust sind die Felder futsch) braucht. Jetzt: fehlt
+`FIELD_ENCRYPTION_KEY` komplett, verhalten sich `EncryptedString`/
+`EncryptedFloat` (`crypto.py`) wie ganz normale String/Float-Spalten -
+`crypto.is_enabled()` haelt diesen Zustand fest, `encrypt_str()`/
+`decrypt_str()` verzweigen intern darauf (No-Op-Passthrough ohne Schluessel).
+`main.py` ruft dafuer nur noch `crypto.check_configured()` auf - validiert
+das FORMAT eines GESETZTEN Schluessels (verweigert den Start bei einem
+kaputten Wert), verlangt aber keine Anwesenheit mehr.
+
+**Einmal aktiviert, bleibt es aktiviert** - genau das ist der Haken am
+Opt-in: wird der Schluessel NACH bereits erfolgter Verschluesselung wieder
+entfernt, waeren die betroffenen Werte ohne ihn nicht mehr lesbar. Dagegen
+prueft `database.py::_check_no_orphaned_ciphertext()` bei JEDEM
+Migrationslauf (nicht nur beim ersten): findet sich in einer der sechs
+betroffenen Spalten ein Wert mit dem Fernet-Praefix `gAAAAA` (siehe
+`crypto.FERNET_PREFIX`, rein String-basiert per `LIKE`, damit der Check auch
+OHNE Schluessel funktioniert) WAEHREND kein Schluessel gesetzt ist, verweigert
+die App den Start mit einer klaren Fehlermeldung, statt kaputte/falsche Werte
+durch API oder Web-UI auszuliefern. Web-UI zeigt den aktuellen Zustand als
+Badge unten in den Einstellungen (🔒/🔓, `encryption_enabled` im
+Template-Kontext von `main.py::_page()`), `/health` liefert ihn zusaetzlich
+als `field_encryption` im JSON.
 
 **Migration Bestandsdaten** (`database.py::run_light_migrations()`): laeuft
 wie alle anderen leichten Migrationen bei jedem Container-Start und ist
-idempotent. Fuer die GPS-Spalten (bisher `DOUBLE PRECISION`) wird der
+idempotent, in zwei getrennten Schritten. **Schritt 1** (immer, unabhaengig
+vom Schluessel): fuer die GPS-Spalten (bisher `DOUBLE PRECISION`) wird der
 Spaltentyp per Umbenennungs-Trick (neue VARCHAR-Spalte, Python-seitig pro
-Zeile verschluesselt befuellen, alte Spalte droppen, neue umbenennen -
-gleiches Muster wie schon bei der `auth_tokens.token`->`token_hash`-Migration)
-auf verschluesselten Text umgestellt; `not_null=True` bei
-`ChargingLocation.latitude/longitude` haelt die urspruengliche
-NOT-NULL-Eigenschaft ueber den Umbau hinweg aufrecht. Fuer `notes`/
-`geocoded_place` (bereits VARCHAR/TEXT) genuegt ein Versuch, jeden
-Bestandswert zu entschluesseln (`crypto.is_encrypted()`) - schlaegt das fehl,
-war der Wert noch Klartext und wird verschluesselt. Auf einer komplett neuen
-Installation legt `create_all()` diese Spalten direkt als VARCHAR an, die
-Migration ist dort ein No-Op. **Vor dem Einsatz auf der echten Installation
-unbedingt gegen eine Kopie der Produktiv-DB testen** - eine fehlgeschlagene
-Verschluesselung von Bestandsdaten ist nicht trivial rueckgaengig zu machen.
+Zeile befuellen ueber `crypto.encrypt_str()` - verschluesselt NUR, wenn
+`is_enabled()`, sonst reiner Passthrough -, alte Spalte droppen, neue
+umbenennen - gleiches Muster wie schon bei der
+`auth_tokens.token`->`token_hash`-Migration) auf Text umgestellt, WEIL das
+Modell (`models.py`) so oder so eine Text-Spalte erwartet, ob verschluesselt
+oder nicht; `not_null=True` bei `ChargingLocation.latitude/longitude` haelt
+die urspruengliche NOT-NULL-Eigenschaft ueber den Umbau hinweg aufrecht.
+**Schritt 2** (`_encrypt_pending_plaintext()`, No-Op ohne Schluessel): fuer
+alle sechs Spalten (die vier GPS- plus `notes`/`geocoded_place`, die schon
+vorher VARCHAR/TEXT waren) werden noch unverschluesselte Bestandswerte
+nachtraeglich verschluesselt, erkannt ueber `crypto.is_encrypted()`
+(Praefix-Check) statt Entschluesselungsversuch. Das deckt auch den Fall
+"Schluessel wird ERST NACH einer Weile aktiviert" ab: bis dahin angesammelte
+Klartextwerte (inkl. GPS, das laengst zu VARCHAR migriert war) werden beim
+naechsten Start mit gesetztem Schluessel automatisch nachverschluesselt. Auf
+einer komplett neuen Installation legt `create_all()` die GPS-Spalten direkt
+als VARCHAR an, Schritt 1 ist dort ein No-Op. **Vor dem Einsatz auf der
+echten Installation unbedingt gegen eine Kopie der Produktiv-DB testen** -
+eine fehlgeschlagene Verschluesselung von Bestandsdaten ist nicht trivial
+rueckgaengig zu machen.
 
 **Bekannte Einschraenkung, unbedingt beachten:** Der eingebaute Export
 (`routers/backup.py`) und das automatische WebDAV-Backup liefern weiterhin

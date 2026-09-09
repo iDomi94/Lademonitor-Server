@@ -37,14 +37,32 @@ def _column_data_type(conn, table: str, column: str) -> str | None:
     return row[0] if row else None
 
 
+# Alle Spalten, die crypto.EncryptedFloat/EncryptedString verwenden (siehe
+# models.py) - an einer Stelle gepflegt, weil sowohl die Typ-Migration als
+# auch der verwaiste-Ciphertext-Check (siehe unten) dieselbe Liste brauchen.
+_ENCRYPTABLE_COORDINATE_COLUMNS = (
+    ("charging_sessions", "latitude", False),
+    ("charging_sessions", "longitude", False),
+    ("charging_locations", "latitude", True),
+    ("charging_locations", "longitude", True),
+)
+_ENCRYPTABLE_TEXT_COLUMNS = (
+    ("charging_sessions", "notes"),
+    ("charging_sessions", "geocoded_place"),
+)
+
+
 def _encrypt_legacy_coordinate_column(conn, table: str, column: str, not_null: bool = False) -> None:
     """Wandelt eine noch unverschluesselte GPS-Spalte (DOUBLE PRECISION aus
     der Zeit vor der Feld-Verschluesselung, siehe crypto.py) in eine
-    verschluesselte Text-Spalte um. Idempotent ueber den Spaltentyp: nach dem
-    ersten Lauf ist die Spalte VARCHAR, jeder weitere Aufruf ist dann ein
-    No-Op. Auf einer neuen Installation legt create_all() die Spalte direkt
-    als VARCHAR an (siehe models.py, EncryptedFloat) - dort greift dieser
-    Codepfad also gar nicht erst.
+    Text-Spalte um - UNABHAENGIG davon, ob FIELD_ENCRYPTION_KEY gesetzt ist:
+    das Modell (models.py, EncryptedFloat) erwartet so oder so eine
+    Text-Spalte, ob der Inhalt dabei tatsaechlich verschluesselt wird,
+    entscheidet crypto.encrypt_str() selbst (No-Op ohne gesetzten Schluessel).
+    Idempotent ueber den Spaltentyp: nach dem ersten Lauf ist die Spalte
+    VARCHAR, jeder weitere Aufruf ist dann ein No-Op. Auf einer neuen
+    Installation legt create_all() die Spalte direkt als VARCHAR an - dort
+    greift dieser Codepfad also gar nicht erst.
 
     `not_null` haelt die urspruengliche NOT-NULL-Eigenschaft der Spalte
     aufrecht (ChargingLocation.latitude/longitude sind Pflichtfelder) - ohne
@@ -67,12 +85,22 @@ def _encrypt_legacy_coordinate_column(conn, table: str, column: str, not_null: b
         conn.execute(text(f"ALTER TABLE {table} ALTER COLUMN {column} SET NOT NULL"))
 
 
-def _encrypt_legacy_text_column(conn, table: str, column: str) -> None:
-    """Verschluesselt Bestandswerte einer bereits als VARCHAR/TEXT angelegten
-    Spalte (notes, geocoded_place) nachtraeglich. Ueber crypto.is_encrypted()
-    idempotent gehalten, weil run_light_migrations() bei jedem Container-Start
-    laeuft - ein zweiter Durchlauf ueberspringt bereits verschluesselte
-    Werte statt sie erneut (und damit falsch) zu verschluesseln."""
+def _encrypt_pending_plaintext(conn, table: str, column: str) -> None:
+    """Verschluesselt noch unverschluesselte Bestandswerte einer bereits als
+    VARCHAR/TEXT angelegten Spalte. Deckt zwei Faelle ab: notes/geocoded_place
+    (waren schon vor der Feld-Verschluesselung VARCHAR/TEXT) UND GPS-Spalten,
+    die schon zu VARCHAR umgebaut wurden (siehe _encrypt_legacy_coordinate_column)
+    aber noch als Klartext befuellt sind, weil FIELD_ENCRYPTION_KEY beim
+    letzten Start noch nicht gesetzt war - erst wenn der Schluessel gesetzt
+    wird, gibt es hier etwas zu tun.
+
+    No-Op ohne gesetzten Schluessel (kann nichts verschluesseln), und ueber
+    crypto.is_encrypted() idempotent (ein zweiter Durchlauf ueberspringt
+    bereits verschluesselte Werte statt sie erneut, und damit falsch, zu
+    verschluesseln) - noetig, weil run_light_migrations() bei jedem
+    Container-Start laeuft."""
+    if not crypto.is_enabled():
+        return
     rows = conn.execute(text(f"SELECT id, {column} FROM {table} WHERE {column} IS NOT NULL")).all()
     for row_id, value in rows:
         if crypto.is_encrypted(value):
@@ -83,11 +111,44 @@ def _encrypt_legacy_text_column(conn, table: str, column: str) -> None:
         )
 
 
+def _check_no_orphaned_ciphertext(conn) -> None:
+    """Verweigert den Start, wenn eine Spalte bereits verschluesselte Werte
+    enthaelt, FIELD_ENCRYPTION_KEY aber gerade NICHT gesetzt ist - sonst
+    wuerde jeder Request, der eine betroffene Zeile liest, erst mitten in der
+    Antwort mit einem RuntimeError abbrechen (crypto.decrypt_str() wirft dann,
+    siehe dort), statt schon beim Start klar zu sagen, woran es liegt.
+    Passiert z.B., wenn jemand den Schluessel testweise gesetzt, Daten
+    verschluesselt und ihn danach wieder entfernt hat - siehe crypto.py,
+    "Einmal verschluesselt, bleibt verschluesselt". Rein String-basiert
+    (LIKE 'gAAAAA%'), braucht dafuer bewusst KEINEN Schluessel (siehe
+    crypto.is_encrypted())."""
+    if crypto.is_enabled():
+        return
+    columns = [(t, c) for t, c, _ in _ENCRYPTABLE_COORDINATE_COLUMNS] + list(_ENCRYPTABLE_TEXT_COLUMNS)
+    for table, column in columns:
+        if _column_data_type(conn, table, column) not in ("character varying", "text"):
+            continue  # noch nie zu Text migriert - kann keinen Ciphertext enthalten
+        found = conn.execute(
+            text(f"SELECT 1 FROM {table} WHERE {column} LIKE '{crypto.FERNET_PREFIX}%' LIMIT 1")
+        ).first()
+        if found:
+            raise RuntimeError(
+                f"{table}.{column} enthaelt bereits verschluesselte Werte, aber "
+                f"{crypto.ENV_VAR} ist nicht (mehr) gesetzt - ohne den Schluessel "
+                "sind diese Werte nicht lesbar. Schluessel wieder eintragen, bevor "
+                "der Server startet (siehe CLAUDE.md, Abschnitt \"Verschluesselung "
+                "personenbezogener Daten\")."
+            )
+
+
 def run_light_migrations() -> None:
     """Ergaenzt nachtraeglich hinzugekommene Spalten, da wir bewusst kein
     Alembic o.ae. einsetzen (Ein-Tabellen-Aenderungen sind selten genug,
     dass ADD COLUMN IF NOT EXISTS reicht)."""
     with engine.begin() as conn:
+        # Allererster Check, vor allem anderen: siehe _check_no_orphaned_ciphertext.
+        _check_no_orphaned_ciphertext(conn)
+
         conn.execute(
             text(
                 "ALTER TABLE charging_sessions "
@@ -302,20 +363,16 @@ def run_light_migrations() -> None:
         # ------------------------------------------------------------------
         # Verschluesselung personenbezogener Daten (siehe crypto.py und
         # CLAUDE.md, Abschnitt "Verschluesselung personenbezogener Daten").
-        # Erfordert FIELD_ENCRYPTION_KEY - crypto.require_key() wird in
-        # main.py schon vor run_light_migrations() aufgerufen, damit ein
-        # fehlender Schluessel hier nicht mitten in der Migration auffliegt.
+        # Opt-in ueber FIELD_ENCRYPTION_KEY - die Typ-Migration (Double
+        # Precision -> Text) laeuft trotzdem immer, weil das Modell (siehe
+        # models.py) so oder so eine Text-Spalte erwartet; ob der Inhalt
+        # dabei verschluesselt wird, entscheiden die Helper-Funktionen selbst
+        # anhand von crypto.is_enabled().
         # ------------------------------------------------------------------
-        for coord_table, coord_column, coord_not_null in (
-            ("charging_sessions", "latitude", False),
-            ("charging_sessions", "longitude", False),
-            ("charging_locations", "latitude", True),
-            ("charging_locations", "longitude", True),
-        ):
+        for coord_table, coord_column, coord_not_null in _ENCRYPTABLE_COORDINATE_COLUMNS:
             _encrypt_legacy_coordinate_column(conn, coord_table, coord_column, not_null=coord_not_null)
 
-        for text_table, text_column in (
-            ("charging_sessions", "notes"),
-            ("charging_sessions", "geocoded_place"),
+        for pending_table, pending_column in (
+            [(t, c) for t, c, _ in _ENCRYPTABLE_COORDINATE_COLUMNS] + list(_ENCRYPTABLE_TEXT_COLUMNS)
         ):
-            _encrypt_legacy_text_column(conn, text_table, text_column)
+            _encrypt_pending_plaintext(conn, pending_table, pending_column)

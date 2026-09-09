@@ -427,6 +427,10 @@
 
   "settings.subpages.email.title": "Email",
   "settings.subpages.email.desc": "Set up SMTP access, send a test email and trace what was sent.",
+  "settings.encryption.badge_on": "🔒 Encryption on",
+  "settings.encryption.hint_on": "GPS coordinates and notes are stored encrypted in the database.",
+  "settings.encryption.badge_off": "🔓 Encryption off",
+  "settings.encryption.hint_off": "GPS coordinates and notes are stored in plain text. Recommended for a publicly reachable server: set FIELD_ENCRYPTION_KEY (see README).",
   "settings.account.heading": "My Account",
   "settings.account.email_heading": "Email address",
   "settings.account.email_description": "Needed for \"forgot password\" and for notifications. Leave empty to remove the address.",

@@ -12,90 +12,122 @@ clientseitige Verschluesselung und wuerde das Geo-Matching, die
 Statistik-Aggregation und die komplette server-gerenderte Web-UI unmoeglich
 machen (siehe CLAUDE.md).
 
-Der Schluessel kommt AUSSCHLIESSLICH aus der Umgebungsvariable
-FIELD_ENCRYPTION_KEY, NIEMALS aus der DB oder aus /config - genau das waere
-sonst wieder gemeinsam mit den verschluesselten Daten im selben Backup, der
-Schutz waere wirkungslos. Erzeugen mit:
+**Bewusst OPT-IN, nicht Pflicht:** wer den Server nur im eigenen Heimnetz
+betreibt, braucht den zusaetzlichen Aufwand (Schluessel generieren, sicher
+verwahren, bei Verlust sind die Felder futsch) nicht - siehe is_enabled()
+weiter unten. Ist FIELD_ENCRYPTION_KEY nicht gesetzt, verhalten sich
+EncryptedString/EncryptedFloat wie ganz normale String/Float-Spalten (nur mit
+Text als DB-Typ). Erzeugen, falls gewuenscht:
 
     python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 
-Fehlt die Variable oder ist sie ungueltig, startet die App bewusst gar nicht
-erst (main.py ruft require_key() vor jedem DB-Zugriff auf) statt still
-unverschluesselt weiterzulaufen.
+Der Schluessel kommt AUSSCHLIESSLICH aus der Umgebungsvariable
+FIELD_ENCRYPTION_KEY, NIEMALS aus der DB oder aus /config - genau das waere
+sonst wieder gemeinsam mit den verschluesselten Daten im selben Backup, der
+Schutz waere wirkungslos.
+
+**Einmal verschluesselt, bleibt verschluesselt:** wurde der Schluessel
+irgendwann gesetzt und hat dadurch Bestandsdaten verschluesselt (siehe
+database.py-Migration), darf er NICHT mehr entfernt werden - ohne ihn sind
+genau diese Werte nicht mehr lesbar. database.py prueft das beim Start
+(verschluesselte Werte ohne gesetzten Schluessel -> Start wird verweigert,
+statt kaputte/garantiert-falsche Werte still auszuliefern).
 """
 
 import os
 from functools import lru_cache
 
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import Fernet
 from sqlalchemy import Text
 from sqlalchemy.types import TypeDecorator
 
 ENV_VAR = "FIELD_ENCRYPTION_KEY"
 
+# Ein Fernet-Token beginnt immer mit dem Versions-Byte 0x80, das in
+# urlsafe-Base64 immer als "gAAAAA" kodiert wird (gilt bis ca. Jahr 2106,
+# danach kippt das erste Zeitstempel-Byte) - reicht als Heuristik, um
+# verschluesselte von Klartext-Werten zu unterscheiden, OHNE dafuer selbst
+# einen Schluessel zu brauchen (wichtig fuer is_encrypted(), siehe unten:
+# muss auch funktionieren, wenn FIELD_ENCRYPTION_KEY gerade NICHT gesetzt
+# ist, um verwaiste Ciphertexte erkennen zu koennen).
+FERNET_PREFIX = "gAAAAA"
+
 
 @lru_cache(maxsize=1)
-def _fernet() -> Fernet:
+def _fernet_or_none() -> Fernet | None:
     key = os.getenv(ENV_VAR)
     if not key:
-        raise RuntimeError(
-            f"{ENV_VAR} ist nicht gesetzt - ohne ihn koennen die verschluesselten "
-            "Spalten (GPS-Koordinaten, Notizen, automatisch ermittelte Ortsnamen) "
-            "weder gelesen noch geschrieben werden. Erzeugen mit: python3 -c "
-            "\"from cryptography.fernet import Fernet; "
-            "print(Fernet.generate_key().decode())\" und als Container-"
-            f"Umgebungsvariable {ENV_VAR} setzen - NICHT unter /config ablegen, "
-            "der Schluessel muss getrennt von der Datenbank/den Backups "
-            "aufbewahrt werden, sonst ist die Verschluesselung wirkungslos. "
-            "Schluessel danach sicher verwahren (z.B. Passwort-Manager) - "
-            "verloren bedeutet dauerhaft unlesbare verschluesselte Felder."
-        )
+        return None
     try:
         return Fernet(key.encode("utf-8"))
     except (ValueError, TypeError) as exc:
         raise RuntimeError(
             f"{ENV_VAR} ist gesetzt, aber kein gueltiger Fernet-Schluessel (32 "
-            "zufaellige Bytes, urlsafe-base64-kodiert - siehe generate_key() "
-            "oben)."
+            "zufaellige Bytes, urlsafe-base64-kodiert). Erzeugen mit: python3 -c "
+            "\"from cryptography.fernet import Fernet; "
+            "print(Fernet.generate_key().decode())\""
         ) from exc
 
 
-def require_key() -> None:
-    """Beim App-Start aufgerufen (main.py), um sofort statt erst beim ersten
-    Request oder bei der Migration mit einer verstaendlichen Meldung zu
-    scheitern."""
-    _fernet()
+def is_enabled() -> bool:
+    """Ob Feld-Verschluesselung gerade aktiv ist - schlicht ob
+    FIELD_ENCRYPTION_KEY gesetzt (und gueltig formatiert) ist. Bewusst
+    opt-in, siehe Modul-Docstring."""
+    return _fernet_or_none() is not None
+
+
+def check_configured() -> None:
+    """Beim App-Start aufgerufen (main.py): validiert nur das FORMAT eines
+    GESETZTEN Schluessels - ein fehlender Schluessel ist kein Fehler
+    (Verschluesselung ist opt-in). Ob ein fehlender Schluessel trotz
+    bereits verschluesselter Bestandsdaten ein Problem ist, prueft
+    database.py (braucht dafuer die DB-Verbindung, siehe Modul-Docstring)."""
+    _fernet_or_none()
 
 
 def encrypt_str(value: str | None) -> str | None:
     if value is None:
         return None
-    return _fernet().encrypt(value.encode("utf-8")).decode("ascii")
+    fernet = _fernet_or_none()
+    if fernet is None:
+        return value
+    return fernet.encrypt(value.encode("utf-8")).decode("ascii")
 
 
 def decrypt_str(value: str | None) -> str | None:
     if value is None:
         return None
-    return _fernet().decrypt(value.encode("ascii")).decode("utf-8")
+    if not is_encrypted(value):
+        # War nie verschluesselt (Verschluesselung war beim Schreiben aus,
+        # oder Altbestand vor dieser Version) - unveraendert zurueckgeben.
+        return value
+    fernet = _fernet_or_none()
+    if fernet is None:
+        # Sollte database.py's Start-Check eigentlich schon verhindert haben
+        # (siehe Modul-Docstring) - hier trotzdem eine klare Fehlermeldung
+        # statt eines kryptischen AttributeError.
+        raise RuntimeError(
+            f"Gespeicherter Wert ist verschluesselt, aber {ENV_VAR} ist nicht "
+            "gesetzt - Schluessel wieder eintragen, sonst ist dieser Wert nicht "
+            "lesbar."
+        )
+    return fernet.decrypt(value.encode("ascii")).decode("utf-8")
 
 
 def is_encrypted(value: str) -> bool:
-    """Erkennt bereits verschluesselte Werte fuer die Migration in
-    database.py - versucht schlicht zu entschluesseln. Genutzt, um
-    run_light_migrations() idempotent zu halten (laeuft bei jedem
-    Container-Start): ein zweiter Durchlauf ueberspringt damit Werte, die
-    schon verschluesselt sind, statt sie erneut zu verschluesseln."""
-    try:
-        _fernet().decrypt(value.encode("utf-8"))
-        return True
-    except (InvalidToken, ValueError):
-        return False
+    """Erkennt bereits verschluesselte Werte - ueber das Praefix, NICHT ueber
+    einen Entschluesselungsversuch, damit das auch ohne gesetzten Schluessel
+    funktioniert (database.py braucht das z.B., um verwaiste Ciphertexte zu
+    erkennen, wenn der Schluessel gerade fehlt)."""
+    return value.startswith(FERNET_PREFIX)
 
 
 class EncryptedString(TypeDecorator):
-    """Transparent ver-/entschluesselter Text - Anwendungscode (Router, ORM-
-    Zugriffe, Pydantic-Schemas) sieht weiterhin normale Python-Strings, in der
-    Datenbank liegt nur Ciphertext."""
+    """Transparent ver-/entschluesselter Text, sofern FIELD_ENCRYPTION_KEY
+    gesetzt ist - sonst ganz normaler Text (nur mit VARCHAR/TEXT als
+    DB-Spaltentyp, unabhaengig vom aktuellen Modus, siehe Modul-Docstring).
+    Anwendungscode (Router, ORM-Zugriffe, Pydantic-Schemas) sieht so oder so
+    weiterhin normale Python-Strings."""
 
     impl = Text
     cache_ok = True
@@ -109,8 +141,9 @@ class EncryptedString(TypeDecorator):
 
 class EncryptedFloat(TypeDecorator):
     """Wie EncryptedString, aber mit float als Python-Typ (fuer GPS-
-    Koordinaten) - liegt als verschluesselter Text in der DB, da eine
-    numerische Spalte selbst nicht verschluesselt gespeichert werden kann."""
+    Koordinaten) - liegt als Text in der DB (verschluesselt oder nicht, siehe
+    EncryptedString), da eine numerische Spalte selbst nicht verschluesselt
+    gespeichert werden kann."""
 
     impl = Text
     cache_ok = True
