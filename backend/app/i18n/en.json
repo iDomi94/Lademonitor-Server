@@ -8,6 +8,8 @@
   "nav.menu": "Menu",
   "nav.logout": "Logout",
 
+  "footer.privacy": "Privacy",
+
   "changelog.title": "What's new",
   "changelog.your_version": "Your version",
 
@@ -424,6 +426,7 @@
   "login.forgot_link": "Forgot password?",
   "register.email_label": "Email address (optional)",
   "register.email_hint": "Without an address everything works as before - only \"forgot password\" and notifications will not.",
+  "register.privacy_note": "By registering you accept the <a href=\"privacy\">privacy policy</a>.",
 
   "settings.subpages.email.title": "Email",
   "settings.subpages.email.desc": "Set up SMTP access, send a test email and trace what was sent.",

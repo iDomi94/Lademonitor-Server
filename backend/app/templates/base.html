@@ -57,6 +57,10 @@
     {% block content %}{% endblock %}
   </main>
 
+  <footer class="sitefoot">
+    <a href="privacy">{{ t('footer.privacy') }}</a>
+  </footer>
+
   {% if changelog %}
   <div class="modal" id="changelog-modal" onclick="event.target === this && closeChangelog()">
     <div class="box">

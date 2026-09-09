@@ -13,6 +13,7 @@
         <div class="auth-error" id="register-error"></div>
       </form>
       <div class="auth-switch">{{ t('register.have_account') }} <a href="login">{{ t('register.login_link') }}</a></div>
+      <div class="auth-hint" style="text-align:center; margin-top: 12px;">{{ t('register.privacy_note')|safe }}</div>
 {% endblock %}
 {% block scripts %}
   <script>

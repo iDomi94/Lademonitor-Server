@@ -6,6 +6,22 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.17.0] — 2026-09-09
+
+### Added
+- **Datenschutzerklärung** unter `/privacy`, öffentlich erreichbar und im
+  Footer jeder Seite sowie bei der Registrierung verlinkt. Beschreibt konkret
+  Kontodaten, Ladeorte/-vorgänge, Fahrzeugdaten sowie die drei einzigen Fälle,
+  in denen Daten den Server verlassen (OpenStreetMap Nominatim für die
+  Adresssuche, die optionale MyŠkoda-Anbindung, ein selbst konfiguriertes
+  WebDAV-Backup) – jeweils klar als optional gekennzeichnet.
+- Verantwortlicher (Name/Anschrift/Kontakt-E-Mail) über die neuen,
+  optionalen Umgebungsvariablen `PRIVACY_CONTROLLER_NAME`,
+  `PRIVACY_CONTROLLER_ADDRESS`, `PRIVACY_CONTROLLER_EMAIL` konfigurierbar
+  (siehe `.env.example`) – datenschutzrechtlich verantwortlich ist der
+  Betreiber der jeweiligen Installation. Ohne gesetzte Variablen zeigt die
+  Seite einen deutlichen Hinweis statt unvollständiger Angaben.
+
 ## [0.16.0] — 2026-09-09
 
 ### Added
