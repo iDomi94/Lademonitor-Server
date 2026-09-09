@@ -83,8 +83,12 @@ docker run -d -p 8111:8000 -v /pfad/zu/daten:/config ghcr.io/idomi94/lademonitor
 `/config` contains the entire Postgres database – be sure to include it in
 your backup plan. Optionally add `-e FIELD_ENCRYPTION_KEY=...` to encrypt
 GPS coordinates/notes in the database – worthwhile once the server is
-publicly reachable, not needed for a pure home-network setup. Details in
-[Security note](#security-note).
+publicly reachable, not needed for a pure home-network setup. Generate a
+valid key with, e.g.:
+```bash
+python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+Details in [Security note](#security-note).
 
 ### Docker Compose (local development/testing)
 
