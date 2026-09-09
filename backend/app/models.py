@@ -15,6 +15,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from .crypto import EncryptedFloat, EncryptedString
 from .database import Base
 
 
@@ -231,8 +232,10 @@ class ChargingLocation(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_uuid)
     user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String)
-    latitude: Mapped[float] = mapped_column(Float)
-    longitude: Mapped[float] = mapped_column(Float)
+    # Verschluesselt (siehe crypto.py) - der schaerfste Fall personenbezogener
+    # Daten dieser App ist ein Ladeort mit dem Namen "Zuhause".
+    latitude: Mapped[float] = mapped_column(EncryptedFloat)
+    longitude: Mapped[float] = mapped_column(EncryptedFloat)
     radius_m: Mapped[int] = mapped_column(Integer, default=100)
     default_provider_id: Mapped[str | None] = mapped_column(
         ForeignKey("providers.id"), nullable=True
@@ -275,17 +278,23 @@ class ChargingSession(Base):
     price_total: Mapped[float | None] = mapped_column(Float, nullable=True)
     price_per_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
 
-    latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
-    longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Verschluesselt (siehe crypto.py) - GPS-Position eines Ladevorgangs ist
+    # genauso personenbezogen wie ein gespeicherter Ladeort.
+    latitude: Mapped[float | None] = mapped_column(EncryptedFloat, nullable=True)
+    longitude: Mapped[float | None] = mapped_column(EncryptedFloat, nullable=True)
     # Automatisch per Offline-Reverse-Geocoding ermittelter Ortsname, nur gesetzt wenn
-    # kein bekannter ChargingLocation-Eintrag zu den Koordinaten passt
-    geocoded_place: Mapped[str | None] = mapped_column(String, nullable=True)
+    # kein bekannter ChargingLocation-Eintrag zu den Koordinaten passt. Ebenfalls
+    # verschluesselt - ein Ortsname wie "Leonberg" waere sonst trotz verschluesselter
+    # Koordinaten im Klartext lesbar.
+    geocoded_place: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
 
     source: Mapped[SessionSource] = mapped_column(Enum(SessionSource), default=SessionSource.MANUAL)
     needs_review: Mapped[bool] = mapped_column(Boolean, default=False)
     external_session_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
 
-    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Verschluesselt (siehe crypto.py) - Freitext, oft mit Ortsangaben aus der
+    # MyŠkoda-Rueckdatierung oder eigenen Notizen des Nutzers.
+    notes: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(

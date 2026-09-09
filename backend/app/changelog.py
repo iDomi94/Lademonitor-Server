@@ -5,6 +5,18 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.15.0",
+        "date": "2026-09-09",
+        "title": "GPS-Koordinaten und Notizen sind jetzt verschlüsselt",
+        "changes": [
+            "Neu: GPS-Koordinaten (Ladeorte und Ladevorgänge), Notizen und automatisch ermittelte Ortsnamen liegen jetzt verschlüsselt in der Datenbank statt im Klartext - relevant, sobald der Server öffentlich erreichbar ist (z.B. über einen eigenen Reverse Proxy) und nicht nur im eigenen Heimnetz läuft.",
+            "WICHTIG - erfordert eine neue Pflicht-Umgebungsvariable `FIELD_ENCRYPTION_KEY`: ohne sie startet der Server ab dieser Version bewusst gar nicht mehr. Vor dem Update unbedingt einen Schlüssel erzeugen (`python3 -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\"`) und als Umgebungsvariable setzen - beim Unraid-Template als neues Pflichtfeld, bei Docker Compose in der `.env` (siehe `.env.example`). Sicher aufbewahren (z.B. Passwort-Manager) und NICHT im Datenverzeichnis (`/config`) ablegen, sonst landet er im selben Backup wie die damit verschlüsselten Daten - ein verlorener Schlüssel macht die betroffenen Felder dauerhaft unlesbar.",
+            "Bestehende Installationen: die verschlüsselten Spalten werden beim ersten Start mit gesetztem Schlüssel automatisch aus den vorhandenen Klartextwerten befüllt, keine manuelle Aktion nötig außer dem Setzen des Schlüssels selbst.",
+            "Kein Zero-Knowledge-Schutz: der Schlüssel liegt im Server-Environment, der Server entschlüsselt weiterhin transparent bei jedem Request. Das schützt gegen Diebstahl von Datenbank/Backup/Datenträger, nicht aber davor, dass jemand mit Kontrolle über den laufenden Server-Prozess selbst die Daten einsehen könnte - echtes Zero-Knowledge würde eine clientseitige Verschlüsselung brauchen und wäre mit Statistik, Geo-Matching, Offline-Reverse-Geocoding und dem Home-Assistant-/MyŠkoda-Push nicht vereinbar.",
+            "Noch nicht verschlüsselt: Namen (Fahrzeug/Anbieter/Ladeort), die E-Mail-Adresse, sowie die schon vorher bekannten Klartext-Zugangsdaten (SMTP-/WebDAV-Passwort, MyŠkoda-API-Key). Der eingebaute CSV-Export und das automatische WebDAV-Backup liefern GPS-Koordinaten/Notizen weiterhin bewusst im Klartext, da sie ein portables, menschenlesbares Format bleiben sollen.",
+        ],
+    },
+    {
         "version": "0.14.1",
         "date": "2026-09-08",
         "title": "Passwortwechsel gibt den neuen Zugang direkt zurueck",

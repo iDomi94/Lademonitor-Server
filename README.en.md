@@ -78,10 +78,16 @@ proxy/Nginx vhost on port 8111 (details on that in the
 For any other Docker host (Synology, VPS, Unraid without CA, …), a single
 container instead of a stack:
 ```bash
-docker run -d -p 8111:8000 -v /pfad/zu/daten:/config ghcr.io/idomi94/lademonitor-server:latest
+docker run -d -p 8111:8000 \
+  -v /pfad/zu/daten:/config \
+  -e FIELD_ENCRYPTION_KEY="$(python3 -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')" \
+  ghcr.io/idomi94/lademonitor-server:latest
 ```
 `/config` contains the entire Postgres database – be sure to include it in
-your backup plan.
+your backup plan. `FIELD_ENCRYPTION_KEY` is **required** (encrypts GPS
+coordinates/notes, see [Security note](#security-note)) – store the
+generated key separately (e.g. a password manager), **not** under
+`/pfad/zu/daten`, or it ends up in the same backup as the data it encrypts.
 
 ### Docker Compose (local development/testing)
 
@@ -93,7 +99,9 @@ docker compose up -d --build
 The web UI is then reachable at `http://<host-ip>:8111`. Credentials for
 the internal Postgres instance can optionally be overridden via `.env`
 (see `.env.example`) – the Compose-internal default is not sensitive, since
-Postgres is not exposed externally.
+Postgres is not exposed externally. `FIELD_ENCRYPTION_KEY` in the same
+`.env` is **required** (no default) – the backend container won't start
+without it, see [Security note](#security-note).
 
 ---
 
@@ -213,8 +221,22 @@ Three levels:
 
 Auth is built in (registration/login, per-user isolated data), but there
 is deliberately **no rate limiting yet** on login/registration – if exposed
-publicly via a reverse proxy, make sure to use a strong password. Details
-and further known limitations in `CLAUDE.md`.
+publicly via a reverse proxy, make sure to use a strong password.
+
+**Encryption of personal data:** GPS coordinates (charging locations and
+sessions) and notes are encrypted at rest (`FIELD_ENCRYPTION_KEY`, see
+above) – this protects against theft of a DB dump/backup/disk, relevant
+once the server is publicly reachable. **This is not zero-knowledge:** the
+key lives in the server's environment and the server still decrypts
+transparently on every request – whoever controls the running server
+process can technically access the data. The built-in CSV export and the
+automatic WebDAV backup deliberately still contain GPS coordinates/notes in
+plain text (portable, human-readable format) – if that backup ends up on
+infrastructure you don't control, encryption doesn't help there. Names
+(vehicle/provider/location) and the email address are not yet encrypted.
+Details in `CLAUDE.md`, section "Verschluesselung personenbezogener Daten".
+
+Details and further known limitations in `CLAUDE.md`.
 
 ## Unreachable after an update?
 

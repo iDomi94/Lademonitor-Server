@@ -6,6 +6,34 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.15.0] — 2026-09-09
+
+### Added
+- **GPS-Koordinaten (Ladeorte und Ladevorgänge), Notizen und automatisch
+  ermittelte Ortsnamen werden jetzt verschlüsselt in der Datenbank
+  gespeichert** statt im Klartext – relevant, sobald der Server öffentlich
+  erreichbar ist statt nur im eigenen Heimnetz.
+
+  **Breaking:** erfordert die neue Pflicht-Umgebungsvariable
+  `FIELD_ENCRYPTION_KEY` – ohne sie startet der Server nicht mehr. Vor dem
+  Update erzeugen:
+  ```bash
+  python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+  ```
+  und sicher aufbewahren (z.B. Passwort-Manager) – **nicht** im Datenverzeichnis
+  (`/config`) ablegen, sonst landet er im selben Backup wie die damit
+  verschlüsselten Daten. Bestehende Klartextwerte werden beim ersten Start mit
+  gesetztem Schlüssel automatisch migriert.
+
+  Kein Zero-Knowledge-Schutz: der Schlüssel liegt im Server-Environment, der
+  Server entschlüsselt weiterhin transparent bei jedem Request. Schützt gegen
+  Diebstahl von Datenbank/Backup/Datenträger, nicht gegen Einsicht durch, wer
+  auch immer den laufenden Server-Prozess kontrolliert. Noch nicht
+  verschlüsselt: Namen (Fahrzeug/Anbieter/Ladeort), E-Mail-Adresse, sowie die
+  schon vorher bekannten Klartext-Zugangsdaten (SMTP/WebDAV/MyŠkoda). Der
+  CSV-Export und das automatische WebDAV-Backup bleiben bewusst
+  menschenlesbar und damit unverschlüsselt.
+
 ## [0.14.1] — 2026-09-08
 
 ### Changed

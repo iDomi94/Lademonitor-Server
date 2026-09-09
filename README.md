@@ -81,10 +81,17 @@ Reverse-Proxy/Nginx-Vhost auf Port 8111 (Details dazu im
 Für jeden anderen Docker-Host (Synology, VPS, Unraid ohne CA, …), ein
 Container statt Stack:
 ```bash
-docker run -d -p 8111:8000 -v /pfad/zu/daten:/config ghcr.io/idomi94/lademonitor-server:latest
+docker run -d -p 8111:8000 \
+  -v /pfad/zu/daten:/config \
+  -e FIELD_ENCRYPTION_KEY="$(python3 -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')" \
+  ghcr.io/idomi94/lademonitor-server:latest
 ```
 `/config` enthält die komplette Postgres-Datenbank – unbedingt in den
-Backup-Plan aufnehmen.
+Backup-Plan aufnehmen. `FIELD_ENCRYPTION_KEY` ist **Pflicht** (verschlüsselt
+GPS-Koordinaten/Notizen, siehe [Sicherheitshinweis](#sicherheitshinweis)) –
+den erzeugten Schlüssel unbedingt separat sichern (z.B. Passwort-Manager),
+**nicht** unter `/pfad/zu/daten` ablegen, sonst landet er im selben Backup
+wie die damit verschlüsselten Daten.
 
 ### Docker Compose (lokale Entwicklung/Tests)
 
@@ -96,7 +103,9 @@ docker compose up -d --build
 Web-UI danach unter `http://<host-ip>:8111`. Zugangsdaten für die interne
 Postgres-Instanz lassen sich optional per `.env` überschreiben (siehe
 `.env.example`) – der Compose-interne Standard ist unkritisch, da Postgres
-nicht nach außen exponiert wird.
+nicht nach außen exponiert wird. `FIELD_ENCRYPTION_KEY` in derselben `.env`
+ist dagegen **Pflicht** (kein Default) – ohne ihn startet der Backend-Container
+nicht, siehe [Sicherheitshinweis](#sicherheitshinweis).
 
 ---
 
@@ -228,6 +237,20 @@ eintragen).
 
 **Beim Zurücksetzen oder Ändern des Passworts werden alle Geräte abgemeldet.**
 Home Assistant und die iOS-App brauchen danach einen neuen Token.
+
+**Verschlüsselung personenbezogener Daten:** GPS-Koordinaten (Ladeorte und
+Ladevorgänge) sowie Notizen liegen verschlüsselt in der Datenbank
+(`FIELD_ENCRYPTION_KEY`, siehe oben) – das schützt gegen Diebstahl von
+DB-Dump/Backup/Datenträger, relevant sobald der Server öffentlich erreichbar
+ist. **Kein Zero-Knowledge-Schutz:** Der Schlüssel liegt im
+Server-Environment, der Server entschlüsselt weiterhin transparent bei jedem
+Request – wer den laufenden Server-Prozess kontrolliert, kommt technisch an
+die Daten. Der eingebaute CSV-Export und das automatische WebDAV-Backup
+liefern GPS-Koordinaten/Notizen bewusst weiterhin im Klartext (portables,
+menschenlesbares Format) – landet dieses Backup auf fremder Infrastruktur,
+greift die Verschlüsselung dort nicht. Namen (Fahrzeug/Anbieter/Ladeort) und
+die E-Mail-Adresse sind noch nicht verschlüsselt. Details in `CLAUDE.md`,
+Abschnitt "Verschlüsselung personenbezogener Daten".
 
 Details und weitere bekannte Einschränkungen in `CLAUDE.md`.
 

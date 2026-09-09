@@ -4,6 +4,8 @@ import os
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
+from . import crypto
+
 DATABASE_URL = os.getenv(
     "DATABASE_URL", "postgresql+psycopg://charging:charging@db:5432/charging"
 )
@@ -22,6 +24,63 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def _column_data_type(conn, table: str, column: str) -> str | None:
+    row = conn.execute(
+        text(
+            "SELECT data_type FROM information_schema.columns "
+            "WHERE table_name = :t AND column_name = :c"
+        ),
+        {"t": table, "c": column},
+    ).first()
+    return row[0] if row else None
+
+
+def _encrypt_legacy_coordinate_column(conn, table: str, column: str, not_null: bool = False) -> None:
+    """Wandelt eine noch unverschluesselte GPS-Spalte (DOUBLE PRECISION aus
+    der Zeit vor der Feld-Verschluesselung, siehe crypto.py) in eine
+    verschluesselte Text-Spalte um. Idempotent ueber den Spaltentyp: nach dem
+    ersten Lauf ist die Spalte VARCHAR, jeder weitere Aufruf ist dann ein
+    No-Op. Auf einer neuen Installation legt create_all() die Spalte direkt
+    als VARCHAR an (siehe models.py, EncryptedFloat) - dort greift dieser
+    Codepfad also gar nicht erst.
+
+    `not_null` haelt die urspruengliche NOT-NULL-Eigenschaft der Spalte
+    aufrecht (ChargingLocation.latitude/longitude sind Pflichtfelder) - ohne
+    das wuerde die Spalte nach dem Umbau ueber ADD COLUMN/RENAME COLUMN
+    nullable, obwohl das Modell (models.py) sie weiterhin als Mapped[float]
+    ohne Optional deklariert."""
+    if _column_data_type(conn, table, column) not in ("double precision", "real", "numeric"):
+        return
+    tmp_column = f"{column}_enc_tmp"
+    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {tmp_column} VARCHAR"))
+    rows = conn.execute(text(f"SELECT id, {column} FROM {table} WHERE {column} IS NOT NULL")).all()
+    for row_id, value in rows:
+        conn.execute(
+            text(f"UPDATE {table} SET {tmp_column} = :v WHERE id = :i"),
+            {"v": crypto.encrypt_str(str(value)), "i": row_id},
+        )
+    conn.execute(text(f"ALTER TABLE {table} DROP COLUMN {column}"))
+    conn.execute(text(f"ALTER TABLE {table} RENAME COLUMN {tmp_column} TO {column}"))
+    if not_null:
+        conn.execute(text(f"ALTER TABLE {table} ALTER COLUMN {column} SET NOT NULL"))
+
+
+def _encrypt_legacy_text_column(conn, table: str, column: str) -> None:
+    """Verschluesselt Bestandswerte einer bereits als VARCHAR/TEXT angelegten
+    Spalte (notes, geocoded_place) nachtraeglich. Ueber crypto.is_encrypted()
+    idempotent gehalten, weil run_light_migrations() bei jedem Container-Start
+    laeuft - ein zweiter Durchlauf ueberspringt bereits verschluesselte
+    Werte statt sie erneut (und damit falsch) zu verschluesseln."""
+    rows = conn.execute(text(f"SELECT id, {column} FROM {table} WHERE {column} IS NOT NULL")).all()
+    for row_id, value in rows:
+        if crypto.is_encrypted(value):
+            continue
+        conn.execute(
+            text(f"UPDATE {table} SET {column} = :v WHERE id = :i"),
+            {"v": crypto.encrypt_str(value), "i": row_id},
+        )
 
 
 def run_light_migrations() -> None:
@@ -239,3 +298,24 @@ def run_light_migrations() -> None:
                 "ADD COLUMN IF NOT EXISTS last_failure_notified_at TIMESTAMP"
             )
         )
+
+        # ------------------------------------------------------------------
+        # Verschluesselung personenbezogener Daten (siehe crypto.py und
+        # CLAUDE.md, Abschnitt "Verschluesselung personenbezogener Daten").
+        # Erfordert FIELD_ENCRYPTION_KEY - crypto.require_key() wird in
+        # main.py schon vor run_light_migrations() aufgerufen, damit ein
+        # fehlender Schluessel hier nicht mitten in der Migration auffliegt.
+        # ------------------------------------------------------------------
+        for coord_table, coord_column, coord_not_null in (
+            ("charging_sessions", "latitude", False),
+            ("charging_sessions", "longitude", False),
+            ("charging_locations", "latitude", True),
+            ("charging_locations", "longitude", True),
+        ):
+            _encrypt_legacy_coordinate_column(conn, coord_table, coord_column, not_null=coord_not_null)
+
+        for text_table, text_column in (
+            ("charging_sessions", "notes"),
+            ("charging_sessions", "geocoded_place"),
+        ):
+            _encrypt_legacy_text_column(conn, text_table, text_column)

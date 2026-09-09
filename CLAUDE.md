@@ -514,7 +514,16 @@ Icon/Tooltip-Logik in der SessionsList-View.
 - **Verschluesselung der gespeicherten Zugangsdaten** (SMTP-, WebDAV-Passwort,
   MyŠkoda-Key) waere nur mit einem Schluessel ausserhalb von `/config` sinnvoll,
   also ueber eine Env-Variable im Unraid-Template. Bewusst zurueckgestellt,
-  siehe Begruendung im E-Mail-Abschnitt.
+  siehe Begruendung im E-Mail-Abschnitt. **Update:** genau dieser Mechanismus
+  (Env-Variable `FIELD_ENCRYPTION_KEY`) existiert seit 2026-09-09 fuer GPS-
+  Koordinaten/Notizen (siehe Abschnitt "Verschluesselung personenbezogener
+  Daten") - liesse sich grundsaetzlich auf diese Secrets ausweiten, ist aber
+  noch nicht passiert.
+- **Feld-Verschluesselung deckt noch nicht alles ab:** Namen (Fahrzeug/
+  Anbieter/Ladeort) und `User.email` sind mangels Blind-Index-Loesung noch
+  Klartext (haengen an DB-Unique-Constraints), und der eingebaute CSV-Export/
+  das WebDAV-Backup liefern GPS/Notizen weiterhin unverschluesselt (siehe
+  Abschnitt "Verschluesselung personenbezogener Daten" fuer Details).
 - **MyŠkoda-Poller: erledigt bis auf die Rueckdatierung selbst.** Das
   Debug-Log ist inzwischen ueber je einen echten AC- und zwei DC-Ladevorgaenge
   ausgewertet (Stand 06.09.2026, 355 Zeilen) - Zustandsfolge, Nachlauf von
@@ -858,6 +867,90 @@ Passwort aendern** - gab es vorher gar nicht) und "Benachrichtigungen" in den
 Einstellungen. Benutzerverwaltung um E-Mail-Spalte, Bearbeiten und Einladen
 erweitert. Oeffentliche Seiten `/forgot-password`, `/reset-password`,
 `/verify-email` - wie alle Seiten genau eine Ebene unter der Basis (Ingress).
+
+## Verschluesselung personenbezogener Daten (`crypto.py`, ab 2026-09-09)
+
+Ausloeser: der Nutzer will den Server oeffentlich (Nginx-Reverse-Proxy statt
+nur Heimnetz) erreichbar machen und wollte dafuer DSGVO-konform absichern,
+idealerweise so, dass er selbst als Betreiber keinen Zugriff auf die
+personenbezogenen Daten anderer/eigener Nutzer hat. Echtes Zero-Knowledge
+(clientseitige Verschluesselung, Schluessel verlaesst nie das Nutzergeraet)
+wurde bewusst VERWORFEN, weil es die Kern-Architektur der App sprengen wuerde:
+Geo-Matching (`match_location`), die komplette Statistik-Aggregation
+(`stats.py`, `consumption.py`), das server-seitige Offline-Reverse-Geocoding
+und vor allem der Home-Assistant-Push sowie der MyŠkoda-Poller (beide senden
+rohes JSON direkt an die API, ohne verschluesselnden Client dazwischen)
+brauchen Klartext-Zugriff auf dem Server. Umgesetzt ist stattdessen
+**Verschluesselung at rest gegen Diebstahl von DB-Dump/Backup/Datentraeger**
+(z.B. wenn der Hoster/VPS-Anbieter oder wer auch immer ein Backup abgreift) -
+**ausdruecklich NICHT** ein Schutz davor, dass der Betreiber (wer den
+laufenden Server-Prozess kontrolliert) die Daten technisch einsehen koennte,
+denn der Schluessel liegt im Server-Environment und der Server entschluesselt
+noch waehrend jedes Requests transparent. Diese Grenze steht auch als
+Docstring in `crypto.py`, damit sie nicht in Vergessenheit geraet.
+
+**Umfang (bewusst NICHT alles auf einmal):** verschluesselt sind die
+GPS-Koordinaten (`ChargingSession.latitude/longitude`,
+`ChargingLocation.latitude/longitude` - der schaerfste Fall ist ein Ladeort
+namens "Zuhause") sowie `ChargingSession.notes` und `.geocoded_place`. NICHT
+verschluesselt: Namen (Vehicle/Provider/ChargingLocation - haengen an
+Unique-Constraints pro Nutzer, siehe Abschnitt "Pro-Nutzer-Datentrennung"
+weiter oben, eine deterministische Verschluesselung/Blind-Index dafuer ist
+noch offen), `User.email` (haengt am funktionalen `lower(email)`-Unique-Index
+fuer den Login/Reset-Lookup, siehe Abschnitt "Authentifizierung" - ebenfalls
+ein Blind-Index-Thema), sowie die bereits vorher bekannten Klartext-Secrets
+(SMTP-/WebDAV-Passwort, MyŠkoda-API-Key - siehe deren jeweilige Abschnitte
+und "Bekannte offene Punkte" unten, unveraendert).
+
+**Mechanik:** `crypto.py` haelt Fernet (`cryptography`-Paket, AES-128-CBC +
+HMAC, inkl. Zeitstempel und Authentifizierung) als `EncryptedString`/
+`EncryptedFloat` (`TypeDecorator`, impl `Text`) - Router/Schemas/ORM-Code
+sehen weiterhin normale Python-`str`/`float`, in der DB liegt nur Ciphertext.
+Dadurch war praktisch **kein Code ausserhalb von `models.py` zu aendern**:
+`match_location()` (Haversine) rechnet schon in Python nach dem ORM-Load,
+`backup.py` liest/schreibt ausschliesslich ueber die ORM-Objekte - beides
+transparent weiter funktionsfaehig.
+
+**Schluessel:** `FIELD_ENCRYPTION_KEY`, ausschliesslich Umgebungsvariable,
+NIEMALS in der DB oder unter `/config` - genau das waere sonst im selben
+Backup wie die verschluesselten Daten und der Schutz waere wirkungslos.
+`main.py` ruft `crypto.require_key()` vor jedem DB-Zugriff auf: fehlt die
+Variable oder ist sie kein gueltiger Fernet-Schluessel, startet die App
+bewusst gar nicht erst statt still unverschluesselt weiterzulaufen. **Das ist
+ein Breaking-Update** - bestehende Installationen (Unraid-Template, Docker
+Compose) muessen den Schluessel VOR dem Update setzen, sonst startet der
+Container nach dem Update nicht mehr (Unraid-Template hat dafuer ein neues
+Pflichtfeld, `.env.example` fuer Compose entsprechend ergaenzt).
+
+**Migration Bestandsdaten** (`database.py::run_light_migrations()`): laeuft
+wie alle anderen leichten Migrationen bei jedem Container-Start und ist
+idempotent. Fuer die GPS-Spalten (bisher `DOUBLE PRECISION`) wird der
+Spaltentyp per Umbenennungs-Trick (neue VARCHAR-Spalte, Python-seitig pro
+Zeile verschluesselt befuellen, alte Spalte droppen, neue umbenennen -
+gleiches Muster wie schon bei der `auth_tokens.token`->`token_hash`-Migration)
+auf verschluesselten Text umgestellt; `not_null=True` bei
+`ChargingLocation.latitude/longitude` haelt die urspruengliche
+NOT-NULL-Eigenschaft ueber den Umbau hinweg aufrecht. Fuer `notes`/
+`geocoded_place` (bereits VARCHAR/TEXT) genuegt ein Versuch, jeden
+Bestandswert zu entschluesseln (`crypto.is_encrypted()`) - schlaegt das fehl,
+war der Wert noch Klartext und wird verschluesselt. Auf einer komplett neuen
+Installation legt `create_all()` diese Spalten direkt als VARCHAR an, die
+Migration ist dort ein No-Op. **Vor dem Einsatz auf der echten Installation
+unbedingt gegen eine Kopie der Produktiv-DB testen** - eine fehlgeschlagene
+Verschluesselung von Bestandsdaten ist nicht trivial rueckgaengig zu machen.
+
+**Bekannte Einschraenkung, unbedingt beachten:** Der eingebaute Export
+(`routers/backup.py`) und das automatische WebDAV-Backup liefern weiterhin
+**Klartext-CSV** - die ORM-Objekte werden beim Export ganz normal entschluesselt
+gelesen (das ist fuer das dokumentierte Ziel "portables, menschenlesbares
+Backup" auch richtig so). Landet dieses Backup auf fremder Infrastruktur
+(z.B. WebDAV auf einer nicht selbst kontrollierten Nextcloud-Instanz), liegen
+GPS-Koordinaten und Notizen dort wieder im Klartext - die
+Feld-Verschluesselung schuetzt nur die laufende Datenbank/deren
+Rohdatentraeger, nicht das CSV-Backup. Bewusst nicht in diesem ersten Schritt
+geloest (wuerde das dokumentierte, restore-faehige CSV-Format aendern);
+Kandidat fuer einen spaeteren Schritt waere ein optional verschluesseltes
+ZIP (z.B. Passwort-geschuetzt) speziell fuer den WebDAV-Weg.
 
 ## Backup-Export/-Import (`routers/backup.py`)
 

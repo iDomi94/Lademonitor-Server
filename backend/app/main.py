@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
-from . import models
+from . import crypto, models
 from .auth import get_current_user, get_user_from_request
 from .changelog import CHANGELOG, VERSION
 from .database import Base, engine, get_db, run_light_migrations
@@ -40,6 +40,12 @@ from .routers import (
     webdav_backup,
 )
 from .webdav_backup import run_due_backups
+
+# Vor JEDEM DB-Zugriff pruefen, ob FIELD_ENCRYPTION_KEY gesetzt und gueltig
+# ist (siehe crypto.py) - sonst startet die App bewusst gar nicht erst, statt
+# still unverschluesselt weiterzulaufen oder erst mitten in der Migration
+# unten mit einem schwer einzuordnenden Fehler abzubrechen.
+crypto.require_key()
 
 Base.metadata.create_all(bind=engine)
 run_light_migrations()
