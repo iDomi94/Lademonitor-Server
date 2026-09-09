@@ -73,6 +73,10 @@ class PasswordChange(BaseModel):
     new_password: str
 
 
+class AccountDeleteRequest(BaseModel):
+    current_password: str
+
+
 class EmailUpdate(BaseModel):
     email: str | None = None
     # Wer die Adresse aendern kann, kann anschliessend das Passwort
