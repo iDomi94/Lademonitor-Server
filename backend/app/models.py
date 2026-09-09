@@ -236,7 +236,8 @@ class Provider(Base):
     name: Mapped[str] = mapped_column(String)
     last_price_ac_per_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
     last_price_dc_per_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
-    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Verschluesselt (siehe crypto.py) - Freitext, keine SQL-Filterung darauf.
+    notes: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     sessions: Mapped[list["ChargingSession"]] = relationship(back_populates="provider")
@@ -330,17 +331,22 @@ class ChargingSession(Base):
 class WebdavBackupConfig(Base):
     """Ein Konfigurationssatz pro Nutzer (passend zur Pro-Nutzer-
     Datentrennung im Rest der App - jeder Nutzer sichert nur seine eigenen
-    Daten auf sein eigenes WebDAV-Ziel). `password` liegt bewusst im Klartext
-    in der DB, genau wie die uebrigen Zugangsdaten dieser App (z.B.
-    Auth-Tokens) - kein Secrets-Vault vorhanden, Postgres ist ohnehin nur via
+    Daten auf sein eigenes WebDAV-Ziel). `url`/`username`/`password` liegen
+    optional verschluesselt (siehe crypto.py, `FIELD_ENCRYPTION_KEY`), sonst
+    im Klartext - kein Secrets-Vault vorhanden, Postgres ist ohnehin nur via
     localhost im selben Container erreichbar."""
     __tablename__ = "webdav_backup_configs"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_uuid)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), unique=True, index=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=False)
-    url: Mapped[str] = mapped_column(String, default="")
-    username: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Verschluesselt (siehe crypto.py) - Cloud-Adressen wie Nextcloud
+    # enthalten oft den eigenen Kontonamen im Pfad
+    # (z.B. .../remote.php/dav/files/<username>/...).
+    url: Mapped[str] = mapped_column(EncryptedString, default="")
+    # Verschluesselt (siehe crypto.py) - Login-Name des WebDAV-Ziels, keine
+    # SQL-Filterung darauf.
+    username: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
     # Verschluesselt (siehe crypto.py) - kein API-Zugriff/keine Unique-
     # Constraint darauf, wird nur an httpx fuer den WebDAV-PUT weitergereicht.
     password: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
@@ -382,12 +388,12 @@ class MySkodaConfig(Base):
     Ladevorgaenge; der HA-Push auf `/api/sessions/auto` bleibt unveraendert
     daneben bestehen (siehe myskoda_poller.py).
 
-    Der `api_key` liegt bewusst im Klartext in der DB, genau wie die uebrigen
-    Zugangsdaten dieser App (Auth-Tokens, WebDAV-Passwort) - kein
-    Secrets-Vault vorhanden, Postgres ist ohnehin nur containerlokal
-    erreichbar. Er wird allerdings NICHT in die Backup-ZIP exportiert
-    (siehe routers/backup.py), weil die ZIP typischerweise auf fremdem
-    Speicher (WebDAV/Nextcloud) landet.
+    `api_key` und `vin` liegen optional verschluesselt (siehe crypto.py,
+    `FIELD_ENCRYPTION_KEY`), sonst im Klartext wie die uebrigen Zugangsdaten
+    dieser App - kein Secrets-Vault vorhanden, Postgres ist ohnehin nur
+    containerlokal erreichbar. `api_key` wird allerdings NICHT in die
+    Backup-ZIP exportiert (siehe routers/backup.py), weil die ZIP
+    typischerweise auf fremdem Speicher (WebDAV/Nextcloud) landet.
 
     Die `open_*`-Spalten halten den gerade laufenden, noch nicht abgeschlossenen
     Ladevorgang. Sie liegen bewusst in der DB und nicht im Prozessspeicher:
@@ -404,7 +410,12 @@ class MySkodaConfig(Base):
     # Verschluesselt (siehe crypto.py) - keine SQL-Filterung/Unique-Constraint
     # darauf, wird nur an httpx fuer den MyŠkoda-API-Aufruf weitergereicht.
     api_key: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
-    vin: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Verschluesselt (siehe crypto.py) - die Fahrzeug-Identifizierungsnummer
+    # ist ein weltweit eindeutiger, ueber Zulassungs-/Versicherungsdaten auf
+    # eine Person rueckfuehrbarer Identifikator. Keine SQL-Filterung/Unique-
+    # Constraint darauf (der API-Aufruf in myskoda.py bekommt sie direkt vom
+    # ORM-Objekt, nicht per Datenbank-Lookup ueber die VIN).
+    vin: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
 
     # Adaptives Polling: das Kontingent von 20 Anfragen/Stunde pro API-Key
     # reicht nicht fuer durchgaengig enge Abfragen. Im Leerlauf selten, waehrend
@@ -466,8 +477,12 @@ class MySkodaConfig(Base):
     open_charging_type: Mapped[str | None] = mapped_column(String, nullable=True)
     open_max_power_kw: Mapped[float | None] = mapped_column(Float, nullable=True)
     open_odometer_km: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    open_latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
-    open_longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Verschluesselt (siehe crypto.py) - dieselbe GPS-Position wie
+    # ChargingSession.latitude/longitude, nur als Zwischenspeicher fuer den
+    # noch laufenden Vorgang (wird 1:1 dorthin kopiert, sobald er
+    # abgeschlossen wird, siehe myskoda_poller.py::_create_session()).
+    open_latitude: Mapped[float | None] = mapped_column(EncryptedFloat, nullable=True)
+    open_longitude: Mapped[float | None] = mapped_column(EncryptedFloat, nullable=True)
     open_poll_count: Mapped[int] = mapped_column(Integer, default=0)
     open_gap_before_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Beim EINSTECKEN erfasst, nicht beim Ausstecken: da steht das Fahrzeug
@@ -512,8 +527,13 @@ class MySkodaLogEntry(Base):
     charge_power_kw: Mapped[float | None] = mapped_column(Float, nullable=True)
     captured_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
-    # Komplette Rohantwort als JSON-Text, nur wenn log_raw_payload aktiv ist
-    payload: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Verschluesselt (siehe crypto.py) - komplette Rohantwort als JSON-Text,
+    # nur wenn log_raw_payload aktiv ist (Standard: an). Enthaelt praktisch
+    # alles, was die MyŠkoda-API ueber das Fahrzeug preisgibt (GPS-Position,
+    # VIN, SoC, Ladeleistung) - bei bis zu LOG_MAX_ENTRIES Zeilen pro Fahrzeug
+    # der mit Abstand groesste zusammenhaengende Bestand personenbezogener
+    # Rohdaten in dieser App.
+    payload: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
 
 
 class SmtpConfig(Base):

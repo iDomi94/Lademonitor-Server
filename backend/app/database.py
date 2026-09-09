@@ -45,6 +45,8 @@ _ENCRYPTABLE_COORDINATE_COLUMNS = (
     ("charging_sessions", "longitude", False),
     ("charging_locations", "latitude", True),
     ("charging_locations", "longitude", True),
+    ("myskoda_configs", "open_latitude", False),
+    ("myskoda_configs", "open_longitude", False),
 )
 _ENCRYPTABLE_TEXT_COLUMNS = (
     ("charging_sessions", "notes"),
@@ -53,7 +55,12 @@ _ENCRYPTABLE_TEXT_COLUMNS = (
     ("charging_locations", "name"),
     ("smtp_configs", "password"),
     ("webdav_backup_configs", "password"),
+    ("webdav_backup_configs", "url"),
+    ("webdav_backup_configs", "username"),
     ("myskoda_configs", "api_key"),
+    ("myskoda_configs", "vin"),
+    ("providers", "notes"),
+    ("myskoda_log_entries", "payload"),
 )
 
 

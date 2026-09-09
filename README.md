@@ -235,8 +235,11 @@ Home Assistant und die iOS-App brauchen danach einen neuen Token.
 
 **Verschlüsselung personenbezogener Daten (optional):** Wird
 `FIELD_ENCRYPTION_KEY` gesetzt (siehe oben), liegen GPS-Koordinaten (Ladeorte
-und Ladevorgänge), Notizen, Fahrzeug-/Ladeort-Namen sowie die gespeicherten
-Zugangsdaten (SMTP-, WebDAV-Passwort, MyŠkoda-API-Key) verschlüsselt in der
+und Ladevorgänge, inkl. eines evtl. gerade laufenden, noch nicht
+abgeschlossenen MyŠkoda-Ladevorgangs), Notizen, Fahrzeug-/Ladeort-Namen, die
+Fahrzeug-Identifizierungsnummer (VIN), die kompletten Rohantworten der
+MyŠkoda-API (Debug-Protokoll) sowie die gespeicherten Zugangsdaten (SMTP-,
+WebDAV-Adresse/-Nutzername/-Passwort, MyŠkoda-API-Key) verschlüsselt in der
 Datenbank statt im Klartext. Standardmäßig **aus** – wer den Server nur im
 eigenen Heimnetz betreibt, braucht das nicht; sinnvoll, sobald er öffentlich
 erreichbar ist (z.B. eigener Reverse Proxy). Ob sie gerade aktiv ist, zeigt

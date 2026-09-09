@@ -9,13 +9,15 @@ folgen [Semantic Versioning](https://semver.org/).
 ## [0.15.0] — 2026-09-09
 
 ### Added
-- **Optional: GPS-Koordinaten (Ladeorte und Ladevorgänge), Notizen,
-  automatisch ermittelte Ortsnamen, Fahrzeug-/Ladeort-Namen sowie gespeicherte
-  Zugangsdaten (SMTP-/WebDAV-Passwort, MyŠkoda-API-Key) können jetzt
-  verschlüsselt in der Datenbank gespeichert werden** statt im Klartext –
-  relevant, sobald der Server öffentlich erreichbar ist statt nur im eigenen
-  Heimnetz. Standardmäßig AUS, keine Aktion nötig für einen reinen
-  Heimnetz-Betrieb.
+- **Optional: GPS-Koordinaten (Ladeorte und Ladevorgänge, auch ein gerade
+  laufender MyŠkoda-Ladevorgang), Notizen (Ladevorgänge und Anbieter),
+  automatisch ermittelte Ortsnamen, Fahrzeug-/Ladeort-Namen, die
+  Fahrzeug-Identifizierungsnummer (VIN), das MyŠkoda-Debug-Protokoll sowie
+  gespeicherte Zugangsdaten (SMTP-Passwort, WebDAV-Adresse/-Nutzername/
+  -Passwort, MyŠkoda-API-Key) können jetzt verschlüsselt in der Datenbank
+  gespeichert werden** statt im Klartext – relevant, sobald der Server
+  öffentlich erreichbar ist statt nur im eigenen Heimnetz. Standardmäßig
+  AUS, keine Aktion nötig für einen reinen Heimnetz-Betrieb.
 
   Aktivieren über die neue optionale Umgebungsvariable
   `FIELD_ENCRYPTION_KEY`:
@@ -40,6 +42,14 @@ folgen [Semantic Versioning](https://semver.org/).
   Anbieter-Name, Nutzername, E-Mail-Adresse. Der CSV-Export und das
   automatische WebDAV-Backup bleiben bewusst menschenlesbar und damit
   unverschlüsselt.
+
+  Bei einer eigenen DSGVO-Prüfung (systematisch alle Datenbankfelder
+  durchgegangen) gefunden und mitkorrigiert: der MyŠkoda-Poller baute die
+  interne Dubletten-Kennung eines Ladevorgangs aus der VIN
+  (`myskoda-<VIN>-<Startzeit>`) – die wäre trotz verschlüsselter VIN-Spalte
+  über dieses zweite, für den Dublettencheck zwingend unverschlüsselte Feld
+  wieder im Klartext gelandet. Läuft jetzt über die interne, nicht
+  personenbezogene Fahrzeug-ID statt der VIN.
 
 ## [0.14.1] — 2026-09-08
 

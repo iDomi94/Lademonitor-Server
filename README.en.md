@@ -220,9 +220,12 @@ is deliberately **no rate limiting yet** on login/registration – if exposed
 publicly via a reverse proxy, make sure to use a strong password.
 
 **Encryption of personal data (optional):** setting `FIELD_ENCRYPTION_KEY`
-(see above) encrypts GPS coordinates (charging locations and sessions),
-notes, vehicle/location names, and stored credentials (SMTP/WebDAV
-passwords, MyŠkoda API key) at rest instead of storing them in plain text.
+(see above) encrypts GPS coordinates (charging locations and sessions,
+including one currently in progress via the MyŠkoda poller), notes,
+vehicle/location names, the vehicle identification number (VIN), the raw
+MyŠkoda API responses (debug log), and stored credentials (SMTP/WebDAV
+address/username/password, MyŠkoda API key) at rest instead of storing them
+in plain text.
 **Off by default** – not needed for a server that only runs on your home
 network; worthwhile once it's publicly reachable (e.g. your own reverse
 proxy). A badge at the bottom of Settings shows whether it's currently

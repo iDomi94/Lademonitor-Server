@@ -376,7 +376,13 @@ def _create_session(
     if not vehicle:
         return None
 
-    external_id = f"myskoda-{config.vin}-{start_time.strftime('%Y%m%dT%H%M%S')}"
+    # Vehicle.id (interne UUID) statt config.vin (siehe crypto.py) - die VIN
+    # ist verschluesselt genau WEIL sie personenbezogen ist, waere hier aber
+    # wieder im Klartext gelandet: external_session_id braucht per Dubletten-
+    # check einen exakten SQL-Gleichheitsvergleich (siehe unten) und kann
+    # deshalb selbst nicht verschluesselt werden. Vehicle.id erfuellt densel-
+    # ben Zweck (pro Fahrzeug eindeutig) ohne die VIN preiszugeben.
+    external_id = f"myskoda-{vehicle.id}-{start_time.strftime('%Y%m%dT%H%M%S')}"
     existing = (
         db.query(models.ChargingSession)
         .filter(

@@ -299,7 +299,15 @@ betreibt, faehrt mit dem Push weiter besser (Push statt Polling, kein
 Rate-Limit); der Server-Weg existiert fuer alle ohne HA. **Beide Quellen
 wissen nichts voneinander** - pro Fahrzeug darf nur eine aktiv sein, sonst
 entstehen Dubletten (die `external_session_id`-Praefixe unterscheiden sich:
-HA liefert eine eigene, der Poller nutzt `myskoda-<FIN>-<Startzeit>`).
+HA liefert eine eigene, der Poller nutzt `myskoda-<Vehicle.id>-<Startzeit>` -
+**Update 2026-09-09:** urspruenglich `myskoda-<FIN>-<Startzeit>`, auf die
+interne Fahrzeug-UUID umgestellt, als die VIN im Zuge der DSGVO-Pruefung
+verschluesselt wurde (siehe Abschnitt "Verschluesselung personenbezogener
+Daten") - `external_session_id` braucht fuer den Dublettencheck einen
+exakten SQL-Gleichheitsvergleich und kann deshalb selbst nicht verschluesselt
+werden, hier waere die VIN sonst trotz verschluesselter `vin`-Spalte wieder
+im Klartext gelandet. `Vehicle.id` ist ebenso pro Fahrzeug eindeutig, aber
+kein personenbezogenes Datum).
 
 Vorerst nur ueber die Web-UI konfigurierbar (Einstellungen), die Endpunkte
 sind aber regulaerer Teil der REST-API, damit die iOS-App das ohne
@@ -940,6 +948,55 @@ nicht alphabetisch. `Provider.name` bleibt unverschluesselt (siehe oben),
 list_locations` sortiert deshalb seither in Python nach dem Laden
 (`sorted(locations, key=lambda loc: loc.name)`) - bei der ueblichen
 Groessenordnung (Ladeorte eines einzelnen Nutzers) unkritisch.
+
+**Update 2026-09-09, DSGVO-Vollpruefung (dritte Runde am selben Tag):** Auf
+Nutzeranfrage alle verbliebenen Klartextfelder systematisch durchgegangen -
+zwei Kategorien gefunden, die beim zweiten Schritt (Secrets) uebersehen
+wurden, plus eine bewusst wieder verworfene dritte:
+
+- **Uebersehen, jetzt nachgezogen:** `Provider.notes` (Freitext, gleiches
+  Risiko wie `ChargingSession.notes`), `WebdavBackupConfig.url`/`.username`
+  (Cloud-Adressen wie Nextcloud enthalten oft den eigenen Kontonamen im Pfad,
+  z.B. `.../files/<username>/...`), `MySkodaConfig.vin` (die
+  Fahrzeug-Identifizierungsnummer - ein weltweit eindeutiger, ueber
+  Zulassungs-/Versicherungsdaten auf eine Person rueckfuehrbarer
+  Identifikator), `MySkodaConfig.open_latitude/open_longitude` (dieselbe
+  GPS-Position wie `ChargingSession.latitude/longitude`, nur als
+  Zwischenspeicher fuer den noch laufenden Vorgang - eine Inkonsistenz: der
+  fertige Datensatz war geschuetzt, die Kopie im Zwischenzustand nicht) und
+  `MySkodaLogEntry.payload` (komplette Rohantwort der MyŠkoda-API inkl. GPS/
+  VIN/SoC, Standard `log_raw_payload=True`, bis zu `LOG_MAX_ENTRIES` Zeilen
+  pro Fahrzeug - der mit Abstand groesste zusammenhaengende Bestand an
+  Rohdaten in der App und vermutlich die groesste Einzel-Angriffsflaeche vor
+  dieser Aenderung).
+
+  **Versteckte Nebenwirkung beim VIN gefunden und mitkorrigiert:**
+  `myskoda_poller.py::_create_session()` baute die
+  `external_session_id` als `f"myskoda-{config.vin}-{start_time}"` - waere
+  die VIN trotz verschluesselter `vin`-Spalte ueber dieses zweite, fuer den
+  Dublettencheck zwingend unverschluesselte Feld wieder im Klartext gelandet
+  (dieselbe Kategorie wie `Vehicle.external_id`/`Provider.name` oben - ein
+  exakter SQL-Gleichheitsvergleich braucht Klartext bzw. deterministischen
+  Wert). Umgestellt auf `f"myskoda-{vehicle.id}-{start_time}"` -
+  `Vehicle.id` ist ebenso pro Fahrzeug eindeutig, aber die interne UUID ist
+  kein personenbezogenes Datum. Format vorher `myskoda-<FIN>-<Startzeit>`,
+  siehe Abschnitt "MyŠkoda Public API" weiter oben. Rein additive Aenderung
+  fuer neu angelegte Sessions - Bestandszeilen mit dem alten Format bleiben
+  unangetastet und kollidieren nicht mit dem neuen Schema.
+
+- **Bewusst NICHT verschluesselt, obwohl technisch moeglich gewesen waere:**
+  `UserToken.email` (bei `EMAIL_VERIFY`) und `EmailLogEntry.to_address` -
+  beide sind zum Zeitpunkt des Schreibens IMMER eine exakte Kopie eines
+  bereits existierenden `User.email`-Werts (verifiziert im Code:
+  `routers/auth.py` setzt `user.email = payload.email` bzw. legt den
+  `User`-Datensatz mit `email=payload.email` an, JEWEILS bevor der
+  zugehoerige Token/die Mail erzeugt wird - `UserToken.email`/
+  `EmailLogEntry.to_address` sind also nie ein GEGENUEBER `User.email`
+  unabhaengiger Wert). Da `User.email` selbst aus den oben genannten
+  Login-/Reset-Lookup-Gruenden zwingend Klartext bleiben muss, wuerde das
+  Verschluesseln der beiden Kopien keinen zusaetzlichen Schutz bringen - die
+  Adresse waere ueber `users.email` ohnehin trivial einsehbar. Reiner
+  Mehraufwand ohne Sicherheitsgewinn, deshalb bewusst ausgelassen.
 
 **Mechanik:** `crypto.py` haelt Fernet (`cryptography`-Paket, AES-128-CBC +
 HMAC, inkl. Zeitstempel und Authentifizierung) als `EncryptedString`/
