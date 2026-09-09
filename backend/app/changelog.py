@@ -5,6 +5,15 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.16.0",
+        "date": "2026-09-09",
+        "title": "Eigenes Konto löschen",
+        "changes": [
+            "Neu unter \"Mein Konto\": das eigene Konto lässt sich jetzt selbst löschen, mit dem aktuellen Passwort bestätigt - nötig, damit die iOS-App die Apple-Vorgabe erfüllt, dass eine App mit Registrierung auch eine Löschung anbieten muss. Gelöscht werden alle eigenen Daten: Fahrzeuge, Ladevorgänge, Anbieter, bekannte Ladeorte, MyŠkoda- und WebDAV-Backup-Konfiguration samt Protokollen sowie das eigene Mail-Versandprotokoll. Der letzte verbliebene Admin kann sich nicht selbst löschen (sonst wäre die Installation ohne Nutzerverwaltung ausgesperrt) - erst ein anderes Konto zum Admin machen.",
+            "Nebenbei einen Bug in der bestehenden Admin-Löschfunktion (Benutzerverwaltung) korrigiert: sie löschte bisher nur den Nutzer-Datensatz samt Sitzungen, nicht aber dessen Fahrzeuge, Ladevorgänge, Anbieter usw. - bei einem Konto mit echten Daten schlug das an Postgres' Fremdschlüssel-Constraint mit einem Serverfehler fehl. Beide Löschwege räumen jetzt vollständig und in der richtigen Reihenfolge auf.",
+        ],
+    },
+    {
         "version": "0.15.0",
         "date": "2026-09-09",
         "title": "Optionale Verschlüsselung für GPS, Notizen, Namen und Zugangsdaten",

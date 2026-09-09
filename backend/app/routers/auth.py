@@ -37,6 +37,59 @@ MIN_PASSWORD_LENGTH = 8
 logger = logging.getLogger(__name__)
 
 
+def _purge_owned_data(db: Session, user_id: str) -> None:
+    """Loescht saemtliche Daten eines Nutzers, ausser dem User-Datensatz selbst
+    (dessen Tokens uebernimmt SQLAlchemy per `cascade="all, delete-orphan"`,
+    sobald `db.delete(user)` folgt).
+
+    Bulk-DELETE statt ueber ORM-Objekte, in Abhaengigkeitsreihenfolge: Vehicle
+    und Provider haben KEINE Kaskade zum Nutzer (nur ChargingSession->Vehicle
+    traegt eine), ein direktes Loeschen von Vehicle/Provider vor ihren
+    Referenzen wuerde also an Postgres' Fremdschluessel-Constraint scheitern.
+    Reihenfolge: Sessions/Logs/MyŠkoda-Konfig zuerst (haengen an Vehicle),
+    dann Ladeorte (haengen an Provider), erst danach Vehicle und Provider
+    selbst.
+    """
+    db.query(models.ChargingSession).filter(
+        models.ChargingSession.user_id == user_id
+    ).delete(synchronize_session=False)
+    db.query(models.MySkodaLogEntry).filter(
+        models.MySkodaLogEntry.user_id == user_id
+    ).delete(synchronize_session=False)
+    db.query(models.MySkodaConfig).filter(
+        models.MySkodaConfig.user_id == user_id
+    ).delete(synchronize_session=False)
+    db.query(models.ChargingLocation).filter(
+        models.ChargingLocation.user_id == user_id
+    ).delete(synchronize_session=False)
+    db.query(models.Vehicle).filter(
+        models.Vehicle.user_id == user_id
+    ).delete(synchronize_session=False)
+    db.query(models.Provider).filter(
+        models.Provider.user_id == user_id
+    ).delete(synchronize_session=False)
+    db.query(models.WebdavBackupFile).filter(
+        models.WebdavBackupFile.user_id == user_id
+    ).delete(synchronize_session=False)
+    db.query(models.WebdavBackupConfig).filter(
+        models.WebdavBackupConfig.user_id == user_id
+    ).delete(synchronize_session=False)
+    # Enthaelt die Zieladresse (oft die eigene E-Mail) im Klartext - fuer eine
+    # echte Loeschung reicht Anonymisieren (user_id = NULL) nicht.
+    db.query(models.EmailLogEntry).filter(
+        models.EmailLogEntry.user_id == user_id
+    ).delete(synchronize_session=False)
+
+
+def _other_admin_exists(db: Session, user_id: str) -> bool:
+    return (
+        db.query(models.User)
+        .filter(models.User.is_admin.is_(True), models.User.id != user_id)
+        .first()
+        is not None
+    )
+
+
 def _email_taken(db: Session, email: str, exclude_user_id: str | None = None) -> bool:
     """Eine Adresse darf nur einem Konto gehoeren - sonst waere beim
     Zuruecksetzen nicht entscheidbar, welches gemeint ist. Der Unique-Index in
@@ -273,11 +326,16 @@ def delete_user(
     db: Session = Depends(get_db),
     admin: models.User = Depends(require_admin),
 ):
+    """Loescht ein fremdes Konto samt allen eigenen Daten (Fahrzeuge,
+    Ladevorgaenge, Anbieter, Ladeorte, MyŠkoda-/WebDAV-Konfiguration,
+    Protokolle) - siehe `_purge_owned_data`. Selbstloeschen ist hier gesperrt
+    (Sperre gegen versehentliches Aussperren); dafuer gibt es DELETE /me."""
     if user_id == admin.id:
         raise HTTPException(400, "Du kannst dich nicht selbst löschen")
     user = db.get(models.User, user_id)
     if not user:
         raise HTTPException(404, "Nutzer nicht gefunden")
+    _purge_owned_data(db, user.id)
     db.delete(user)
     db.commit()
 
@@ -369,6 +427,37 @@ def resend_verification(
     if user.email_verified_at:
         raise HTTPException(400, "Adresse ist bereits bestätigt")
     _send_verification_mail(db, user)
+
+
+@router.delete("/me", status_code=204)
+def delete_own_account(
+    payload: schemas.AccountDeleteRequest,
+    response: Response,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Loescht das eigene Konto unwiderruflich, inkl. aller eigenen Daten
+    (siehe `_purge_owned_data`). Verlangt das aktuelle Passwort wie /email und
+    /password - ein gestohlener Bearer-Token allein darf ein Konto nicht
+    vernichten koennen.
+
+    Der letzte verbliebene Admin kann sich nicht selbst loeschen, sonst waere
+    die Installation ohne Nutzerverwaltung/Admin-Einstellungen ausgesperrt -
+    erst ein anderes Konto zum Admin machen, dann loeschen.
+    """
+    if not verify_password(payload.current_password, user.password_hash):
+        raise HTTPException(403, "Aktuelles Passwort ist falsch")
+    if user.is_admin and not _other_admin_exists(db, user.id):
+        raise HTTPException(
+            400,
+            "Du bist der einzige Admin. Mach zuerst ein anderes Konto zum "
+            "Admin, bevor du dein eigenes löschst.",
+        )
+
+    _purge_owned_data(db, user.id)
+    db.delete(user)
+    db.commit()
+    response.delete_cookie(COOKIE_NAME)
 
 
 @router.put("/notifications", response_model=schemas.UserOut)

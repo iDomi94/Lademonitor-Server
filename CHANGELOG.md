@@ -6,6 +6,22 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.16.0] — 2026-09-09
+
+### Added
+- **Eigenes Konto löschen**, unter "Mein Konto" mit dem aktuellen Passwort
+  bestätigt. Löscht alle eigenen Daten: Fahrzeuge, Ladevorgänge, Anbieter,
+  bekannte Ladeorte, MyŠkoda- und WebDAV-Backup-Konfiguration samt
+  Protokollen sowie das eigene Mail-Versandprotokoll. Der letzte verbliebene
+  Admin kann sich nicht selbst löschen.
+
+### Fixed
+- Die bestehende Admin-Löschfunktion (Benutzerverwaltung) räumte bisher nur
+  Nutzer-Datensatz und Sitzungen auf, nicht aber Fahrzeuge, Ladevorgänge,
+  Anbieter usw. – bei einem Konto mit echten Daten schlug das an Postgres'
+  Fremdschlüssel-Constraint mit einem Serverfehler fehl. Beide Löschwege
+  räumen jetzt vollständig auf.
+
 ## [0.15.0] — 2026-09-09
 
 ### Added
