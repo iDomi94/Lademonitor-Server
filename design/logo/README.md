@@ -18,6 +18,21 @@ schreibt `favicon.ico`, `favicon-16/32.png`, `apple-touch-icon.png` und
 `icon-192/512.png` nach `backend/app/static/` sowie das `icon.png` im
 Repo-Wurzelverzeichnis, auf das die Unraid-CA-Vorlagen verweisen.
 
+Die iOS-App liegt in einem **eigenen Repo** (`iDomi94/Lademonitor-App`) und
+wird auf Wunsch mitbedient:
+
+```bash
+python3 design/logo/icons.py --ios ../lademonitor-app
+```
+
+Der Generator liegt bewusst hier und nicht dort: die Zeichnung hat nur einen
+Ursprung, zwei Kopien würden früher oder später auseinanderlaufen. Für iOS
+gelten zwei Besonderheiten – das `AppIcon` wird **ohne Alphakanal**
+geschrieben (App Store Connect weist Icons mit Transparenz zurück), und das
+Zeichen im Erststart-Screen ist ein **PNG statt SVG**: Asset-Kataloge können
+zwar SVG, aber Xcodes Importer unterstützt `stroke-dasharray` nicht
+zuverlässig – und genau daraus besteht das Kabel.
+
 Drei Fassungen derselben Variante, alle aus `build._v17()`:
 
 | Fassung | Größen | Warum |

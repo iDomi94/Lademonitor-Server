@@ -33,6 +33,10 @@ folgen [Semantic Versioning](https://semver.org/).
   Navigationsleiste und waren dadurch als einzige Seiten ganz ohne
   Markenzeichen. Dort größer und zentriert über der Karte; die Grundform liegt
   nur einmal in `style.css`, damit beide Stellen nicht auseinanderlaufen.
+- **Datenschutzseite** trägt die Marke ebenfalls – linksbündig über dem
+  Zurück-Link statt zentriert, weil sie ein Fließtext-Dokument in voller
+  Breite ist und keine zentrierte Karte. Dort fehlte außerdem noch die
+  Versionsnummer an den Icon-Verweisen.
 
 ### Fixed
 - Das von `templates/lademonitor-server.xml` und `ca_profile.xml` verlinkte

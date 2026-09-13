@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
 """Erzeugt den App-Icon-Satz aus Logo-Variante 17 ("Angeschnitten").
 
-    python3 design/logo/icons.py
+    python3 design/logo/icons.py                       # Server + Unraid
+    python3 design/logo/icons.py --ios ../lademonitor-app   # zusaetzlich iOS
 
 Schreibt direkt nach backend/app/static/ und legt zusaetzlich das icon.png im
 Repo-Wurzelverzeichnis an, auf das die Unraid-CA-Vorlagen verweisen.
+
+Mit --ios wird auch der Asset-Katalog der iOS-App bedient (eigenes Repo,
+iDomi94/Lademonitor-App). Der Generator liegt bewusst hier und nicht dort:
+die Zeichnung selbst hat nur einen Ursprung, und zwei Kopien davon wuerden
+frueher oder spaeter auseinanderlaufen.
 
 Warum drei Fassungen derselben Variante
 ---------------------------------------
@@ -93,7 +99,54 @@ def write_ico(img, sizes, path):
     print(f"  {os.path.relpath(path, ROOT):<40}{'/'.join(str(s) for s in sizes)}")
 
 
+def write_ios(voll, quadrat, ios_root):
+    """Asset-Katalog der iOS-App bedienen.
+
+    Zwei Dinge, die hier anders laufen als im Web:
+
+    * **AppIcon ohne Alphakanal.** App Store Connect weist Icons mit
+      Transparenz zurueck. Deshalb die quadratische Fassung und zusaetzlich
+      convert("RGB") - die Vorlage ist zwar ohnehin deckend, traegt als RGBA
+      aber trotzdem einen Alphakanal mit sich.
+    * **PNG statt SVG fuer das Zeichen im Erststart-Screen.** Asset-Kataloge
+      koennen SVG, aber Xcodes SVG-Import unterstuetzt `stroke-dasharray`
+      nicht zuverlaessig - und genau daraus besteht das Kabel. Ein stiller
+      Ausfall genau des Elements, das die Marke ausmacht, ist das Risiko
+      nicht wert; die Kachel wird ohnehin nur in einer Groesse gezeigt.
+
+    Das Zeichen ist bewusst die gerundete KACHEL, nicht das quere Zeichen aus
+    der Web-Kopfleiste: der Erststart-Screen folgt dem Hell/Dunkel-Modus des
+    Systems, und die graue Silhouette mit gruenem Kabel ist fuer dunklen
+    Grund gezeichnet. Die Kachel bringt ihren eigenen Grund mit und sitzt
+    dadurch in beiden Modi richtig.
+    """
+    assets = os.path.join(ios_root, "Lademonitor", "Assets.xcassets")
+    if not os.path.isdir(assets):
+        raise SystemExit(f"Asset-Katalog nicht gefunden: {assets}")
+
+    icon = os.path.join(assets, "AppIcon.appiconset", "AppIcon-1024.png")
+    quadrat.convert("RGB").resize((1024, 1024), Image.LANCZOS).save(
+        icon, "PNG", optimize=True)
+    print(f"  {os.path.relpath(icon, ios_root):<52}1024x1024, ohne Alpha")
+
+    mark = os.path.join(assets, "LogoMark.imageset")
+    os.makedirs(mark, exist_ok=True)
+    voll.resize((512, 512), Image.LANCZOS).save(
+        os.path.join(mark, "LogoMark.png"), "PNG", optimize=True)
+    # Ohne "scale" behandelt Xcode das Bild als Single Scale - dieselbe Form,
+    # die der AppIcon-Eintrag schon benutzt.
+    with open(os.path.join(mark, "Contents.json"), "w") as fh:
+        fh.write('{\n  "images" : [\n    {\n      "filename" : "LogoMark.png",'
+                 '\n      "idiom" : "universal"\n    }\n  ],\n  "info" : {'
+                 '\n    "author" : "xcode",\n    "version" : 1\n  }\n}\n')
+    print(f"  {os.path.relpath(mark, ios_root):<52}512x512 + Contents.json")
+
+
 def main():
+    ios_root = None
+    if "--ios" in sys.argv:
+        ios_root = os.path.abspath(sys.argv[sys.argv.index("--ios") + 1])
+
     print("rastere Variante 17 ...")
     voll = rasterise(build.v17_angeschnitten())
     klein = rasterise(build.v17_klein())
@@ -114,6 +167,10 @@ def main():
     with open(mark, "w") as fh:
         fh.write(build.lockup_mark())
     print(f"  {os.path.relpath(mark, ROOT):<40}SVG, quer")
+    if ios_root:
+        print(f"\niOS-App ({ios_root}):")
+        write_ios(voll, quadrat, ios_root)
+
     print("\nfertig - Version in backend/app/changelog.py nicht vergessen.")
 
 
