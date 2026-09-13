@@ -6,6 +6,43 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.18.0] — 2026-09-13
+
+### Changed
+- **Neues Logo**: gestauchte, comic-hafte Fahrzeugsilhouette nach dem Vorbild
+  des Škoda Enyaq, dazu Ladesäule und gestricheltes Kabel in Electric Green auf
+  dunklem Grund. Ersetzt das bisherige Symbol (Auto-Umriss mit Blitz) in
+  Browser-Tab, Lesezeichen, Startbildschirm und PWA-Installation. Entwürfe und
+  Generator liegen unter `design/logo/`.
+- Favicon-Größen (16 und 32 px) nutzen eine **reduzierte Fassung** desselben
+  Motivs – ohne Türfugen, Griffe und Leuchten, dafür mit kräftigerem Kabel; die
+  volle Zeichnung zerläuft in dieser Größe zu einem Fleck. Das
+  `apple-touch-icon` ist randlos quadratisch, weil iOS seine eigene Maske
+  darüberlegt.
+- Icon-Verweise in den Seitenköpfen tragen jetzt wie `style.css` eine
+  Versionsnummer (`?v=…`) – Browser halten ein Favicon besonders hartnäckig
+  fest.
+- **Navigationsleiste**: Wort-Bild-Marke statt des bisherigen ⚡-Emojis. Das
+  Zeichen liegt dort **quer** – in der Leiste gilt die Quadrat-Beschränkung des
+  App-Icons nicht, quer passt die ganze Szene bei gleicher Höhe rund dreimal so
+  breit hinein und bleibt lesbar. Größe von Zeichen und Schriftzug regelt
+  `clamp()` fließend, damit Marke, Versions-Badge und Menü-Knopf auch auf 320 px
+  eine Zeile bleiben, ohne einen zweiten Breakpoint einzuführen.
+- **Anmeldeseiten** (Anmelden, Registrieren, Passwort vergessen, Passwort
+  setzen, Adresse bestätigen) tragen die Marke ebenfalls – sie haben keine
+  Navigationsleiste und waren dadurch als einzige Seiten ganz ohne
+  Markenzeichen. Dort größer und zentriert über der Karte; die Grundform liegt
+  nur einmal in `style.css`, damit beide Stellen nicht auseinanderlaufen.
+- **Datenschutzseite** trägt die Marke ebenfalls – linksbündig über dem
+  Zurück-Link statt zentriert, weil sie ein Fließtext-Dokument in voller
+  Breite ist und keine zentrierte Karte. Dort fehlte außerdem noch die
+  Versionsnummer an den Icon-Verweisen.
+
+### Fixed
+- Das von `templates/lademonitor-server.xml` und `ca_profile.xml` verlinkte
+  `icon.png` existierte nicht im Repo; der Eintrag im Unraid-App-Katalog hatte
+  dadurch ein kaputtes Bild. Die Datei wird jetzt miterzeugt.
+
 ## [0.17.0] — 2026-09-09
 
 ### Added

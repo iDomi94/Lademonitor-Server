@@ -19,13 +19,20 @@
   <title>{% block page_title %}Lademonitor{% endblock %}</title>
   {# Dieselben Icons wie base.html - ohne sie fragt der Browser /favicon.ico ab
      und bekommt eine 404, und im Tab steht kein App-Symbol. #}
-  <link rel="icon" href="static/favicon.ico" sizes="any">
-  <link rel="icon" type="image/png" sizes="32x32" href="static/favicon-32.png">
-  <link rel="icon" type="image/png" sizes="16x16" href="static/favicon-16.png">
-  <link rel="apple-touch-icon" href="static/apple-touch-icon.png">
+  <link rel="icon" href="static/favicon.ico?v={{ version|default('dev') }}" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="static/favicon-32.png?v={{ version|default('dev') }}">
+  <link rel="icon" type="image/png" sizes="16x16" href="static/favicon-16.png?v={{ version|default('dev') }}">
+  <link rel="apple-touch-icon" href="static/apple-touch-icon.png?v={{ version|default('dev') }}">
   <link rel="stylesheet" href="static/style.css?v={{ version|default('dev') }}">
   <style>
     .auth-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    /* Wort-Bild-Marke ueber der Karte. Grundform (.brand/.brandname) kommt
+       aus style.css und ist dieselbe wie in der Navigationsleiste - hier nur
+       groesser und zentriert, weil sie auf diesen Seiten das einzige
+       Markenzeichen ist und nicht neben Navigationselementen steht. */
+    .auth-brand { justify-content: center; gap: 11px; margin-bottom: 20px; }
+    .auth-brand img { height: clamp(34px, 11vw, 42px); }
+    .auth-brand .brandname { font-size: clamp(18px, 5.8vw, 22px); }
     .auth-card { width: 100%; max-width: 360px; }
     .auth-card h1 { margin-bottom: 16px; }
     .auth-card .field { margin-bottom: 14px; }
@@ -44,6 +51,14 @@
 <body>
   <div class="auth-wrap">
     <div>
+      {# Diese Seiten haben keine Navigationsleiste und waeren sonst die
+         einzigen ganz ohne Marke. alt="" weil der Schriftzug daneben
+         denselben Namen schon traegt. #}
+      <div class="brand auth-brand">
+        <img src="static/logo-mark.svg?v={{ version|default('dev') }}"
+             alt="" width="240" height="94">
+        <span class="brandname">Lade<b>monitor</b></span>
+      </div>
       <div class="card auth-card">
         {% block card %}{% endblock %}
       </div>

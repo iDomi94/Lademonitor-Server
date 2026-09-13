@@ -21,10 +21,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{ 'Datenschutzerklärung' if lang == 'de' else 'Privacy Policy' }} · Lademonitor</title>
-  <link rel="icon" href="static/favicon.ico" sizes="any">
-  <link rel="icon" type="image/png" sizes="32x32" href="static/favicon-32.png">
-  <link rel="icon" type="image/png" sizes="16x16" href="static/favicon-16.png">
-  <link rel="apple-touch-icon" href="static/apple-touch-icon.png">
+  <link rel="icon" href="static/favicon.ico?v={{ version|default('dev') }}" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="static/favicon-32.png?v={{ version|default('dev') }}">
+  <link rel="icon" type="image/png" sizes="16x16" href="static/favicon-16.png?v={{ version|default('dev') }}">
+  <link rel="apple-touch-icon" href="static/apple-touch-icon.png?v={{ version|default('dev') }}">
   <link rel="stylesheet" href="static/style.css?v={{ version|default('dev') }}">
   <style>
     .privacy-card { line-height: 1.6; }
@@ -35,6 +35,11 @@
     .privacy-card ul { margin: 0 0 12px; padding-left: 20px; }
     .privacy-card li { margin-bottom: 6px; }
     .privacy-card a { color: var(--accent2); }
+    /* Grundform (.brand/.brandname) kommt aus style.css - hier nur der
+       Abstand nach unten. Linksbuendig statt zentriert wie auf den
+       Anmeldeseiten: das hier ist ein Fliesstext-Dokument in voller
+       Container-Breite, keine zentrierte Karte. */
+    .privacy-brand { margin-bottom: 18px; }
     .privacy-back { display: inline-block; margin-bottom: 20px; color: var(--muted); font-size: 14px; }
     .privacy-back:hover { color: var(--text); }
     .privacy-warning {
@@ -59,6 +64,14 @@
 </head>
 <body>
   <main class="container">
+    {# Diese Seite hat wie die Anmeldeseiten keine Navigationsleiste - ohne
+       die Marke waere sie die einzige ganz ohne Markenzeichen. alt="" weil
+       der Schriftzug daneben denselben Namen schon traegt. #}
+    <div class="brand privacy-brand">
+      <img src="static/logo-mark.svg?v={{ version|default('dev') }}"
+           alt="" width="240" height="94">
+      <span class="brandname">Lade<b>monitor</b></span>
+    </div>
     <a class="privacy-back" href="javascript:history.back()">{{ '← Zurück' if lang == 'de' else '← Back' }}</a>
     <div class="card privacy-card">
 

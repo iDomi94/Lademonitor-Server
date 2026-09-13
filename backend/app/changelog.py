@@ -5,6 +5,20 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.18.0",
+        "date": "2026-09-13",
+        "title": "Neues Logo",
+        "changes": [
+            "Neues App-Symbol: gestauchte, comic-hafte Fahrzeugsilhouette nach dem Vorbild des Enyaq, dazu Ladesäule und gestricheltes Kabel in Electric Green auf dunklem Grund. Ersetzt das bisherige Symbol (Auto-Umriss mit Blitz) in Browser-Tab, Lesezeichen, Startbildschirm und PWA-Installation. Die Entwürfe samt Generator liegen unter design/logo/ im Repo.",
+            "Favicon-Größen (16 und 32 px) nutzen bewusst eine reduzierte Fassung desselben Motivs - ohne Türfugen, Griffe und Leuchten, dafür mit kräftigerem Kabel. Die volle Zeichnung zerläuft in dieser Größe zu einem Fleck. Das apple-touch-icon ist randlos quadratisch, weil iOS seine eigene Maske darüberlegt und eine schon gerundete Vorlage doppelt gerundete Ecken ergäbe.",
+            "Die Icon-Verweise in den Seitenköpfen tragen jetzt wie style.css eine Versionsnummer (?v=...) - Browser halten ein Favicon besonders hartnäckig fest, ohne die Version bliebe nach einem Wechsel das alte Symbol im Tab stehen.",
+            "In der Navigationsleiste steht jetzt die Wort-Bild-Marke statt des bisherigen ⚡-Emojis. Das Zeichen liegt dort bewusst QUER: in der Leiste gilt die Quadrat-Beschränkung des App-Icons nicht, quer passt die ganze Szene bei gleicher Höhe rund dreimal so breit hinein und bleibt dadurch lesbar. Größe von Zeichen und Schriftzug regelt clamp() fließend, damit Marke, Versions-Badge und Menü-Knopf auch auf 320 px eine Zeile bleiben - ohne dass die Oberfläche dafür einen zweiten Breakpoint bekommt.",
+            "Die Anmeldeseiten (Anmelden, Registrieren, Passwort vergessen, Passwort setzen, Adresse bestätigen) tragen die Marke jetzt ebenfalls - sie haben keine Navigationsleiste und waren dadurch als einzige Seiten ganz ohne Markenzeichen. Dort steht sie größer und zentriert über der Karte; die Grundform ist dieselbe wie in der Leiste und liegt nur einmal in style.css, damit beide nicht auseinanderlaufen.",
+            "Auch die Datenschutzseite trägt die Marke jetzt (linksbündig über dem Zurück-Link, nicht zentriert wie auf den Anmeldeseiten - sie ist ein Fließtext-Dokument in voller Breite, keine zentrierte Karte). Dort fehlte außerdem noch die Versionsnummer an den Icon-Verweisen, die base.html und auth_base.html schon hatten.",
+            "Nebenbei korrigiert: das von den Unraid-Community-Applications-Vorlagen (templates/lademonitor-server.xml, ca_profile.xml) verlinkte icon.png existierte gar nicht im Repo - der Eintrag im App-Katalog hatte dadurch ein kaputtes Bild. Die Datei wird jetzt mit erzeugt.",
+        ],
+    },
+    {
         "version": "0.17.0",
         "date": "2026-09-09",
         "title": "Datenschutzerklärung",

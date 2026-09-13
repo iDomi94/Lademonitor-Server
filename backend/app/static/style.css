@@ -8,6 +8,10 @@
   --accent2: #5b8def;
   --warn: #f2b84b;
   --danger: #ef6461;
+  /* Logo-Gruen. Bewusst NICHT --accent (#4fd1a5): das ist der Bedienfarbton
+     der Oberflaeche, das hier ist die Farbe der Marke (Kabel im Logo) und
+     soll nur dort auftauchen. */
+  --brand: #3bf07c;
 }
 
 * { box-sizing: border-box; }
@@ -28,7 +32,41 @@ body {
   background: var(--card);
 }
 
-.topnav .brand { font-weight: 700; margin-right: 16px; }
+/* Wort-Bild-Marke: Zeichen und Schriftzug sind EIN Objekt, deshalb
+   gemeinsame Flexbox statt Rand am Bild - der Abstand bleibt so bei jeder
+   Schriftgroesse gleich. Die Hoehe steuert das Bild, die Breite folgt aus
+   dem Seitenverhaeltnis des SVG (2,55:1).
+
+   Bewusst NICHT an .topnav gebunden: dieselbe Marke steht auch ueber den
+   Anmeldeseiten (auth_base.html), die keine Navigationsleiste haben. Zwei
+   Definitionen wuerden frueher oder spaeter auseinanderlaufen; die
+   Abweichungen dort (groesser, zentriert) haengen als .auth-brand im
+   Style-Block von auth_base.html. */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+/* Fliessende Groesse statt eines zweiten Breakpoints: die Datei kommt
+   bewusst mit genau einem aus (720 px). clamp() laesst Zeichen und Schriftzug
+   auf schmalen Schirmen mitschrumpfen, damit Marke, Versions-Badge und
+   Burger-Knopf eine Zeile bleiben, ohne dass die Leiste dafuer eine zweite
+   Regel braucht. */
+.brand img {
+  height: clamp(21px, 6.2vw, 30px);
+  width: auto;
+  display: block;
+}
+.brandname {
+  font-weight: 700;
+  font-size: clamp(14px, 4.3vw, 17px);
+  letter-spacing: -0.2px;
+  color: var(--text);
+  white-space: nowrap;
+}
+.brandname b { color: var(--brand); font-weight: 700; }
+
+.topnav .brand { margin-right: 16px; }
 
 /* Nur auf schmalen Schirmen sichtbar (siehe Media Query unten) - dort traegt
    der Button das Aufklappen, auf dem Desktop bleibt die Leiste wie bisher. */
@@ -604,7 +642,9 @@ details.panel > summary .count {
      selbst bleibt eine Zeile (Marke + Version + Button), die Links klappen
      darunter als Liste auf. */
   .topnav { flex-wrap: wrap; gap: 12px; padding: 12px 16px; }
-  .topnav .brand { margin-right: 0; }
+  /* Marke, Versions-Badge und Burger-Knopf teilen sich hier eine Zeile; die
+     Groesse regelt clamp() weiter oben, hier faellt nur der Rand weg. */
+  .topnav .brand { margin-right: 0; gap: 7px; }
   .navtoggle { display: block; }
   .navlinks {
     display: none;

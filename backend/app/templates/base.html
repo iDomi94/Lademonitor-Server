@@ -4,12 +4,16 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Lademonitor</title>
-  <link rel="icon" href="static/favicon.ico" sizes="any">
-  <link rel="icon" type="image/png" sizes="32x32" href="static/favicon-32.png">
-  <link rel="icon" type="image/png" sizes="16x16" href="static/favicon-16.png">
-  <link rel="apple-touch-icon" href="static/apple-touch-icon.png">
-  <link rel="icon" type="image/png" sizes="192x192" href="static/icon-192.png">
-  <link rel="icon" type="image/png" sizes="512x512" href="static/icon-512.png">
+  {# ?v=... auch auf den Icons: Browser halten ein Favicon besonders
+     hartnaeckig fest. Ohne die Version bliebe nach einem Logo-Wechsel
+     das alte Symbol im Tab stehen - dieselbe Ueberlegung wie bei
+     style.css, nur noch ausgepraegter. #}
+  <link rel="icon" href="static/favicon.ico?v={{ version|default('dev') }}" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="static/favicon-32.png?v={{ version|default('dev') }}">
+  <link rel="icon" type="image/png" sizes="16x16" href="static/favicon-16.png?v={{ version|default('dev') }}">
+  <link rel="apple-touch-icon" href="static/apple-touch-icon.png?v={{ version|default('dev') }}">
+  <link rel="icon" type="image/png" sizes="192x192" href="static/icon-192.png?v={{ version|default('dev') }}">
+  <link rel="icon" type="image/png" sizes="512x512" href="static/icon-512.png?v={{ version|default('dev') }}">
   <link rel="stylesheet" href="static/style.css?v={{ version|default('dev') }}">
   <script>
     // Kleine Uebersetzungstabelle fuer static/filter.js - die Datei ist ein
@@ -26,7 +30,17 @@
 </head>
 <body>
   <nav class="topnav" id="topnav">
-    <div class="brand">⚡ Lademonitor</div>
+    {# Wort-Bild-Marke statt des bisherigen ⚡-Emojis. Das Zeichen liegt hier
+       bewusst QUER (static/logo-mark.svg, erzeugt von design/logo/icons.py):
+       in der Leiste gilt die Quadrat-Beschraenkung des App-Icons nicht, quer
+       passt die ganze Szene bei gleicher Hoehe rund dreimal so breit hinein
+       und bleibt dadurch lesbar. alt="" weil der Schriftzug daneben denselben
+       Namen schon traegt - sonst liest ein Screenreader ihn zweimal vor. #}
+    <div class="brand">
+      <img src="static/logo-mark.svg?v={{ version|default('dev') }}"
+           alt="" width="240" height="94">
+      <span class="brandname">Lade<b>monitor</b></span>
+    </div>
     {% if version %}
     <button class="ver" type="button" onclick="openChangelog()" title="{{ t('nav.version_title') }}">v{{ version }}</button>
     {% endif %}
