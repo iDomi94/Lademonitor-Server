@@ -28,6 +28,11 @@ folgen [Semantic Versioning](https://semver.org/).
   breit hinein und bleibt lesbar. Größe von Zeichen und Schriftzug regelt
   `clamp()` fließend, damit Marke, Versions-Badge und Menü-Knopf auch auf 320 px
   eine Zeile bleiben, ohne einen zweiten Breakpoint einzuführen.
+- **Anmeldeseiten** (Anmelden, Registrieren, Passwort vergessen, Passwort
+  setzen, Adresse bestätigen) tragen die Marke ebenfalls – sie haben keine
+  Navigationsleiste und waren dadurch als einzige Seiten ganz ohne
+  Markenzeichen. Dort größer und zentriert über der Karte; die Grundform liegt
+  nur einmal in `style.css`, damit beide Stellen nicht auseinanderlaufen.
 
 ### Fixed
 - Das von `templates/lademonitor-server.xml` und `ca_profile.xml` verlinkte

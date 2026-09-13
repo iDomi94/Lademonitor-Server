@@ -35,31 +35,38 @@ body {
 /* Wort-Bild-Marke: Zeichen und Schriftzug sind EIN Objekt, deshalb
    gemeinsame Flexbox statt Rand am Bild - der Abstand bleibt so bei jeder
    Schriftgroesse gleich. Die Hoehe steuert das Bild, die Breite folgt aus
-   dem Seitenverhaeltnis des SVG (2,55:1). */
-.topnav .brand {
+   dem Seitenverhaeltnis des SVG (2,55:1).
+
+   Bewusst NICHT an .topnav gebunden: dieselbe Marke steht auch ueber den
+   Anmeldeseiten (auth_base.html), die keine Navigationsleiste haben. Zwei
+   Definitionen wuerden frueher oder spaeter auseinanderlaufen; die
+   Abweichungen dort (groesser, zentriert) haengen als .auth-brand im
+   Style-Block von auth_base.html. */
+.brand {
   display: flex;
   align-items: center;
   gap: 9px;
-  margin-right: 16px;
 }
 /* Fliessende Groesse statt eines zweiten Breakpoints: die Datei kommt
    bewusst mit genau einem aus (720 px). clamp() laesst Zeichen und Schriftzug
    auf schmalen Schirmen mitschrumpfen, damit Marke, Versions-Badge und
    Burger-Knopf eine Zeile bleiben, ohne dass die Leiste dafuer eine zweite
    Regel braucht. */
-.topnav .brand img {
+.brand img {
   height: clamp(21px, 6.2vw, 30px);
   width: auto;
   display: block;
 }
-.topnav .brandname {
+.brandname {
   font-weight: 700;
   font-size: clamp(14px, 4.3vw, 17px);
   letter-spacing: -0.2px;
   color: var(--text);
   white-space: nowrap;
 }
-.topnav .brandname b { color: var(--brand); font-weight: 700; }
+.brandname b { color: var(--brand); font-weight: 700; }
+
+.topnav .brand { margin-right: 16px; }
 
 /* Nur auf schmalen Schirmen sichtbar (siehe Media Query unten) - dort traegt
    der Button das Aufklappen, auf dem Desktop bleibt die Leiste wie bisher. */
