@@ -25,6 +25,15 @@ Drei Fassungen derselben Variante, alle aus `build._v17()`:
 | voll | 512, 256, 192 | die komplette Zeichnung |
 | klein | 48, 32, 16 | ohne Türfugen, Griffe, Leuchten, Displaydetails, dafür kräftigeres Kabel – die volle Zeichnung zerläuft bei 32 px zu einem Fleck |
 | quadratisch | 180 (apple-touch) | randlos ohne Rundung: iOS legt seine eigene Maske darüber, eine schon gerundete Vorlage ergäbe doppelt gerundete Ecken, und transparente Ecken füllt iOS mit Schwarz oder Weiß |
+| quer | `logo-mark.svg` | Navigationsleiste. Bleibt SVG (nicht gerastert), damit es mit der Schriftgröße mitskaliert |
+
+**Warum das Zeichen in der Leiste quer liegt:** dort gilt die
+Quadrat-Beschränkung nicht, die Variante 17 überhaupt erst nötig gemacht hat.
+Quer passt die ganze Szene bei gleicher Höhe rund dreimal so breit hinein – bei
+30 px Höhe ist das Fahrzeug damit rund 60 px breit statt 24 px und liegt damit
+klar über der Schwelle, ab der es zum Fleck zerläuft. Kachel und Hintergrund
+entfallen, weil die Leiste ihren eigenen Grund mitbringt (`--card`) – ein
+zweiter dunkler Kasten darin sähe aus wie ein hineingeklebtes App-Icon.
 
 Rasterung läuft über das im Container vorhandene headless Chromium (kein
 cairosvg/rsvg im Image), einmal bei 1024 px und dann mit LANCZOS

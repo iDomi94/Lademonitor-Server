@@ -578,6 +578,40 @@ def v17_quadratisch():
     return _v17(True, square=True)
 
 
+# ===========================================================================
+# Zeichen fuer die Navigationsleiste (backend/app/static/logo-mark.svg)
+# ===========================================================================
+def lockup_mark(detail=False):
+    """Das Motiv quer, ohne Kachel und ohne Hintergrund.
+
+    In der Navigationsleiste gilt die Quadrat-Beschraenkung nicht, die
+    Variante 17 ueberhaupt erst noetig gemacht hat: liegt das Zeichen quer,
+    passt die ganze Szene bei gleicher Hoehe rund dreimal so breit hinein.
+    Bei 30 px Hoehe ist das Fahrzeug damit rund 60 px breit - deutlich ueber
+    der Groesse, bei der es im Quadrat zum Fleck zerlaeuft.
+
+    Kachel und Hintergrund entfallen, weil die Leiste ihren eigenen Grund
+    mitbringt (--card) - ein zweiter, dunkler Kasten darin saehe aus wie ein
+    hineingeklebtes App-Icon.
+
+    *detail* standardmaessig aus: bei der tatsaechlichen Anzeigegroesse liegen
+    Tuerfugen und Griffe unter einem Geraetepixel und ergeben nur Grauschleier.
+    """
+    car = car_side(port=EV) if detail else car_side_simple()
+    body = (
+        f'<path d="M 0 101 L 240 101" stroke="{GREY_DEEP}" stroke-width="2" '
+        f'stroke-linecap="round" opacity="0.85"/>'
+        + f'<g>{station(base=False, screen=detail)}</g>'
+        + f'<g transform="translate({CAR_X},0)">{car}</g>'
+        + (f'<circle cx="{PORT[0]}" cy="{PORT[1]}" r="4.2" fill="{EV}"/>'
+           if not detail else "")
+        + cable(CABLE_SAG, width=7, dash="11 10", glow=0)
+    )
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 12 240 94" '
+            f'width="240" height="94" role="img">'
+            f'<title>Lademonitor</title>{body}</svg>')
+
+
 VARIANTS = [
     ("01-klassik", "Klassik", v01_klassik),
     ("02-kreis", "Kreisemblem", v02_kreis),
@@ -697,8 +731,10 @@ def main():
         print(f"  {name:<14} {label}")
     write("17-angeschnitten-klein", v17_klein())
     write("17-angeschnitten-quadrat", v17_quadratisch())
+    write("lockup-mark", lockup_mark())
     print("  17-…-klein    Ableitung fuer Favicon-Groessen (16/32 px)")
     print("  17-…-quadrat  Ableitung ohne Rundung (apple-touch-icon)")
+    print("  lockup-mark   quer, transparent (Navigationsleiste)")
     with open(os.path.join(OUT, "preview.html"), "w") as fh:
         fh.write(preview_html())
     print(f"\n{len(VARIANTS)} Varianten + preview.html -> {OUT}")

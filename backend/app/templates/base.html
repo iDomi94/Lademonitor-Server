@@ -30,7 +30,17 @@
 </head>
 <body>
   <nav class="topnav" id="topnav">
-    <div class="brand">⚡ Lademonitor</div>
+    {# Wort-Bild-Marke statt des bisherigen ⚡-Emojis. Das Zeichen liegt hier
+       bewusst QUER (static/logo-mark.svg, erzeugt von design/logo/icons.py):
+       in der Leiste gilt die Quadrat-Beschraenkung des App-Icons nicht, quer
+       passt die ganze Szene bei gleicher Hoehe rund dreimal so breit hinein
+       und bleibt dadurch lesbar. alt="" weil der Schriftzug daneben denselben
+       Namen schon traegt - sonst liest ein Screenreader ihn zweimal vor. #}
+    <div class="brand">
+      <img src="static/logo-mark.svg?v={{ version|default('dev') }}"
+           alt="" width="77" height="30">
+      <span class="brandname">Lade<b>monitor</b></span>
+    </div>
     {% if version %}
     <button class="ver" type="button" onclick="openChangelog()" title="{{ t('nav.version_title') }}">v{{ version }}</button>
     {% endif %}

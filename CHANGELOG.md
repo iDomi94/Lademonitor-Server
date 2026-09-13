@@ -22,6 +22,12 @@ folgen [Semantic Versioning](https://semver.org/).
 - Icon-Verweise in den Seitenköpfen tragen jetzt wie `style.css` eine
   Versionsnummer (`?v=…`) – Browser halten ein Favicon besonders hartnäckig
   fest.
+- **Navigationsleiste**: Wort-Bild-Marke statt des bisherigen ⚡-Emojis. Das
+  Zeichen liegt dort **quer** – in der Leiste gilt die Quadrat-Beschränkung des
+  App-Icons nicht, quer passt die ganze Szene bei gleicher Höhe rund dreimal so
+  breit hinein und bleibt lesbar. Größe von Zeichen und Schriftzug regelt
+  `clamp()` fließend, damit Marke, Versions-Badge und Menü-Knopf auch auf 320 px
+  eine Zeile bleiben, ohne einen zweiten Breakpoint einzuführen.
 
 ### Fixed
 - Das von `templates/lademonitor-server.xml` und `ca_profile.xml` verlinkte

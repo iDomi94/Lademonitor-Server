@@ -18,6 +18,11 @@ Warum drei Fassungen derselben Variante
   seine eigene Maske darueber; eine schon gerundete Vorlage ergibt doppelt
   gerundete Ecken, und transparente Ecken fuellt iOS mit Schwarz oder Weiss.
 
+Dazu kommt das Zeichen fuer die Navigationsleiste (logo-mark.svg): dasselbe
+Motiv quer, ohne Kachel und ohne Hintergrund. Es bleibt SVG, wird also nicht
+gerastert - in der Leiste soll es mit der Schriftgroesse mitskalieren und auf
+jedem Bildschirm scharf sein.
+
 Rasterung laeuft ueber das im Container vorhandene headless Chromium (kein
 cairosvg/rsvg im Bild). Gerendert wird einmal gross und dann mit LANCZOS
 heruntergerechnet - direkt bei 16 px zu rendern ergibt sichtbar rauhere
@@ -104,6 +109,11 @@ def main():
     # ca_profile.xml - die Datei fehlte im Repo, das CA-Eintragsbild war
     # dadurch kaputt.
     write_png(voll, 256, os.path.join(ROOT, "icon.png"))
+
+    mark = os.path.join(STATIC, "logo-mark.svg")
+    with open(mark, "w") as fh:
+        fh.write(build.lockup_mark())
+    print(f"  {os.path.relpath(mark, ROOT):<40}SVG, quer")
     print("\nfertig - Version in backend/app/changelog.py nicht vergessen.")
 
 
