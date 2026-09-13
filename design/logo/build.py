@@ -19,9 +19,17 @@ SIZE = 512
 # Gemeinsamer Bildausschnitt der Seitenansicht-Szene (Saeule links, Auto
 # rechts). Bewusst als feste Konstante: dadurch sitzt das Motiv in allen
 # Varianten gleich gross im Rahmen und die Reihe wirkt als Familie.
+#
+# Die Szene ist rund 2,6:1 breit, die Kachel 1:1 - die BREITE begrenzt also
+# die Skalierung, die Hoehe ist im Ueberfluss da. Jede Einheit Breite, die
+# Luecke oder Rand verschenkt, geht deshalb direkt von der Groesse des
+# Fahrzeugs ab. Der erste Entwurf verschenkte davon reichlich (Luecke von 34
+# Einheiten zwischen Saeule und Auto, dazu 10 Einheiten Rand im Rahmen und
+# ein zu kleines Bildfeld) und liess das Auto nur 55 % der Kachelbreite
+# einnehmen; eng gepackt sind es rund 70 %.
 STATION_X = 0
-CAR_X = 74
-SCENE_BB = (-14, 12, 266, 104)
+CAR_X = 52
+SCENE_BB = (-5, 10, 236, 102)
 
 OUTLET = (STATION_OUTLET[0] + STATION_X, STATION_OUTLET[1])
 PORT = (CAR_X + CHARGE_PORT[0], CHARGE_PORT[1])
@@ -37,7 +45,23 @@ def fit(bbox, bx, by, bw, bh):
     return f"translate({tx:.2f},{ty:.2f}) scale({s:.4f})"
 
 
-def ground(y=101, x0=-16, x1=262, color=GREY_DEEP, op=0.9, w=2.2):
+TILE_CLIP = (f'<clipPath id="tile"><rect x="0" y="0" width="{SIZE}" '
+             f'height="{SIZE}" rx="{SIZE * 0.2237:.1f}"/></clipPath>')
+
+
+def tiled(bbox, box, inner):
+    """Szene, eingepasst UND auf die Kachelform beschnitten.
+
+    Ohne den Beschnitt duerfte die Standlinie nicht ueber den Rahmen
+    hinauslaufen - und genau das laesst die quadratische Kachel gefuellt
+    wirken, obwohl das Motiv breit und flach ist: die Linie endet nicht
+    sichtbar im Bild, sondern laeuft aus ihm heraus.
+    """
+    return (f'<g clip-path="url(#tile)"><g transform="{fit(bbox, *box)}">'
+            f'{inner}</g></g>')
+
+
+def ground(y=101, x0=-90, x1=340, color=GREY_DEEP, op=0.9, w=2.2):
     return (f'<path d="M {x0} {y} L {x1} {y}" stroke="{color}" stroke-width="{w}" '
             f'stroke-linecap="round" opacity="{op}"/>')
 
@@ -51,8 +75,8 @@ def shadow(cx, rx, y=100.5, op=0.32):
 # Standard-Kabelverlauf: sackt in die Luecke zwischen Saeule und Auto und
 # steigt am Heck zur Ladeklappe an. Ein durchhaengendes Kabel liest sich
 # sofort als Kabel - eine straff gezogene Linie eher als Strich.
-CABLE_SAG = (f"M {OUTLET[0]} {OUTLET[1]} C 54 90, 74 92, 86 80 "
-             f"C 94 72, 96 58, {PORT[0]} {PORT[1]}")
+CABLE_SAG = (f"M {OUTLET[0]} {OUTLET[1]} C 46 84, 58 88, 68 78 "
+             f"C 74 71, 76 58, {PORT[0]} {PORT[1]}")
 
 
 def write(name, markup):
@@ -65,7 +89,7 @@ def write(name, markup):
 
 
 def scene(car_kw=None, station_kw=None, cable_d=None, cable_kw=None,
-          ground_op=0.5, extra_back="", extra_front=""):
+          ground_op=0.5, ground_x=(-90, 340), extra_back="", extra_front=""):
     """Die Standardszene: Saeule links, Auto rechts, Kabel dazwischen.
 
     Zehn der fuenfzehn Entwuerfe unterscheiden sich nur im Rahmen und im
@@ -77,7 +101,8 @@ def scene(car_kw=None, station_kw=None, cable_d=None, cable_kw=None,
     cable_kw = cable_kw or {}
     return (
         extra_back
-        + ground(op=ground_op) + shadow(CAR_X + 92, 92) + shadow(20, 26)
+        + ground(x0=ground_x[0], x1=ground_x[1], op=ground_op)
+        + shadow(CAR_X + 92, 92) + shadow(20, 26)
         + f'<g>{station(**station_kw)}</g>'
         + f'<g transform="translate({CAR_X},0)">{car_side(**car_kw)}</g>'
         + cable(cable_d or CABLE_SAG, **cable_kw)
@@ -85,19 +110,19 @@ def scene(car_kw=None, station_kw=None, cable_d=None, cable_kw=None,
     )
 
 
-ICON_BOX = (44, 102, 424, 308)   # Bildflaeche innerhalb der 512er Kachel
+ICON_BOX = (26, 88, 460, 336)   # Bildflaeche innerhalb der 512er Kachel
 
 
 # ===========================================================================
 # 01 - Klassik: die Grundaufstellung, an der sich alles andere misst.
 # ===========================================================================
 def v01_klassik():
-    defs = bg_gradient() + radial_glow("g1", EV, 0.22)
+    defs = TILE_CLIP + bg_gradient() + radial_glow("g1", EV, 0.22)
     inner = scene(car_kw={"glow_edge": True},
                   extra_back=f'<ellipse cx="46" cy="62" rx="74" ry="56" '
                              f'fill="url(#g1)" opacity="0.55"/>')
     return svg(SIZE, SIZE, squircle(SIZE)
-               + f'<g transform="{fit(SCENE_BB, *ICON_BOX)}">{inner}</g>',
+               + tiled(SCENE_BB, ICON_BOX, inner),
                defs, "Lademonitor")
 
 
@@ -107,9 +132,9 @@ def v01_klassik():
 #      wirken statt wie einen blossen Rahmen.
 # ===========================================================================
 def v02_kreis():
-    defs = bg_gradient("bg", BG_SOFT, BG_DEEP) + radial_glow("g2", EV, 0.13)
+    defs = TILE_CLIP + bg_gradient("bg", BG_SOFT, BG_DEEP) + radial_glow("g2", EV, 0.13)
     c, r = SIZE / 2, 226
-    inner = scene(cable_kw={"width": 5.6})
+    inner = scene(ground_x=(-20, 250), cable_kw={"width": 5.6})
     body = (
         f'<circle cx="{c}" cy="{c}" r="{r + 18}" fill="url(#bg)"/>'
         f'<circle cx="{c}" cy="{c}" r="{r + 18}" fill="url(#g2)"/>'
@@ -130,7 +155,7 @@ def v02_kreis():
 #      Saeule und Auto, wo sonst nur Leerraum waere.
 # ===========================================================================
 def v03_puls():
-    defs = bg_gradient() + radial_glow("g3", EV, 0.20)
+    defs = TILE_CLIP + bg_gradient() + radial_glow("g3", EV, 0.20)
     pulse = (f"M {OUTLET[0]} {OUTLET[1]} C 43 76, 43 82, 46 84 "
              f"L 53 84 L 58 62 L 66 104 L 73 72 L 78 84 L 86 84 "
              f"C 93 82, 95 58, {PORT[0]} {PORT[1]}")
@@ -139,7 +164,7 @@ def v03_puls():
                   extra_back=f'<ellipse cx="66" cy="80" rx="74" ry="44" '
                              f'fill="url(#g3)" opacity="0.6"/>')
     return svg(SIZE, SIZE, squircle(SIZE)
-               + f'<g transform="{fit(SCENE_BB, *ICON_BOX)}">{inner}</g>',
+               + tiled(SCENE_BB, ICON_BOX, inner),
                defs, "Lademonitor")
 
 
@@ -149,10 +174,10 @@ def v03_puls():
 #      "Auto + Strom", sondern "wie voll ist es".
 # ===========================================================================
 def v04_ladering():
-    defs = bg_gradient()
+    defs = TILE_CLIP + bg_gradient()
     c, r, w = SIZE / 2, 198, 20
     pct = 72
-    inner = scene(ground_op=0.35, cable_kw={"width": 5.4})
+    inner = scene(ground_x=(-20, 250), ground_op=0.35, cable_kw={"width": 5.4})
     body = (
         squircle(SIZE)
         + f'<circle cx="{c}" cy="{c}" r="{r}" fill="none" stroke="{GREY_DEEP}" '
@@ -162,7 +187,7 @@ def v04_ladering():
         + f'<circle cx="{c}" cy="{c}" r="{r}" fill="none" stroke="{EV}" '
           f'stroke-width="{w}" stroke-linecap="round" pathLength="100" '
           f'stroke-dasharray="{pct} 100" transform="rotate(-90 {c} {c})"/>'
-        + f'<g transform="{fit(SCENE_BB, 116, 196, 280, 150)}">{inner}</g>'
+        + tiled(SCENE_BB, (116, 196, 280, 150), inner)
         + f'<text x="{c}" y="{c + 118}" text-anchor="middle" font-size="46" '
           f'font-weight="700" font-family="Inter, -apple-system, Segoe UI, sans-serif" '
           f'fill="{EV}" opacity="0.95">{pct} %</text>'
@@ -176,7 +201,7 @@ def v04_ladering():
 #      ein, statt es als zweites Zeichen daneben zu stellen.
 # ===========================================================================
 def v05_blitz():
-    defs = bg_gradient() + radial_glow("g5", EV, 0.24)
+    defs = TILE_CLIP + bg_gradient() + radial_glow("g5", EV, 0.24)
     # Klassische Blitzform: hin, scharf zurueck, hin. Der erste Versuch mit
     # vier gleichmaessigen Zacken las sich als Schallwelle, nicht als Blitz.
     bolt = f"M {OUTLET[0]} {OUTLET[1]} L 74 50 L 56 80 L {PORT[0]} {PORT[1]}"
@@ -185,7 +210,7 @@ def v05_blitz():
                   extra_back=f'<ellipse cx="66" cy="74" rx="66" ry="48" '
                              f'fill="url(#g5)" opacity="0.6"/>')
     return svg(SIZE, SIZE, squircle(SIZE)
-               + f'<g transform="{fit(SCENE_BB, *ICON_BOX)}">{inner}</g>',
+               + tiled(SCENE_BB, ICON_BOX, inner),
                defs, "Lademonitor")
 
 
@@ -196,10 +221,10 @@ def v05_blitz():
 #      Buchstabe waere dahin.
 # ===========================================================================
 def v06_monogramm():
-    defs = bg_gradient()
+    defs = TILE_CLIP + bg_gradient()
     x0, ytop, ybot = 122, 132, 400
-    s_car = 1.20
-    port_xy = (258, 340)
+    s_car = 1.34
+    port_xy = (268, 332)
     car_x = port_xy[0] - CHARGE_PORT[0] * s_car
     car_y = port_xy[1] - CHARGE_PORT[1] * s_car
     lpath = (f"M {x0} {ytop} L {x0} {ybot} L 214 {ybot} "
@@ -220,7 +245,7 @@ def v06_monogramm():
 #      der abgewandten Seite, ohne die Front zu zerschneiden.
 # ===========================================================================
 def v07_front():
-    defs = bg_gradient() + radial_glow("g7", EV, 0.26)
+    defs = TILE_CLIP + bg_gradient() + radial_glow("g7", EV, 0.26)
     inner = (
         f'<ellipse cx="78" cy="56" rx="96" ry="66" fill="url(#g7)" opacity="0.45"/>'
         + ground(x0=-30, x1=250, op=0.5) + shadow(75, 72, op=0.4)
@@ -230,7 +255,7 @@ def v07_front():
         + car_front()
     )
     return svg(SIZE, SIZE, squircle(SIZE)
-               + f'<g transform="{fit((-24, 2, 244, 104), 54, 74, 404, 364)}">{inner}</g>',
+               + tiled((-10, 0, 224, 104), (26, 74, 460, 364), inner),
                defs, "Lademonitor")
 
 
@@ -239,11 +264,11 @@ def v07_front():
 #      Die App ist in erster Linie eine Auswertung - das sagt das Zeichen mit.
 # ===========================================================================
 def v08_statistik():
-    defs = bg_gradient()
-    heights = [14, 21, 18, 28, 24, 35, 30, 42, 37]
+    defs = TILE_CLIP + bg_gradient()
+    heights = [16, 25, 21, 33, 28, 41]
     bars = "".join(
-        f'<rect x="{-10 + i * 31}" y="{100 - h}" width="21" height="{h}" rx="4" '
-        f'fill="{GREY_MID}" opacity="{0.13 + i * 0.016:.3f}"/>'
+        f'<rect x="{2 + i * 38}" y="{100 - h}" width="19" height="{h}" rx="4" '
+        f'fill="{GREY_MID}" opacity="{0.11 + i * 0.021:.3f}"/>'
         for i, h in enumerate(heights))
     inner = scene(
         ground_op=0.6, extra_back=bars,
@@ -251,7 +276,7 @@ def v08_statistik():
                 f"C 90 63, 94 56, {PORT[0]} {PORT[1]}",
         cable_kw={"width": 6.2})
     return svg(SIZE, SIZE, squircle(SIZE)
-               + f'<g transform="{fit(SCENE_BB, *ICON_BOX)}">{inner}</g>',
+               + tiled(SCENE_BB, ICON_BOX, inner),
                defs, "Lademonitor")
 
 
@@ -263,7 +288,7 @@ def v08_statistik():
 #      beides bei kleiner Groesse zu einem Klumpen.
 # ===========================================================================
 def v09_monoline():
-    defs = bg_gradient()
+    defs = TILE_CLIP + bg_gradient()
     # Deutlich groesser im Rahmen als die uebrigen Entwuerfe und ohne Sockel,
     # Display und Statusband an der Saeule: der Test bei 32 px hat gezeigt,
     # dass die volle Szene dort zu einem Fleck zerlaeuft. Hier bleiben genau
@@ -277,7 +302,7 @@ def v09_monoline():
                 width=12, dash="20 17", glow=0)
     )
     return svg(SIZE, SIZE, squircle(SIZE)
-               + f'<g transform="{fit(bb, 30, 126, 452, 260)}">{inner}</g>',
+               + tiled(bb, (30, 126, 452, 260), inner),
                defs, "Lademonitor")
 
 
@@ -296,11 +321,11 @@ FONT = "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif"
 
 def v10_lockup():
     W, H = 1280, 360
-    defs = bg_gradient("bg", BG_SOFT, BG_DEEP, 0, 0, 1, 1)
+    defs = TILE_CLIP + bg_gradient("bg", BG_SOFT, BG_DEEP, 0, 0, 1, 1)
     inner = scene(ground_op=0.4, cable_kw={"width": 6})
     body = (
         f'<rect width="{W}" height="{H}" fill="url(#bg)"/>'
-        + f'<g transform="{fit(SCENE_BB, 44, 66, 452, 228)}">{inner}</g>'
+        + tiled(SCENE_BB, (44, 66, 452, 228), inner)
         + f'<text x="522" y="186" font-family="{FONT}" font-size="92" '
           f'font-weight="700" letter-spacing="-2" fill="{GREY_LIGHT}">'
           f'Lade<tspan fill="{EV}">monitor</tspan></text>'
@@ -317,20 +342,20 @@ def v10_lockup():
 #      App-Icons - das Zeichen ist schon am Rand erkennbar.
 # ===========================================================================
 def v11_rahmen():
-    defs = bg_gradient()
+    defs = TILE_CLIP + bg_gradient()
     m, r = 46, 86
     frame = (f"M {SIZE/2} {m} L {SIZE-m-r} {m} A {r} {r} 0 0 1 {SIZE-m} {m+r} "
              f"L {SIZE-m} {SIZE-m-r} A {r} {r} 0 0 1 {SIZE-m-r} {SIZE-m} "
              f"L {m+r} {SIZE-m} A {r} {r} 0 0 1 {m} {SIZE-m-r} "
              f"L {m} {m+r} A {r} {r} 0 0 1 {m+r} {m} Z")
-    inner = scene(ground_op=0.4, cable_kw={"width": 5.8})
+    inner = scene(ground_x=(-20, 250), ground_op=0.4, cable_kw={"width": 5.8})
     body = (
         squircle(SIZE)
         + f'<path d="{frame}" fill="none" stroke="{EV}" stroke-width="12" '
           f'stroke-linecap="round" stroke-dasharray="18 21" opacity="0.2"/>'
         + f'<path d="{frame}" fill="none" stroke="{EV}" stroke-width="7.5" '
           f'stroke-linecap="round" stroke-dasharray="18 21"/>'
-        + f'<g transform="{fit(SCENE_BB, 84, 174, 344, 190)}">{inner}</g>'
+        + tiled(SCENE_BB, (84, 174, 344, 190), inner)
     )
     return svg(SIZE, SIZE, body, defs, "Lademonitor")
 
@@ -341,7 +366,7 @@ def v11_rahmen():
 #      eigenen Garage) statt nur die Gegenstaende aufzuzaehlen.
 # ===========================================================================
 def v12_nacht():
-    defs = (bg_gradient("bg", "#121C2C", "#070B12")
+    defs = (TILE_CLIP + bg_gradient("bg", "#121C2C", "#070B12")
             + radial_glow("g12", EV, 0.55)
             + f'<linearGradient id="cone" x1="0" y1="0" x2="0" y2="1">'
               f'<stop offset="0" stop-color="{EV}" stop-opacity="0.42"/>'
@@ -361,7 +386,7 @@ def v12_nacht():
         for x, y, r, o in [(112, 92, 3.2, 0.45), (392, 78, 2.6, 0.38),
                            (330, 132, 2, 0.24), (438, 168, 2.2, 0.26)])
     return svg(SIZE, SIZE, squircle(SIZE) + stars
-               + f'<g transform="{fit(SCENE_BB, 44, 118, 424, 296)}">{inner}</g>',
+               + tiled(SCENE_BB, (44, 118, 424, 296), inner),
                defs, "Lademonitor")
 
 
@@ -372,7 +397,7 @@ def v12_nacht():
 #      Trennung uebernimmt, die sonst der dunkle Hintergrund leistet.
 # ===========================================================================
 def v13_sticker():
-    defs = bg_gradient("bg", "#1C2638", "#0B111B")
+    defs = TILE_CLIP + bg_gradient("bg", "#1C2638", "#0B111B")
     o, ow = "#141C2A", 7
     # Kontur: dieselben Formen einmal breit dunkel darunter. Die Raeder
     # brauchen ihre eigene, sonst haengen sie ohne Kante an der Karosserie.
@@ -391,7 +416,7 @@ def v13_sticker():
         + cable(CABLE_SAG, width=8.5, dash="12 11", glow=0.2)
     )
     return svg(SIZE, SIZE, squircle(SIZE)
-               + f'<g transform="{fit(SCENE_BB, 38, 108, 436, 296)}">{inner}</g>',
+               + tiled(SCENE_BB, (38, 108, 436, 296), inner),
                defs, "Lademonitor")
 
 
@@ -401,7 +426,7 @@ def v13_sticker():
 # ===========================================================================
 def v14_hexagon():
     import math
-    defs = bg_gradient() + radial_glow("g14", EV, 0.12)
+    defs = TILE_CLIP + bg_gradient() + radial_glow("g14", EV, 0.12)
     c = SIZE / 2
 
     def hexd(R):
@@ -409,7 +434,7 @@ def v14_hexagon():
                for a in range(-90, 271, 60)]
         return "M " + " L ".join(f"{x:.1f} {y:.1f}" for x, y in pts) + " Z"
 
-    inner = scene(ground_op=0.4, cable_kw={"width": 5.6})
+    inner = scene(ground_x=(-20, 250), ground_op=0.4, cable_kw={"width": 5.6})
     body = (
         f'<path d="{hexd(248)}" fill="url(#bg)"/>'
         f'<path d="{hexd(248)}" fill="url(#g14)"/>'
@@ -430,7 +455,7 @@ def v14_hexagon():
 # ===========================================================================
 def v15_typ2():
     import math
-    defs = bg_gradient() + radial_glow("g15", EV, 0.13)
+    defs = TILE_CLIP + bg_gradient() + radial_glow("g15", EV, 0.13)
     c, r = SIZE / 2 - 12, 206
     fx, fy = r * 0.7926, r * 0.61
     plug = (f"M {c - fx:.1f} {c - fy:.1f} L {c + fx:.1f} {c - fy:.1f} "
@@ -451,11 +476,73 @@ def v15_typ2():
         + f'<path d="{plug}" fill="url(#g15)"/>'
         + f'<path d="{plug}" fill="none" stroke="{GREY}" stroke-width="16"/>'
         + pins
-        + f'<g transform="{fit(car_bb, 100, 206, 312, 168)}">{inner}</g>'
+        + tiled(car_bb, (100, 206, 312, 168), inner)
         + cable(f"M {c} {c + r - 4} C {c} {SIZE - 16}, {c + 96} {SIZE - 8}, "
                 f"{c + 168} {SIZE - 44}", width=9.5, dash="15 16", glow=0.16)
     )
     return svg(SIZE, SIZE, body, defs, "Lademonitor")
+
+
+# ===========================================================================
+# 16 - Wandbox: die Anordnung, die die Kachelhoehe ueberhaupt erst nutzt.
+#      Nebeneinander gestellt begrenzt IMMER die Breite (Szene 2,6:1 in einer
+#      1:1-Kachel), das Auto kommt damit nie ueber rund 70 % der Breite
+#      hinaus. Uebereinander gestapelt - Wandbox oben, Kabel als Fall dazwi-
+#      schen, Fahrzeug unten - sind es 78 %, und die Kachel steht voll.
+# ===========================================================================
+def v16_wandbox():
+    defs = TILE_CLIP + bg_gradient() + radial_glow("g16", EV, 0.18)
+    s = 2.18
+    car_x, car_y = 48, 200          # Standlinie landet damit auf y=418
+    px = car_x + CHARGE_PORT[0] * s
+    py = car_y + CHARGE_PORT[1] * s
+    wb_w, wb_h = 92, 112
+    wb_x, wb_y = px - wb_w / 2, 74  # Wandbox mittig ueber der Ladeklappe
+    inner = (
+        f'<ellipse cx="{px:.0f}" cy="{(wb_y + wb_h + 40):.0f}" rx="150" ry="150" '
+        f'fill="url(#g16)" opacity="0.5"/>'
+        + f'<g transform="translate(-70,{car_y}) scale({s})">'
+          f'{ground(x0=-40, x1=340, op=0.55)}</g>'
+        + f'<ellipse cx="{px + 150:.0f}" cy="416" rx="200" ry="8" fill="{BG_DEEP}" opacity="0.4"/>'
+        + f'<g transform="translate({wb_x:.1f},{wb_y})">{wallbox(w=wb_w, h=wb_h)}</g>'
+        + f'<g transform="translate({car_x},{car_y}) scale({s})">{car_side(glow_edge=True)}</g>'
+        # Das Kabel haengt links am Fahrzeug vorbei durch und kommt von unten
+        # in die Ladeklappe - ein senkrechter Fall waere ein Strich, keine
+        # Leitung.
+        + cable(f"M {px:.0f} {wb_y + wb_h} C {px:.0f} 224, 66 238, 66 272 "
+                f"C 66 298, 90 314, {px:.0f} {py:.0f}", width=9, dash="15 14")
+    )
+    return svg(SIZE, SIZE, squircle(SIZE) + f'<g clip-path="url(#tile)">{inner}</g>',
+               defs, "Lademonitor")
+
+
+# ===========================================================================
+# 17 - Angeschnitten: dieselbe Aufstellung wie 01, aber die Saeule laeuft aus
+#      der Kachel heraus. Sie ist das Nebenmotiv - wird sie angeschnitten
+#      statt vollstaendig gezeigt, bleibt die gesamte Breite fuers Fahrzeug:
+#      84 % der Kachel statt 70 %. Wer sie ganz sehen will, nimmt 01.
+# ===========================================================================
+def v17_angeschnitten():
+    defs = TILE_CLIP + bg_gradient() + radial_glow("g17", EV, 0.2)
+    s = 2.3
+    car_x, car_y = 78, 172          # Standlinie auf y=402
+    st_x, st_y = -20, 172
+    ox = st_x + STATION_OUTLET[0] * s
+    oy = st_y + STATION_OUTLET[1] * s
+    px = car_x + CHARGE_PORT[0] * s
+    py = car_y + CHARGE_PORT[1] * s
+    inner = (
+        f'<ellipse cx="40" cy="308" rx="140" ry="126" fill="url(#g17)" opacity="0.5"/>'
+        + f'<g transform="translate(0,{car_y}) scale({s})">'
+          f'{ground(x0=-30, x1=230, op=0.55)}</g>'
+        + f'<ellipse cx="{px + 170:.0f}" cy="400" rx="210" ry="8" fill="{BG_DEEP}" opacity="0.4"/>'
+        + f'<g transform="translate({st_x},{st_y}) scale({s})">{station(base=False)}</g>'
+        + f'<g transform="translate({car_x},{car_y}) scale({s})">{car_side(glow_edge=True)}</g>'
+        + cable(f"M {ox:.0f} {oy:.0f} C 84 366, 108 374, 124 344 "
+                f"C 132 328, 134 306, {px:.0f} {py:.0f}", width=9, dash="15 14")
+    )
+    return svg(SIZE, SIZE, squircle(SIZE) + f'<g clip-path="url(#tile)">{inner}</g>',
+               defs, "Lademonitor")
 
 
 VARIANTS = [
@@ -474,6 +561,8 @@ VARIANTS = [
     ("13-sticker", "Sticker", v13_sticker),
     ("14-hexagon", "Sechseck", v14_hexagon),
     ("15-typ2", "Typ-2-Stecker", v15_typ2),
+    ("16-wandbox", "Wandbox (hoch)", v16_wandbox),
+    ("17-angeschnitten", "Angeschnitten", v17_angeschnitten),
 ]
 
 
@@ -509,6 +598,12 @@ NOTES = {
                   "comic-hafteste Entwurf – und der einzige, der sich auch auf HELLEM Grund hält.",
     "14-hexagon": "Wabenform statt Kachel. Liest sich technisch/modular und hebt sich in einer "
                   "Reihe runder App-Icons deutlich ab.",
+    "16-wandbox": "Die Anordnung, die die Kachelhöhe nutzt: Wandbox oben, Kabel als Fall, "
+                  "Fahrzeug unten. Nebeneinander begrenzt immer die Breite – gestapelt "
+                  "belegt das Auto 78 % der Kachel statt 70 %.",
+    "17-angeschnitten": "Aufstellung wie 01, aber die Säule läuft aus der Kachel heraus. Sie ist "
+                        "das Nebenmotiv – angeschnitten bleibt die ganze Breite fürs Fahrzeug: "
+                        "84 % statt 70 %.",
     "15-typ2": "Außenform ist der Typ-2-Stecker (Kreis mit abgeflachter Oberseite), Kontakte im "
                "Rand, Fahrzeug im Negativraum. Braucht einen Moment, ist danach unverwechselbar.",
 }

@@ -1,6 +1,6 @@
 # Lademonitor – Logo-Entwürfe
 
-15 Varianten für ein neues Lademonitor-Logo. Vorgabe: **gestauchte,
+17 Varianten für ein neues Lademonitor-Logo. Vorgabe: **gestauchte,
 comic-hafte Fahrzeugsilhouette in Anlehnung an den Škoda Enyaq, Ladesäule,
 gestricheltes Kabel** – dunkler Hintergrund, graue Silhouette und Säule,
 Kabel in Electric Green.
@@ -8,7 +8,7 @@ Kabel in Electric Green.
 ```
 design/logo/
   parts.py      gemeinsame Bausteine (Fahrzeug, Säule, Wallbox, Kabel, Farben)
-  build.py      die 15 Varianten + Übersichtsseite
+  build.py      die 17 Varianten + Übersichtsseite
   out/          erzeugte SVGs + preview.html   (generiert, nicht von Hand ändern)
 ```
 
@@ -26,9 +26,39 @@ Varianten nebeneinander, jeweils mit Begründung und mit Abbildungen bei 48,
 
 Alle Varianten ziehen Fahrzeug, Säule und Kabel aus `parts.py`. Eine
 Korrektur an der Silhouette schlägt dadurch in allen Entwürfen gleichzeitig
-durch, statt fünfzehnmal nachgezogen werden zu müssen (und dabei
+durch, statt siebzehnmal nachgezogen werden zu müssen (und dabei
 auseinanderzulaufen). Genau das ist während der Entwurfsarbeit mehrfach
-passiert – die Silhouette ist in vier Durchgängen überarbeitet worden.
+passiert – die Silhouette ist in vier Durchgängen überarbeitet worden, das
+Layout in zweien.
+
+## Warum die Breite über die Größe des Fahrzeugs entscheidet
+
+Die Szene aus Säule, Lücke und Fahrzeug ist rund **2,6 : 1** breit, die
+Kachel ist **1 : 1**. Damit begrenzt immer die *Breite* die Skalierung, die
+Höhe steht im Überfluss zur Verfügung. Jede Einheit Breite, die an Lücke
+oder Rand verloren geht, geht deshalb direkt von der Größe des Fahrzeugs ab.
+
+Der erste Wurf verschenkte davon reichlich: 34 Einheiten Lücke zwischen
+Säule und Auto, 10 Einheiten Rand in der Bildfläche und ein zu kleines
+Bildfeld. Das Fahrzeug belegte dadurch nur **55 %** der Kachelbreite. Eng
+gepackt (Lücke auf 14 Einheiten, Bildfeld auf 460 px) sind es **70 %** –
+ohne dass sich an der Anordnung selbst etwas ändert.
+
+Weiter kommt man nur, wenn die Anordnung selbst die Höhe nutzt oder Breite
+freigibt:
+
+| Anordnung | Fahrzeug | Prinzip |
+|---|---|---|
+| 01 und die übrigen Kachelentwürfe | 70 % | Säule und Auto nebeneinander |
+| 16 Wandbox | 79 % | gestapelt – Wandbox oben, Auto unten |
+| 17 Angeschnitten | 83 % | Säule läuft aus der Kachel heraus |
+
+Zweiter Hebel gegen den optischen Leerlauf: die **Standlinie läuft über den
+Rand hinaus** statt sichtbar im Bild zu enden (`tiled()` beschneidet die
+Szene auf die Kachelform). Das lässt das Quadrat gefüllt wirken, obwohl das
+Motiv breit und flach bleibt. Kreis, Sechseck und Kabelrahmen bekommen
+dafür eine kürzere Linie mit (`scene(ground_x=…)`) – dort würde eine
+auslaufende Linie sichtbar aus dem Zeichen ausbrechen.
 
 ## Farben
 
