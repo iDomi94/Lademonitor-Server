@@ -6,6 +6,28 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.18.0] — 2026-09-13
+
+### Changed
+- **Neues Logo**: gestauchte, comic-hafte Fahrzeugsilhouette nach dem Vorbild
+  des Škoda Enyaq, dazu Ladesäule und gestricheltes Kabel in Electric Green auf
+  dunklem Grund. Ersetzt das bisherige Symbol (Auto-Umriss mit Blitz) in
+  Browser-Tab, Lesezeichen, Startbildschirm und PWA-Installation. Entwürfe und
+  Generator liegen unter `design/logo/`.
+- Favicon-Größen (16 und 32 px) nutzen eine **reduzierte Fassung** desselben
+  Motivs – ohne Türfugen, Griffe und Leuchten, dafür mit kräftigerem Kabel; die
+  volle Zeichnung zerläuft in dieser Größe zu einem Fleck. Das
+  `apple-touch-icon` ist randlos quadratisch, weil iOS seine eigene Maske
+  darüberlegt.
+- Icon-Verweise in den Seitenköpfen tragen jetzt wie `style.css` eine
+  Versionsnummer (`?v=…`) – Browser halten ein Favicon besonders hartnäckig
+  fest.
+
+### Fixed
+- Das von `templates/lademonitor-server.xml` und `ca_profile.xml` verlinkte
+  `icon.png` existierte nicht im Repo; der Eintrag im Unraid-App-Katalog hatte
+  dadurch ein kaputtes Bild. Die Datei wird jetzt miterzeugt.
+
 ## [0.17.0] — 2026-09-09
 
 ### Added

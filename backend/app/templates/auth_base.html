@@ -19,10 +19,10 @@
   <title>{% block page_title %}Lademonitor{% endblock %}</title>
   {# Dieselben Icons wie base.html - ohne sie fragt der Browser /favicon.ico ab
      und bekommt eine 404, und im Tab steht kein App-Symbol. #}
-  <link rel="icon" href="static/favicon.ico" sizes="any">
-  <link rel="icon" type="image/png" sizes="32x32" href="static/favicon-32.png">
-  <link rel="icon" type="image/png" sizes="16x16" href="static/favicon-16.png">
-  <link rel="apple-touch-icon" href="static/apple-touch-icon.png">
+  <link rel="icon" href="static/favicon.ico?v={{ version|default('dev') }}" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="static/favicon-32.png?v={{ version|default('dev') }}">
+  <link rel="icon" type="image/png" sizes="16x16" href="static/favicon-16.png?v={{ version|default('dev') }}">
+  <link rel="apple-touch-icon" href="static/apple-touch-icon.png?v={{ version|default('dev') }}">
   <link rel="stylesheet" href="static/style.css?v={{ version|default('dev') }}">
   <style>
     .auth-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; }

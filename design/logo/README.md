@@ -5,10 +5,42 @@ comic-hafte Fahrzeugsilhouette in Anlehnung an den Škoda Enyaq, Ladesäule,
 gestricheltes Kabel** – dunkler Hintergrund, graue Silhouette und Säule,
 Kabel in Electric Green.
 
+## Ausgewählt: 17 „Angeschnitten"
+
+Diese Variante ist seit v0.18.0 das Logo der App. Der Icon-Satz wird daraus
+erzeugt:
+
+```bash
+python3 design/logo/icons.py
+```
+
+schreibt `favicon.ico`, `favicon-16/32.png`, `apple-touch-icon.png` und
+`icon-192/512.png` nach `backend/app/static/` sowie das `icon.png` im
+Repo-Wurzelverzeichnis, auf das die Unraid-CA-Vorlagen verweisen.
+
+Drei Fassungen derselben Variante, alle aus `build._v17()`:
+
+| Fassung | Größen | Warum |
+|---|---|---|
+| voll | 512, 256, 192 | die komplette Zeichnung |
+| klein | 48, 32, 16 | ohne Türfugen, Griffe, Leuchten, Displaydetails, dafür kräftigeres Kabel – die volle Zeichnung zerläuft bei 32 px zu einem Fleck |
+| quadratisch | 180 (apple-touch) | randlos ohne Rundung: iOS legt seine eigene Maske darüber, eine schon gerundete Vorlage ergäbe doppelt gerundete Ecken, und transparente Ecken füllt iOS mit Schwarz oder Weiß |
+
+Rasterung läuft über das im Container vorhandene headless Chromium (kein
+cairosvg/rsvg im Image), einmal bei 1024 px und dann mit LANCZOS
+heruntergerechnet – direkt bei 16 px zu rendern ergibt sichtbar rauhere
+Kanten. Die `.ico` wird von Hand zusammengesetzt (PNG-Nutzlast je Eintrag),
+damit jede Größe einzeln mit LANCZOS gerechnet wird.
+
+**Nach jeder Änderung an den Icons die Version in `backend/app/changelog.py`
+hochzählen** – die Icon-Verweise in `base.html`/`auth_base.html` tragen
+`?v={{ version }}`, sonst bleibt das alte Symbol im Tab stehen.
+
 ```
 design/logo/
   parts.py      gemeinsame Bausteine (Fahrzeug, Säule, Wallbox, Kabel, Farben)
   build.py      die 17 Varianten + Übersichtsseite
+  icons.py      erzeugt den App-Icon-Satz aus Variante 17
   out/          erzeugte SVGs + preview.html   (generiert, nicht von Hand ändern)
 ```
 

@@ -522,7 +522,22 @@ def v16_wandbox():
 #      statt vollstaendig gezeigt, bleibt die gesamte Breite fuers Fahrzeug:
 #      84 % der Kachel statt 70 %. Wer sie ganz sehen will, nimmt 01.
 # ===========================================================================
-def v17_angeschnitten():
+def _v17(detail=True, square=False):
+    """Variante 17, wahlweise mit oder ohne Binnenzeichnung.
+
+    *square=True* liefert dieselbe Zeichnung randlos auf einem vollen Quadrat
+    statt auf der abgerundeten Kachel - so braucht es das apple-touch-icon:
+    iOS legt seine eigene Maske darueber, eine schon gerundete Vorlage ergibt
+    dort doppelt gerundete Ecken, und die transparenten Ecken fuellt iOS mit
+    Schwarz oder Weiss auf.
+
+    *detail=False* liefert dieselbe Anordnung, aber nur noch die grossen
+    Formen: keine Tuerfugen, Griffe, Leuchten und Radlaufleisten, keine
+    Displaydetails an der Saeule, dafuer ein kraeftigeres Kabel mit laengeren
+    Strichen. Gebraucht fuer Favicon-Groessen (16 und 32 px), wo die volle
+    Zeichnung zu einem Fleck zerlaeuft - beide Fassungen entstehen aus
+    derselben Funktion, damit sie nicht auseinanderlaufen koennen.
+    """
     defs = TILE_CLIP + bg_gradient() + radial_glow("g17", EV, 0.2)
     s = 2.3
     car_x, car_y = 78, 172          # Standlinie auf y=402
@@ -531,18 +546,36 @@ def v17_angeschnitten():
     oy = st_y + STATION_OUTLET[1] * s
     px = car_x + CHARGE_PORT[0] * s
     py = car_y + CHARGE_PORT[1] * s
+    car = car_side(glow_edge=True) if detail else car_side_simple()
     inner = (
         f'<ellipse cx="40" cy="308" rx="140" ry="126" fill="url(#g17)" opacity="0.5"/>'
         + f'<g transform="translate(0,{car_y}) scale({s})">'
           f'{ground(x0=-30, x1=230, op=0.55)}</g>'
         + f'<ellipse cx="{px + 170:.0f}" cy="400" rx="210" ry="8" fill="{BG_DEEP}" opacity="0.4"/>'
-        + f'<g transform="translate({st_x},{st_y}) scale({s})">{station(base=False)}</g>'
-        + f'<g transform="translate({car_x},{car_y}) scale({s})">{car_side(glow_edge=True)}</g>'
+        + f'<g transform="translate({st_x},{st_y}) scale({s})">'
+          f'{station(base=False, screen=detail)}</g>'
+        + f'<g transform="translate({car_x},{car_y}) scale({s})">{car}</g>'
         + cable(f"M {ox:.0f} {oy:.0f} C 84 366, 108 374, 124 344 "
-                f"C 132 328, 134 306, {px:.0f} {py:.0f}", width=9, dash="15 14")
+                f"C 132 328, 134 306, {px:.0f} {py:.0f}",
+                width=9 if detail else 13, dash="15 14" if detail else "22 19")
     )
+    if square:
+        bg = f'<rect x="0" y="0" width="{SIZE}" height="{SIZE}" fill="url(#bg)"/>'
+        return svg(SIZE, SIZE, bg + inner, defs, "Lademonitor")
     return svg(SIZE, SIZE, squircle(SIZE) + f'<g clip-path="url(#tile)">{inner}</g>',
                defs, "Lademonitor")
+
+
+def v17_angeschnitten():
+    return _v17(True)
+
+
+def v17_klein():
+    return _v17(False)
+
+
+def v17_quadratisch():
+    return _v17(True, square=True)
 
 
 VARIANTS = [
@@ -662,6 +695,10 @@ def main():
     for name, label, fn in VARIANTS:
         write(name, fn())
         print(f"  {name:<14} {label}")
+    write("17-angeschnitten-klein", v17_klein())
+    write("17-angeschnitten-quadrat", v17_quadratisch())
+    print("  17-…-klein    Ableitung fuer Favicon-Groessen (16/32 px)")
+    print("  17-…-quadrat  Ableitung ohne Rundung (apple-touch-icon)")
     with open(os.path.join(OUT, "preview.html"), "w") as fh:
         fh.write(preview_html())
     print(f"\n{len(VARIANTS)} Varianten + preview.html -> {OUT}")

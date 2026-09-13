@@ -5,6 +5,17 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.18.0",
+        "date": "2026-09-13",
+        "title": "Neues Logo",
+        "changes": [
+            "Neues App-Symbol: gestauchte, comic-hafte Fahrzeugsilhouette nach dem Vorbild des Enyaq, dazu Ladesäule und gestricheltes Kabel in Electric Green auf dunklem Grund. Ersetzt das bisherige Symbol (Auto-Umriss mit Blitz) in Browser-Tab, Lesezeichen, Startbildschirm und PWA-Installation. Die Entwürfe samt Generator liegen unter design/logo/ im Repo.",
+            "Favicon-Größen (16 und 32 px) nutzen bewusst eine reduzierte Fassung desselben Motivs - ohne Türfugen, Griffe und Leuchten, dafür mit kräftigerem Kabel. Die volle Zeichnung zerläuft in dieser Größe zu einem Fleck. Das apple-touch-icon ist randlos quadratisch, weil iOS seine eigene Maske darüberlegt und eine schon gerundete Vorlage doppelt gerundete Ecken ergäbe.",
+            "Die Icon-Verweise in den Seitenköpfen tragen jetzt wie style.css eine Versionsnummer (?v=...) - Browser halten ein Favicon besonders hartnäckig fest, ohne die Version bliebe nach einem Wechsel das alte Symbol im Tab stehen.",
+            "Nebenbei korrigiert: das von den Unraid-Community-Applications-Vorlagen (templates/lademonitor-server.xml, ca_profile.xml) verlinkte icon.png existierte gar nicht im Repo - der Eintrag im App-Katalog hatte dadurch ein kaputtes Bild. Die Datei wird jetzt mit erzeugt.",
+        ],
+    },
+    {
         "version": "0.17.0",
         "date": "2026-09-09",
         "title": "Datenschutzerklärung",
