@@ -6,6 +6,24 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.19.0] — 2026-09-14
+
+### Added
+- **Rate-Limiting auf `/api/auth/login` und `/api/auth/register`**: neuer,
+  leichtgewichtiger In-Memory-Limiter pro Client-IP (kein Redis/slowapi
+  nötig) – Login max. 20 Versuche pro 5 Minuten, Registrierung max. 5 pro
+  Stunde, danach HTTP 429. Bremst automatisiertes Passwort-Raten und
+  Spam-Registrierungen aus, jetzt der Server öffentlich erreichbar ist.
+  Zusätzliche Schutzschicht, kein Ersatz für ein starkes, einzigartiges
+  Passwort.
+
+### Fixed
+- **Nutzername war case-sensitiv**, obwohl die Anmeldung mit E-Mail-Adresse
+  Groß-/Kleinschreibung schon länger ignoriert – "Domi" und "domi" wären
+  zwei getrennte Konten gewesen. Login, Registrierung und Admin-Nutzeranlage
+  vergleichen den Nutzernamen jetzt einheitlich unabhängig von Groß-/
+  Kleinschreibung.
+
 ## [0.18.0] — 2026-09-13
 
 ### Changed

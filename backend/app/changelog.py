@@ -5,6 +5,15 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.19.0",
+        "date": "2026-09-14",
+        "title": "Rate-Limiting & Nutzername case-insensitiv",
+        "changes": [
+            "Login und Registrierung (/api/auth/login, /api/auth/register) waren bisher komplett ungedrosselt erreichbar - seit der Server öffentlich per Domain erreichbar ist, ließe sich damit automatisiert das Passwort raten oder die Nutzertabelle mit Spam-Konten fluten. Neuer, leichtgewichtiger Rate-Limiter pro Client-IP (kein Redis/slowapi nötig, ein einzelner Prozess reicht): Login max. 20 Versuche pro 5 Minuten, Registrierung max. 5 pro Stunde, danach HTTP 429. Zusätzliche Schutzschicht, ersetzt nicht ein starkes, einzigartiges Passwort.",
+            "Nutzername war bei der Anmeldung case-sensitiv (\"Domi\" ≠ \"domi\"), obwohl die E-Mail-Adresse das schon länger ignoriert - eine Inkonsistenz, die beim Tippen mit Autovervollständigung/Passwort-Manager unnötig zu \"falsches Passwort\"-Fehlern führen konnte. Anmeldung, Registrierung und die Admin-Nutzerverwaltung vergleichen den Nutzernamen jetzt einheitlich unabhängig von Groß-/Kleinschreibung, der Unique-Index in der Datenbank läuft entsprechend auf lower(username) statt auf der Rohspalte.",
+        ],
+    },
+    {
         "version": "0.18.0",
         "date": "2026-09-13",
         "title": "Neues Logo",
