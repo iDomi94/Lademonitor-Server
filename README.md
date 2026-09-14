@@ -9,7 +9,8 @@ MySkoda/Home-Assistant-Integration), inspiriert von Spritmonitor. Läuft
 komplett selbstgehostet, kein Cloud-Dienst.
 
 Zugehörige iOS-App (SwiftUI, reiner REST-Client gegen dieses Backend):
-[Lademonitor-App](https://github.com/iDomi94/Lademonitor-App)
+[Lademonitor-App](https://github.com/iDomi94/Lademonitor-App) – öffentliche
+Beta über TestFlight: [testflight.apple.com/join/NMbyFTEK](https://testflight.apple.com/join/NMbyFTEK)
 
 ## Features
 
