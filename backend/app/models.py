@@ -73,7 +73,15 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_uuid)
-    username: Mapped[str] = mapped_column(String, unique=True, index=True)
+    # Weder `unique=True` noch `index=True` hier: Eindeutigkeit UND Lookup
+    # laufen komplett ueber einen funktionalen Index auf lower(username)
+    # (siehe database.py, uq_users_username_lower) - alle Abfragen filtern
+    # ohnehin ueber func.lower(), ein zusaetzlicher case-sensitiver Index auf
+    # der Rohspalte wuerde nur ungenutzt danebenliegen. Ohne den funktionalen
+    # Index waere "Domi" und "domi" als zwei Konten registrierbar, obwohl die
+    # Anmeldung Gross-/Kleinschreibung inzwischen ignoriert
+    # (_find_user_by_login).
+    username: Mapped[str] = mapped_column(String)
     password_hash: Mapped[str] = mapped_column(String)
     # Erster jemals registrierter Nutzer wird automatisch Admin (siehe routers/auth.py)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)

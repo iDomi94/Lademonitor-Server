@@ -20,6 +20,7 @@ from ..auth import (
 )
 from ..database import get_db
 from ..i18n import LANGUAGE_COOKIE_MAX_AGE, LANGUAGE_COOKIE_NAME, language_context, translate
+from ..rate_limit import client_ip, is_rate_limited
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -27,10 +28,21 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 # liesse sich mit dem Passwort-vergessen-Formular ein fremdes Postfach fluten
 # und das eigene SMTP-Kontingent verbrennen. Bewusst ueber vorhandene Tabellen
 # gezaehlt statt mit einer zusaetzlichen Abhaengigkeit (slowapi o.ae.) - fuer
-# eine Heimnetz-App reicht das. Das offene Rate-Limit auf /login und /register
-# bleibt davon unberuehrt, das ist ein eigenes Thema (siehe CLAUDE.md).
+# eine Heimnetz-App reicht das.
 RESET_MAX_PER_HOUR_PER_USER = 3
 MAIL_MAX_PER_HOUR_GLOBAL = 20
+
+# Rate-Limits fuer /login und /register, jeweils pro Client-IP (siehe
+# rate_limit.py). Login bewusst grosszuegiger als Registrierung - ein
+# Nutzer, der sein eigenes Passwort ein paar Mal falsch tippt, soll sich
+# nicht selbst aussperren; trotzdem ist 20/5min genug, um automatisiertes
+# Passwort-Raten spuerbar auszubremsen. Registrierung ist enger (Spam-Konten
+# kosten Datenbankzeilen und loesen bei aktivierten Admin-Benachrichtigungen
+# Mails aus).
+LOGIN_MAX_PER_IP = 20
+LOGIN_WINDOW_SECONDS = 300
+REGISTER_MAX_PER_IP = 5
+REGISTER_WINDOW_SECONDS = 3600
 
 MIN_PASSWORD_LENGTH = 8
 
@@ -100,6 +112,19 @@ def _email_taken(db: Session, email: str, exclude_user_id: str | None = None) ->
         query = query.filter(models.User.id != exclude_user_id)
     return query.first() is not None
 
+
+def _username_taken(db: Session, username: str, exclude_user_id: str | None = None) -> bool:
+    """Ein Nutzername darf nur einem Konto gehoeren, unabhaengig von Gross-/
+    Kleinschreibung - sonst koennten sich "Domi" und "domi" beide registrieren,
+    obwohl sie beim Anmelden ohnehin nicht mehr unterscheidbar sind (siehe
+    _find_user_by_login). Der Unique-Index in der DB laeuft ebenfalls ueber
+    lower() (siehe database.py), diese Pruefung liefert nur die verstaendliche
+    409 statt eines 500."""
+    query = db.query(models.User).filter(func.lower(models.User.username) == username.lower())
+    if exclude_user_id:
+        query = query.filter(models.User.id != exclude_user_id)
+    return query.first() is not None
+
 # ~400 Tage - Chrome deckelt Cookie-Max-Age ohnehin dort. Serverseitig laufen
 # Tokens nicht ab, das Cookie ist nur dafuer da, dass der Browser eingeloggt
 # bleibt statt bei jedem Neustart neu zu fragen.
@@ -131,15 +156,20 @@ def _set_session_cookie(request: Request, response: Response, token: str) -> Non
 def _find_user_by_login(db: Session, identifier: str) -> models.User | None:
     """Anmeldung mit Nutzername ODER E-Mail-Adresse.
 
-    Nutzername zuerst: er ist die eigentliche Identitaet und exakt eindeutig.
-    Erst danach die Adresse, unabhaengig von Gross-/Kleinschreibung (der
-    Unique-Index laeuft ebenfalls ueber lower(), siehe database.py) - sonst
-    scheitert die Anmeldung an einem grossgeschriebenen Anfangsbuchstaben,
-    den der Mail-Client vorschlaegt."""
+    Nutzername zuerst: er ist die eigentliche Identitaet. Beide Wege
+    unabhaengig von Gross-/Kleinschreibung (der Unique-Index laeuft fuer
+    beide Spalten ueber lower(), siehe database.py) - sonst scheitert die
+    Anmeldung an einem gross-/kleingeschriebenen Zeichen, das z.B. die
+    Autovervollstaendigung eines Mail-Clients oder Passwort-Managers
+    vorschlaegt."""
     identifier = identifier.strip()
     if not identifier:
         return None
-    user = db.query(models.User).filter(models.User.username == identifier).first()
+    user = (
+        db.query(models.User)
+        .filter(func.lower(models.User.username) == identifier.lower())
+        .first()
+    )
     if user:
         return user
     return (
@@ -220,14 +250,16 @@ def _notify_admins_of_registration(db: Session, new_user: models.User) -> None:
 
 @router.post("/register", response_model=schemas.LoginResponse, status_code=201)
 def register(payload: schemas.RegisterRequest, request: Request, response: Response, db: Session = Depends(get_db)):
+    if is_rate_limited(f"register:{client_ip(request)}", REGISTER_MAX_PER_IP, REGISTER_WINDOW_SECONDS):
+        raise HTTPException(429, "Zu viele Registrierungen - bitte spaeter erneut versuchen")
+
     username = payload.username.strip()
     if len(username) < 3:
         raise HTTPException(422, "Nutzername muss mindestens 3 Zeichen lang sein")
     if len(payload.password) < MIN_PASSWORD_LENGTH:
         raise HTTPException(422, "Passwort muss mindestens 8 Zeichen lang sein")
 
-    existing = db.query(models.User).filter(models.User.username == username).first()
-    if existing:
+    if _username_taken(db, username):
         raise HTTPException(409, "Nutzername bereits vergeben")
     if payload.email and _email_taken(db, payload.email):
         raise HTTPException(409, "E-Mail-Adresse wird bereits verwendet")
@@ -259,6 +291,9 @@ def register(payload: schemas.RegisterRequest, request: Request, response: Respo
 
 @router.post("/login", response_model=schemas.LoginResponse)
 def login(payload: schemas.LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)):
+    if is_rate_limited(f"login:{client_ip(request)}", LOGIN_MAX_PER_IP, LOGIN_WINDOW_SECONDS):
+        raise HTTPException(429, "Zu viele Anmeldeversuche - bitte in ein paar Minuten erneut versuchen")
+
     user = _find_user_by_login(db, payload.username)
     if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(401, "Nutzername oder Passwort falsch")
@@ -650,7 +685,7 @@ def create_user(
     username = payload.username.strip()
     if len(username) < 3:
         raise HTTPException(422, "Nutzername muss mindestens 3 Zeichen lang sein")
-    if db.query(models.User).filter(models.User.username == username).first():
+    if _username_taken(db, username):
         raise HTTPException(409, "Nutzername bereits vergeben")
     if _email_taken(db, payload.email):
         raise HTTPException(409, "E-Mail-Adresse wird bereits verwendet")

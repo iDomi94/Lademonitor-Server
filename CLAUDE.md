@@ -509,14 +509,33 @@ Icon/Tooltip-Logik in der SessionsList-View.
 
 ## Bekannte offene Punkte / TODOs
 
-- **Kein Rate-Limiting auf `/api/auth/login`/`/register`** - seit die App
-  oeffentlich per Nginx erreichbar ist, kein Schutz gegen automatisiertes
-  Passwort-Raten oder Spam-Registrierungen. Bewusst zurueckgestellt (starkes
-  Passwort des Nutzers als aktuelle Absicherung), waere ein separater,
-  ueberschaubarer Zusatz (z.B. `slowapi` oder Nginx-seitig). **Der
-  Passwort-vergessen-Endpunkt hat seit v0.14.0 ein eigenes Limit** (3 pro Konto
-  und Stunde plus globale Obergrenze), weil er Mails ausloest - die beiden
-  anderen bleiben offen.
+- **Rate-Limiting auf `/api/auth/login`/`/register`** - seit die App
+  oeffentlich per Nginx erreichbar ist, war das offen (automatisiertes
+  Passwort-Raten/Spam-Registrierungen technisch nicht gedrosselt). **Erledigt
+  seit 2026-09-14** (Anlass: `lademonitor.cloud`-Launch): `rate_limit.py`
+  haelt einen simplen In-Memory-Sliding-Window-Zaehler pro Client-IP (kein
+  Redis/slowapi noetig, ein Prozess pro Container reicht) -
+  `/login` 20 Versuche/5 min, `/register` 5/Stunde, beide 429 bei
+  Ueberschreitung. Client-IP kommt aus `X-Forwarded-For` (gesetzt vom eigenen
+  Reverse Proxy), Fallback `request.client.host` ohne Proxy - bei direktem
+  Zugriff OHNE eigenen Reverse Proxy davor liesse sich der Header faelschen
+  und der Limiter umgehen (Heimnetz-Fall, dort ist das Risiko gering; siehe
+  Docstring in `rate_limit.py`). Bleibt eine zusaetzliche Schutzschicht, nicht
+  der Ersatz fuer starke, einzigartige Passwoerter (weiterhin kein
+  Kontosperren nach N Fehlversuchen o.ae.). **Der Passwort-vergessen-Endpunkt
+  hat seit v0.14.0 ein eigenes, getrenntes Limit** (3 pro Konto und Stunde
+  plus globale Obergrenze), weil er zusaetzlich Mails ausloest.
+- **Nutzername war case-sensitiv eindeutig, Login ignorierte Gross-/
+  Kleinschreibung aber schon vorher bei der E-Mail-Adresse.** Inkonsistenz:
+  Anmeldung mit Nutzername war weiterhin exakt (`==`), zwei Konten "Domi"/
+  "domi" waeren gleichzeitig registrierbar gewesen. **Erledigt seit
+  2026-09-14** (gleicher Anlass): Login-Lookup UND Registrierungs-/
+  Admin-Anlage-Check laufen jetzt einheitlich ueber `func.lower()`
+  (`_username_taken()`, neu neben `_email_taken()`), der DB-Unique-Index
+  wechselt von der Rohspalte auf `lower(username)`
+  (`uq_users_username_lower`, `database.py`) - gleiches Muster wie
+  `uq_users_email_lower`. Migration droppt den alten
+  `ix_users_username`-Index (von `unique=True, index=True` auf der Spalte).
 - **Auth-Tokens ueberleben einen Passwort-Reset nicht** (siehe E-Mail-Abschnitt):
   danach muessen der Home-Assistant-Token und die iOS-Anmeldung neu eingetragen
   werden. Die saubere Loesung waeren typisierte, benannte API-Tokens

@@ -317,6 +317,22 @@ def run_light_migrations() -> None:
             )
         )
 
+        # Nutzername war urspruenglich case-sensitiv eindeutig (unique=True auf
+        # der Spalte, siehe models.py) - das liess "Domi" und "domi" als zwei
+        # Konten zu, obwohl die Anmeldung Gross-/Kleinschreibung inzwischen
+        # ignoriert (_find_user_by_login). Alter case-sensitiver Unique-Index
+        # (von SQLAlchemy bei `unique=True, index=True` als eigenstaendiger
+        # UNIQUE INDEX angelegt, nicht als table-level CONSTRAINT - gleiches
+        # Muster wie ix_vehicles_external_id oben) weg, funktionaler Index auf
+        # lower() dafuer rein - kein WHERE noetig, username ist NOT NULL.
+        conn.execute(text("DROP INDEX IF EXISTS ix_users_username"))
+        conn.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_users_username_lower "
+                "ON users (lower(username))"
+            )
+        )
+
         # Auth-Tokens werden nur noch als SHA-256-Hash gespeichert (siehe
         # models.AuthToken): ein Auth-Token ist eine fertige Anmeldung, im
         # Klartext war die Tabelle also ein Generalschluessel fuer jedes Konto.
