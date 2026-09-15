@@ -1,0 +1,539 @@
+{% extends "base.html" %}
+{# Die Karte soll so viel Flaeche wie moeglich bekommen - wie die
+   Ladevorgaenge-Seite darf sie deshalb ueber die 1100 px Standardbreite
+   hinaus, siehe .container.wide in style.css. #}
+{% block container_class %}wide{% endblock %}
+{% block content %}
+{# Leaflet liegt bewusst LOKAL unter static/vendor/ statt an einem CDN: der
+   Rest der Oberflaeche kommt seit der Chart.js-Entfernung ohne externe
+   Skript-Quellen aus (ein Client hatte keinen CDN-Zugriff), und ein
+   Kartenfenster ohne Bedienlogik waere derselbe Fehlerfall. Die Kacheln
+   selbst muessen naturgemaess von openstreetmap.org kommen - darauf weist
+   der Hinweis unter der Karte hin. #}
+<link rel="stylesheet" href="static/vendor/leaflet/leaflet.css?v={{ version|default('dev') }}">
+<script src="static/vendor/leaflet/leaflet.js?v={{ version|default('dev') }}"></script>
+
+<h1>{{ t('map.heading') }}</h1>
+
+<div id="filter-bar"></div>
+
+<div class="maparea">
+  <div id="map"></div>
+
+  <!-- Legende UND Filter in einem: ein Klick blendet die jeweilige
+       Markergruppe aus, genau wie die LegendToggle-Knoepfe in der iOS-App. -->
+  <div class="map-legend" id="map-legend">
+    <button type="button" class="legend-toggle on" id="toggle-locations">
+      <span class="dot dot-location"></span>{{ t('map.legend.locations') }}
+    </button>
+    <button type="button" class="legend-toggle on" id="toggle-sessions">
+      <span class="dot dot-session"></span>{{ t('map.legend.sessions') }}
+    </button>
+  </div>
+
+  <button type="button" class="map-locate" id="locate-btn"
+          title="{{ t('map.locate') }}" aria-label="{{ t('map.locate') }}">◎</button>
+
+  <!-- Leere Karte/Fehler liegen ueber der Karte statt an ihrer Stelle: so
+       bleibt bei einem Ladefehler die zuletzt gezeigte Karte erhalten. -->
+  <div class="map-overlay" id="map-overlay" style="display:none">
+    <div class="card">
+      <p id="map-overlay-text"></p>
+      <button type="button" id="map-retry-btn">{{ t('map.retry') }}</button>
+    </div>
+  </div>
+</div>
+
+<p class="muted map-hint">{{ t('map.tiles_hint') }}</p>
+
+<!-- Vorschau eines Ladevorgangs. Aufbau wie SessionDetailView in der
+     iOS-App: erst die Werte, darunter Bestaetigen/Bearbeiten. -->
+<div class="modal" id="session-modal" onclick="event.target === this && closeModal('session-modal')">
+  <div class="box">
+    <div class="mtop">
+      <h3>{{ t('map.session.title') }}</h3>
+      <button class="close" type="button" onclick="closeModal('session-modal')">✕</button>
+    </div>
+    <div class="mbody" id="session-modal-body"></div>
+  </div>
+</div>
+
+<!-- Liste eines Clusters, das sich nicht weiter auseinanderzoomen laesst
+     (mehrfach an derselben Wallbox geladen). -->
+<div class="modal" id="cluster-modal" onclick="event.target === this && closeModal('cluster-modal')">
+  <div class="box">
+    <div class="mtop">
+      <h3 id="cluster-modal-title"></h3>
+      <button class="close" type="button" onclick="closeModal('cluster-modal')">✕</button>
+    </div>
+    <div class="mbody" id="cluster-modal-body"></div>
+  </div>
+</div>
+
+<!-- Ladeort bearbeiten - dieselben Felder wie unter Einstellungen -> Ladeorte,
+     damit ein Tipp auf den Marker nicht erst dorthin schickt. -->
+<div class="modal" id="location-modal" onclick="event.target === this && closeModal('location-modal')">
+  <div class="box">
+    <div class="mtop">
+      <h3>{{ t('map.location.title') }}</h3>
+      <button class="close" type="button" onclick="closeModal('location-modal')">✕</button>
+    </div>
+    <div class="mbody">
+      <form class="inline-form" id="location-form">
+        <div><label>{{ t('settings.location.name') }}</label><input id="m-name" required></div>
+        <div><label>{{ t('settings.location.lat') }}</label><input type="number" step="any" id="m-lat" required></div>
+        <div><label>{{ t('settings.location.lon') }}</label><input type="number" step="any" id="m-lon" required></div>
+        <div><label>{{ t('settings.location.radius') }}</label><input type="number" id="m-radius" value="100"></div>
+        <div>
+          <label>{{ t('settings.location.default_provider') }}</label>
+          <select id="m-provider"></select>
+        </div>
+        <div class="form-actions">
+          <button type="button" id="m-delete-btn" style="background:var(--danger)">{{ t('common.delete') }}</button>
+          <button type="submit">{{ t('settings.location.submit_edit') }}</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+const LOCALE = {{ lang|default('de')|tojson }} === 'en' ? 'en-US' : 'de-DE';
+const T = {
+  sessionsPlural: {{ t('map.sessions_count')|tojson }},
+  empty: {{ t('map.empty')|tojson }},
+  loadError: {{ t('map.load_error')|tojson }},
+  locateError: {{ t('map.locate_error')|tojson }},
+  locateUnsupported: {{ t('map.locate_unsupported')|tojson }},
+  vehicle: {{ t('map.field.vehicle')|tojson }},
+  start: {{ t('map.field.start')|tojson }},
+  type: {{ t('map.field.type')|tojson }},
+  provider: {{ t('map.field.provider')|tojson }},
+  place: {{ t('map.field.place')|tojson }},
+  soc: {{ t('map.field.soc')|tojson }},
+  energy: {{ t('map.field.energy')|tojson }},
+  estimated: {{ t('map.field.estimated')|tojson }},
+  odometer: {{ t('map.field.odometer')|tojson }},
+  consumption: {{ t('map.field.consumption')|tojson }},
+  priceTotal: {{ t('map.field.price_total')|tojson }},
+  pricePerKwh: {{ t('map.field.price_per_kwh')|tojson }},
+  source: {{ t('map.field.source')|tojson }},
+  status: {{ t('map.field.status')|tojson }},
+  statusReview: {{ t('map.status.needs_review')|tojson }},
+  statusChecked: {{ t('map.status.checked')|tojson }},
+  confirm: {{ t('map.action.confirm')|tojson }},
+  edit: {{ t('common.edit')|tojson }},
+  badgeManual: {{ t('sessions.badge.manual')|tojson }},
+  badgeAutomatic: {{ t('sessions.badge.automatic')|tojson }},
+  badgeImport: {{ t('sessions.badge.import')|tojson }},
+  noneOption: {{ t('common.none_option')|tojson }},
+  confirmDeleteLocation: {{ t('settings.location.confirm_delete')|tojson }},
+  locationSessions: {{ t('map.location.session_count')|tojson }},
+};
+
+let locations = [];
+let sessions = [];
+let vehicles = [];
+let providers = [];
+let showLocations = true;
+let showSessions = true;
+let editingLocationId = null;
+
+const map = L.map('map', { zoomControl: true, worldCopyJump: true })
+  .setView([51.0, 10.0], 5);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 19,
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+}).addTo(map);
+
+const locationLayer = L.layerGroup().addTo(map);
+const sessionLayer = L.layerGroup().addTo(map);
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, c => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
+
+function formatDate(iso, opts) {
+  return new Date(iso).toLocaleString(LOCALE, opts || { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+// ---------------------------------------------------------------- Ladeorte
+
+const ICON_LOCATION = `<svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true">
+  <path d="M4 16V9.5A2.5 2.5 0 0 1 6.5 7h2l1.2-2.2A2 2 0 0 1 11.5 3.8h3.3a2 2 0 0 1 1.8 1L18 7h.5A2.5 2.5 0 0 1 21 9.5V16h-2a3 3 0 0 1-6 0H10a3 3 0 0 1-6 0H4Z"/>
+</svg>`;
+const ICON_SESSION = `<svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" aria-hidden="true">
+  <path d="M13 2 4.5 13H11l-1 9 8.5-11H12l1-9Z"/>
+</svg>`;
+
+function renderLocations() {
+  locationLayer.clearLayers();
+  if (!showLocations) return;
+  locations.forEach(loc => {
+    // Matching-Radius zuerst zeichnen, damit der Marker darueber liegt - er
+    // zeigt, wie nah ein Ladevorgang liegen muss, um automatisch diesem Ort
+    // zugeordnet zu werden (siehe match_location in routers/locations.py).
+    L.circle([loc.latitude, loc.longitude], {
+      radius: loc.radius_m,
+      color: '#5b8def', weight: 1, opacity: 0.5,
+      fillColor: '#5b8def', fillOpacity: 0.12,
+    }).addTo(locationLayer);
+
+    const count = sessions.filter(s => s.location_id === loc.id).length;
+    // Der Ladeort haengt als Pin UEBER seinem Punkt (Spitze unten), die
+    // Ladevorgaenge sitzen als Punkt genau darauf. Ohne diesen Versatz
+    // liegen beide exakt uebereinander - an einem bekannten Ladeort ist das
+    // der Normalfall -, und der obere verdeckt den unteren vollstaendig.
+    const marker = L.marker([loc.latitude, loc.longitude], {
+      icon: L.divIcon({
+        className: 'map-pin-wrap',
+        html: `<span class="map-pin pin-location">${ICON_LOCATION}</span>`,
+        iconSize: [26, 26], iconAnchor: [13, 34],
+      }),
+      title: loc.name,
+      zIndexOffset: 1000,
+    }).addTo(locationLayer);
+    marker.bindTooltip(
+      `${escapeHtml(loc.name)}<br><small>${T.locationSessions.replace('{count}', count)}</small>`,
+      { direction: 'top', offset: [0, -32] });
+    marker.on('click', () => openLocationEditor(loc.id));
+  });
+}
+
+// ------------------------------------------------------------ Ladevorgaenge
+
+function sessionPins() {
+  return sessions
+    .filter(s => s.latitude != null && s.longitude != null)
+    .map(s => ({ id: s.id, lat: s.latitude, lon: s.longitude, needsReview: s.needs_review }));
+}
+
+/// Einfaches Single-Linkage-Clustering mit einer an den aktuellen Zoom
+/// gekoppelten Schwelle - dieselbe Rechnung wie sessionClusters in der
+/// iOS-App (6 % der sichtbaren Kantenlaenge). Fuer die Groessenordnung eines
+/// persoenlichen Lade-Logs reicht das; eine Clustering-Bibliothek waere hier
+/// die schwerere Loesung fuer dasselbe Ergebnis.
+function clusterPins(pins) {
+  const bounds = map.getBounds();
+  const latSpan = bounds.getNorth() - bounds.getSouth();
+  const lonSpan = bounds.getEast() - bounds.getWest();
+  const threshold = Math.max(latSpan, lonSpan) * 0.06;
+
+  const remaining = pins.slice();
+  const clusters = [];
+  while (remaining.length) {
+    const first = remaining.shift();
+    const group = [first];
+    for (let i = remaining.length - 1; i >= 0; i--) {
+      if (Math.abs(remaining[i].lat - first.lat) < threshold &&
+          Math.abs(remaining[i].lon - first.lon) < threshold) {
+        group.push(remaining.splice(i, 1)[0]);
+      }
+    }
+    clusters.push({
+      lat: group.reduce((a, p) => a + p.lat, 0) / group.length,
+      lon: group.reduce((a, p) => a + p.lon, 0) / group.length,
+      pins: group,
+      needsReview: group.some(p => p.needsReview),
+    });
+  }
+  return clusters;
+}
+
+function renderSessions() {
+  sessionLayer.clearLayers();
+  if (!showSessions) return;
+  clusterPins(sessionPins()).forEach(cluster => {
+    const many = cluster.pins.length > 1;
+    const cls = cluster.needsReview ? ' pin-review' : '';
+    const marker = L.marker([cluster.lat, cluster.lon], {
+      icon: L.divIcon({
+        className: 'map-pin-wrap',
+        html: many
+          ? `<span class="map-pin pin-cluster${cls}">${cluster.pins.length}</span>`
+          : `<span class="map-pin pin-session${cls}">${ICON_SESSION}</span>`,
+        iconSize: many ? [30, 30] : [24, 24],
+        iconAnchor: many ? [15, 15] : [12, 12],
+      }),
+    }).addTo(sessionLayer);
+    if (!many) {
+      const s = sessions.find(x => x.id === cluster.pins[0].id);
+      if (s) marker.bindTooltip(formatDate(s.start_time), { direction: 'top', offset: [0, -12] });
+    } else {
+      marker.bindTooltip(T.sessionsPlural.replace('{count}', cluster.pins.length),
+        { direction: 'top', offset: [0, -15] });
+    }
+    marker.on('click', () => handleClusterClick(cluster));
+  });
+}
+
+/// Klick auf ein Cluster: eine einzelne Session oeffnet direkt die Vorschau.
+/// Bei mehreren wird unterschieden, ob sie geografisch auseinanderliegen
+/// (dann reinzoomen) oder praktisch am selben Punkt (dann bringt Zoomen
+/// nichts, stattdessen die Liste) - wie handleClusterTap in der iOS-App.
+function handleClusterClick(cluster) {
+  if (cluster.pins.length === 1) {
+    openSessionDetail(cluster.pins[0].id);
+    return;
+  }
+  const lats = cluster.pins.map(p => p.lat);
+  const lons = cluster.pins.map(p => p.lon);
+  const latSpan = Math.max(...lats) - Math.min(...lats);
+  const lonSpan = Math.max(...lons) - Math.min(...lons);
+  // ~11 m - naeher beieinander laesst sich nichts mehr sinnvoll auftrennen.
+  const SAME_SPOT = 0.0001;
+  if (latSpan < SAME_SPOT && lonSpan < SAME_SPOT) {
+    openClusterList(cluster.pins.map(p => p.id));
+    return;
+  }
+  map.fitBounds(L.latLngBounds(cluster.pins.map(p => [p.lat, p.lon])).pad(0.6),
+    { maxZoom: 18 });
+}
+
+// ----------------------------------------------------------- Detailansicht
+
+function badgeFor(source) {
+  const labels = { manual: T.badgeManual, automatic: T.badgeAutomatic, import: T.badgeImport };
+  return `<span class="badge badge-${source}">${escapeHtml(labels[source] || source)}</span>`;
+}
+
+function socText(s) {
+  if (s.soc_start != null && s.soc_end != null) return `${s.soc_start} → ${s.soc_end} %`;
+  if (s.soc_start != null) return `${s.soc_start} %`;
+  if (s.soc_end != null) return `${s.soc_end} %`;
+  return null;
+}
+
+function openSessionDetail(id) {
+  const s = sessions.find(x => x.id === id);
+  if (!s) return;
+  // Kommt der Aufruf aus der Cluster-Liste, tritt die Vorschau an deren
+  // Stelle - zwei offene Dialoge uebereinander wie in der iOS-App, wo das
+  // Sheet ebenfalls ersetzt statt gestapelt wird.
+  closeModal('cluster-modal');
+  const vehicle = vehicles.find(v => v.id === s.vehicle_id);
+  const provider = providers.find(p => p.id === s.provider_id);
+  const location = locations.find(l => l.id === s.location_id);
+
+  const rows = [
+    [T.vehicle, vehicle ? vehicle.name : null],
+    [T.start, formatDate(s.start_time, { dateStyle: 'full', timeStyle: 'short' })],
+    [T.type, s.charging_type],
+    [T.provider, provider ? provider.name : null],
+    [T.place, location ? location.name : s.geocoded_place],
+    [T.soc, socText(s)],
+    [T.energy, s.energy_kwh != null
+      ? `${s.energy_kwh.toFixed(2)} kWh${s.energy_is_estimated ? ' ' + T.estimated : ''}` : null],
+    [T.odometer, s.odometer_km != null ? `${s.odometer_km.toLocaleString(LOCALE)} km` : null],
+    [T.consumption, s.consumption_kwh_per_100km != null
+      ? `${s.consumption_kwh_per_100km.toFixed(1)} kWh/100km` : null],
+    [T.priceTotal, s.price_total != null ? `${s.price_total.toFixed(2)} €` : null],
+    [T.pricePerKwh, s.price_per_kwh != null ? `${s.price_per_kwh.toFixed(4)} €` : null],
+  ].filter(([, value]) => value != null && value !== '');
+
+  document.getElementById('session-modal-body').innerHTML = `
+    <dl class="detail-list">
+      ${rows.map(([label, value]) =>
+        `<dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd>`).join('')}
+      <dt>${escapeHtml(T.source)}</dt><dd>${badgeFor(s.source)}</dd>
+      <dt>${escapeHtml(T.status)}</dt>
+      <dd>${escapeHtml(s.needs_review ? T.statusReview : T.statusChecked)}</dd>
+    </dl>
+    <div class="form-actions">
+      ${s.needs_review
+        ? `<button type="button" onclick="confirmSession('${s.id}')">${escapeHtml(T.confirm)}</button>` : ''}
+      <button type="button" onclick="editSession('${s.id}')">${escapeHtml(T.edit)}</button>
+    </div>`;
+  openModal('session-modal');
+}
+
+/// "Bestaetigen" entspricht dem gleichnamigen Knopf in der iOS-Detailansicht:
+/// nimmt einem automatisch erkannten Ladevorgang das needs_review-Flag, ohne
+/// dass man dafuer das Bearbeiten-Formular oeffnen muss.
+async function confirmSession(id) {
+  const res = await fetch(`api/sessions/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ needs_review: false }),
+  });
+  if (res.ok) {
+    closeModal('session-modal');
+    await load();
+  }
+}
+
+/// Bearbeitet wird auf der Ladevorgaenge-Seite - die hat das vollstaendige
+/// Formular bereits. Der Hash sagt ihr, welchen Eintrag sie nach dem Laden
+/// oeffnen soll (siehe openFromHash() in sessions.html).
+function editSession(id) {
+  window.location = `sessions#edit=${encodeURIComponent(id)}`;
+}
+
+function openClusterList(ids) {
+  const items = ids.map(id => sessions.find(s => s.id === id)).filter(Boolean);
+  document.getElementById('cluster-modal-title').textContent =
+    T.sessionsPlural.replace('{count}', items.length);
+  document.getElementById('cluster-modal-body').innerHTML = items.map(s => {
+    const vehicle = vehicles.find(v => v.id === s.vehicle_id);
+    const provider = providers.find(p => p.id === s.provider_id);
+    const subtitle = [vehicle?.name, provider?.name].filter(Boolean).join(' · ');
+    return `<button type="button" class="cluster-row" onclick="openSessionDetail('${s.id}')">
+      <span>
+        <strong>${escapeHtml(formatDate(s.start_time))}</strong>
+        ${subtitle ? `<small>${escapeHtml(subtitle)}</small>` : ''}
+      </span>
+      <span>${s.energy_kwh != null ? escapeHtml(s.energy_kwh.toFixed(1)) + ' kWh' : ''}</span>
+    </button>`;
+  }).join('');
+  openModal('cluster-modal');
+}
+
+// ------------------------------------------------------ Ladeort bearbeiten
+
+function openLocationEditor(id) {
+  const loc = locations.find(l => l.id === id);
+  if (!loc) return;
+  editingLocationId = id;
+  document.getElementById('m-name').value = loc.name;
+  document.getElementById('m-lat').value = loc.latitude;
+  document.getElementById('m-lon').value = loc.longitude;
+  document.getElementById('m-radius').value = loc.radius_m;
+  document.getElementById('m-provider').innerHTML =
+    `<option value="">${escapeHtml(T.noneOption)}</option>` +
+    providers.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
+  document.getElementById('m-provider').value = loc.default_provider_id || '';
+  openModal('location-modal');
+}
+
+document.getElementById('location-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const res = await fetch(`api/locations/${editingLocationId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: document.getElementById('m-name').value,
+      latitude: parseFloat(document.getElementById('m-lat').value),
+      longitude: parseFloat(document.getElementById('m-lon').value),
+      radius_m: parseInt(document.getElementById('m-radius').value, 10),
+      default_provider_id: document.getElementById('m-provider').value || null,
+    }),
+  });
+  if (res.ok) {
+    closeModal('location-modal');
+    await load();
+  }
+});
+
+document.getElementById('m-delete-btn').addEventListener('click', async () => {
+  if (!confirm(T.confirmDeleteLocation)) return;
+  await fetch(`api/locations/${editingLocationId}`, { method: 'DELETE' });
+  closeModal('location-modal');
+  await load();
+});
+
+// ------------------------------------------------------------- Bedienung
+
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+function setLegend(btnId, on) {
+  document.getElementById(btnId).classList.toggle('on', on);
+}
+
+document.getElementById('toggle-locations').addEventListener('click', () => {
+  showLocations = !showLocations;
+  setLegend('toggle-locations', showLocations);
+  renderLocations();
+});
+document.getElementById('toggle-sessions').addEventListener('click', () => {
+  showSessions = !showSessions;
+  setLegend('toggle-sessions', showSessions);
+  renderSessions();
+});
+
+// Die Clustergroesse haengt am Zoom - nach jeder Kamerabewegung neu bilden.
+map.on('moveend', renderSessions);
+
+let userMarker = null;
+document.getElementById('locate-btn').addEventListener('click', () => {
+  if (!navigator.geolocation) { alert(T.locateUnsupported); return; }
+  const btn = document.getElementById('locate-btn');
+  btn.disabled = true;
+  navigator.geolocation.getCurrentPosition(pos => {
+    btn.disabled = false;
+    const here = [pos.coords.latitude, pos.coords.longitude];
+    if (userMarker) userMarker.remove();
+    userMarker = L.circleMarker(here, {
+      radius: 7, color: '#fff', weight: 2,
+      fillColor: '#5b8def', fillOpacity: 1,
+    }).addTo(map);
+    map.setView(here, 14);
+  }, () => {
+    btn.disabled = false;
+    alert(T.locateError);
+  });
+});
+
+function showOverlay(text) {
+  document.getElementById('map-overlay-text').textContent = text;
+  document.getElementById('map-overlay').style.display = '';
+}
+function hideOverlay() {
+  document.getElementById('map-overlay').style.display = 'none';
+}
+document.getElementById('map-retry-btn').addEventListener('click', load);
+
+/// Einmal nach dem Laden auf einen Bereich fahren, der alle Punkte umfasst.
+function fitToData() {
+  const points = locations.map(l => [l.latitude, l.longitude])
+    .concat(sessionPins().map(p => [p.lat, p.lon]));
+  if (!points.length) return;
+  map.fitBounds(L.latLngBounds(points).pad(0.2), { maxZoom: 15 });
+}
+
+let firstLoad = true;
+
+async function load() {
+  try {
+    // Der Zeitraumfilter wirkt nur auf die Ladevorgaenge - Ladeorte sind
+    // Stammdaten und sollen unabhaengig davon sichtbar bleiben. Das Limit
+    // liegt bewusst hoeher als die 200 der Listenansicht: eine Karte mit
+    // Luecken waere schwer als solche zu erkennen.
+    const params = appendFilterParams(new URLSearchParams());
+    params.set('limit', '1000');
+    const [l, s, v, p] = await Promise.all([
+      fetch('api/locations').then(r => r.json()),
+      fetch('api/sessions?' + params.toString()).then(r => r.json()),
+      fetch('api/vehicles').then(r => r.json()),
+      fetch('api/providers').then(r => r.json()),
+    ]);
+    locations = l; sessions = s; vehicles = v; providers = p;
+  } catch {
+    showOverlay(T.loadError);
+    return;
+  }
+
+  renderLocations();
+  renderSessions();
+  if (firstLoad) { fitToData(); firstLoad = false; }
+
+  if (!locations.length && !sessionPins().length) {
+    showOverlay(T.empty);
+    document.getElementById('map-retry-btn').style.display = 'none';
+  } else {
+    hideOverlay();
+    document.getElementById('map-retry-btn').style.display = '';
+  }
+}
+
+(async () => {
+  renderFilterBar('filter-bar', load);
+  await load();
+  // Die Karte wird vor dem Layout gebaut; ohne das bleibt sie bei manchen
+  // Browserbreiten grau, bis das Fenster einmal die Groesse aendert.
+  setTimeout(() => map.invalidateSize(), 0);
+})();
+</script>
+{% endblock %}

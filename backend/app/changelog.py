@@ -5,6 +5,18 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.20.0",
+        "date": "2026-09-15",
+        "title": "Kartenansicht",
+        "changes": [
+            "Neue Seite „Karte“ in der Hauptnavigation: zeigt alle bekannten Ladeorte und alle Ladevorgänge mit eigenen Koordinaten gemeinsam auf einer OpenStreetMap-Karte - das Gegenstück zum Karten-Tab der iOS-App, das es im Web bislang gar nicht gab. Ladeorte tragen ihren Matching-Radius als Kreis, damit sichtbar wird, wie nah ein Ladevorgang liegen muss, um automatisch diesem Ort zugeordnet zu werden.",
+            "Ladevorgänge werden abhängig vom Zoom zu Zahlen-Markern zusammengefasst. Ein Klick darauf zoomt hinein, solange sich die Punkte noch auftrennen lassen - liegen sie praktisch am selben Punkt (mehrfach an derselben Wallbox geladen), öffnet sich stattdessen eine Liste der betroffenen Ladevorgänge. Noch nicht geprüfte Einträge (needs_review) sind orange statt blau.",
+            "Ein Klick auf einen einzelnen Ladevorgang öffnet eine Vorschau mit allen Werten; von dort lässt er sich direkt bestätigen (nimmt das Prüf-Flag, ohne das Formular zu öffnen) oder auf der Ladevorgänge-Seite bearbeiten. Ein Klick auf einen Ladeort öffnet dessen Bearbeiten-Dialog gleich auf der Karte.",
+            "Legende unten dient gleichzeitig als Filter (Ladeorte/Ladevorgänge einzeln ausblenden), der Zeitraum-Filter der übrigen Seiten wirkt auch hier, und ein Knopf zoomt auf den eigenen Standort.",
+            "Leaflet liegt bewusst lokal im Image (static/vendor/) statt an einem CDN - wie schon bei der Entfernung von Chart.js, weil nicht jede Installation CDN-Zugriff hat. Nur die Kartenkacheln selbst kommen naturgemäß von openstreetmap.org; darauf weisen ein Hinweis unter der Karte und ein neuer Abschnitt in der Datenschutzerklärung hin.",
+        ],
+    },
+    {
         "version": "0.19.0",
         "date": "2026-09-14",
         "title": "Rate-Limiting & Nutzername case-insensitiv",

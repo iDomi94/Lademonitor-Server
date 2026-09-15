@@ -219,6 +219,11 @@ def sessions_page(request: Request, db: Session = Depends(get_db)):
     return _page(request, db, "sessions.html")
 
 
+@app.get("/map", response_class=HTMLResponse)
+def map_page(request: Request, db: Session = Depends(get_db)):
+    return _page(request, db, "map.html")
+
+
 @app.get("/import", response_class=HTMLResponse)
 def import_page(request: Request, db: Session = Depends(get_db)):
     return _page(request, db, "import.html")
