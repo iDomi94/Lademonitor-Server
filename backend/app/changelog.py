@@ -5,14 +5,22 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.21.0",
+        "date": "2026-09-16",
+        "title": "Karte: Ladevorgänge eines Ortes",
+        "changes": [
+            "Ein Klick auf einen Ladeort listet jetzt dessen Ladevorgänge auf, statt direkt das Bearbeiten-Formular zu öffnen - nachsehen, was man dort überhaupt geladen hat, war vorher gar nicht möglich. Eine Zeile öffnet die Vorschau, das Bearbeiten des Ortes liegt als Knopf unter der Liste. Mit aufgeführt werden auch Ladevorgänge, die im Radius des Ortes liegen, aber noch keinem Ort zugeordnet sind.",
+            "Die Liste eines Clusters erschien bisher praktisch nie: sie kam nur, wenn die Punkte enger als 11 Meter beieinanderlagen - die GPS-Punkte mehrerer Ladevorgänge an derselben Wallbox streuen aber um einige zehn Meter. Man zoomte deshalb bis zum Anschlag und stand dann vor einem Cluster, das sich nicht mehr auflöste. Jetzt entscheidet sich in Bildschirmpixeln bei maximalem Zoom, ob Hineinzoomen überhaupt noch etwas trennt.",
+        ],
+    },
+    {
         "version": "0.20.0",
         "date": "2026-09-15",
         "title": "Kartenansicht",
         "changes": [
             "Neue Seite „Karte“ in der Hauptnavigation: zeigt alle bekannten Ladeorte und alle Ladevorgänge mit eigenen Koordinaten gemeinsam auf einer OpenStreetMap-Karte - das Gegenstück zum Karten-Tab der iOS-App, das es im Web bislang gar nicht gab. Ladeorte tragen ihren Matching-Radius als Kreis, damit sichtbar wird, wie nah ein Ladevorgang liegen muss, um automatisch diesem Ort zugeordnet zu werden.",
             "Ladevorgänge werden abhängig vom Zoom zu Zahlen-Markern zusammengefasst. Ein Klick darauf zoomt hinein, solange sich die Punkte noch auftrennen lassen - liegen sie praktisch am selben Punkt (mehrfach an derselben Wallbox geladen), öffnet sich stattdessen eine Liste der betroffenen Ladevorgänge. Noch nicht geprüfte Einträge (needs_review) sind orange statt blau.",
-            "Ein Klick auf einen einzelnen Ladevorgang öffnet eine Vorschau mit allen Werten; von dort lässt er sich direkt bestätigen (nimmt das Prüf-Flag, ohne das Formular zu öffnen) oder auf der Ladevorgänge-Seite bearbeiten.",
-            "Ein Klick auf einen Ladeort listet alle Ladevorgänge dort auf (inklusive der Vorgänge, die im Radius liegen, aber noch keinem Ort zugeordnet sind) - eine Zeile öffnet die Vorschau, das Bearbeiten des Ortes liegt als Knopf darunter. Die Liste eines Clusters erscheint jetzt außerdem immer dann, wenn sich die Punkte durch Hineinzoomen nicht mehr auftrennen lassen: entschieden wird das in Bildschirmpixeln bei maximalem Zoom statt an einer festen Entfernung von 11 Metern, die unterhalb der üblichen GPS-Streuung lag und deshalb praktisch nie erreicht wurde.",
+            "Ein Klick auf einen einzelnen Ladevorgang öffnet eine Vorschau mit allen Werten; von dort lässt er sich direkt bestätigen (nimmt das Prüf-Flag, ohne das Formular zu öffnen) oder auf der Ladevorgänge-Seite bearbeiten. Ein Klick auf einen Ladeort öffnet dessen Bearbeiten-Dialog gleich auf der Karte.",
             "Legende unten dient gleichzeitig als Filter (Ladeorte/Ladevorgänge einzeln ausblenden), der Zeitraum-Filter der übrigen Seiten wirkt auch hier, und ein Knopf zoomt auf den eigenen Standort.",
             "Leaflet liegt bewusst lokal im Image (static/vendor/) statt an einem CDN - wie schon bei der Entfernung von Chart.js, weil nicht jede Installation CDN-Zugriff hat. Nur die Kartenkacheln selbst kommen naturgemäß von openstreetmap.org; darauf weisen ein Hinweis unter der Karte und ein neuer Abschnitt in der Datenschutzerklärung hin.",
         ],
