@@ -554,5 +554,6 @@
   "map.status.checked": "Reviewed",
   "map.action.confirm": "Confirm",
   "map.location.title": "Edit charging location",
-  "map.location.session_count": "{count} charging sessions here"
+  "map.location.session_count": "{count} charging sessions here",
+  "map.location.no_sessions": "No charging session recorded at this location in the selected period."
 }

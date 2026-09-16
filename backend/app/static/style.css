@@ -910,6 +910,7 @@ details.panel > summary .count {
 }
 .cluster-row:hover { border-color: var(--accent2); }
 .cluster-row small { display: block; color: var(--muted); font-size: 12px; }
+.listempty { color: var(--muted); font-size: 14px; margin: 0 0 16px; }
 
 @media (max-width: 720px) {
   /* Mobil zaehlt jede Zeile: die Karte bekommt den Rest des Bildschirms,
