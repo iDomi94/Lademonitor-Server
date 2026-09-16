@@ -6,6 +6,25 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.21.0] — 2026-09-16
+
+### Changed
+- **Ein Klick auf einen Ladeort listet dessen Ladevorgänge auf**, statt
+  direkt das Bearbeiten-Formular zu öffnen – nachsehen, was man dort
+  überhaupt geladen hat, war vorher gar nicht möglich. Eine Zeile öffnet die
+  Vorschau, das Bearbeiten des Ortes liegt als Knopf unter der Liste. Mit
+  aufgeführt werden auch Ladevorgänge, die im Radius des Ortes liegen, aber
+  noch keinem Ort zugeordnet sind (genau die, die das Geo-Matching diesem
+  Ort zuschlagen würde).
+
+### Fixed
+- **Die Liste eines Clusters erschien praktisch nie.** Sie kam nur, wenn die
+  Punkte enger als 11 Meter beieinanderlagen – die GPS-Punkte mehrerer
+  Ladevorgänge an derselben Wallbox streuen aber um einige zehn Meter. Man
+  zoomte deshalb bis zum Anschlag und stand dann vor einem Cluster, das sich
+  nicht mehr auflöste. Ob Hineinzoomen überhaupt noch etwas trennt,
+  entscheidet sich jetzt in Bildschirmpixeln bei maximalem Zoom.
+
 ## [0.20.0] — 2026-09-15
 
 ### Added
@@ -17,20 +36,15 @@ folgen [Semantic Versioning](https://semver.org/).
   Ladevorgang liegen muss, um automatisch diesem Ort zugeordnet zu werden.
 - **Zoom-abhängiges Clustering der Ladevorgänge** (dieselbe Single-Linkage-
   Logik wie in der App): ein Klick auf einen Zahlen-Marker zoomt hinein,
-  solange sich die Punkte noch auftrennen lassen – sonst öffnet sich eine
-  Liste der betroffenen Ladevorgänge. Ob sich etwas auftrennen lässt,
-  entscheidet sich in Bildschirmpixeln bei maximalem Zoom, nicht an einer
-  festen Entfernung: die GPS-Punkte mehrerer Ladevorgänge an derselben
-  Wallbox streuen um einige zehn Meter. Noch nicht geprüfte Einträge
-  (`needs_review`) sind orange statt blau.
+  solange sich die Punkte noch auftrennen lassen – liegen sie praktisch am
+  selben Punkt (mehrfach an derselben Wallbox geladen), öffnet sich
+  stattdessen eine Liste der betroffenen Ladevorgänge. Noch nicht geprüfte
+  Einträge (`needs_review`) sind orange statt blau.
 - **Vorschau und Schnellaktionen**: ein Klick auf einen einzelnen
   Ladevorgang öffnet eine Detailvorschau; von dort lässt er sich direkt
   bestätigen (nimmt das Prüf-Flag, ohne das Formular zu öffnen) oder auf der
-  Ladevorgänge-Seite bearbeiten (`sessions#edit=<id>`).
-- **Ein Klick auf einen Ladeort listet dessen Ladevorgänge auf** – inklusive
-  der Vorgänge, die im Radius liegen, aber noch keinem Ort zugeordnet sind.
-  Eine Zeile öffnet die Vorschau, das Bearbeiten des Ortes liegt als Knopf
-  unter der Liste.
+  Ladevorgänge-Seite bearbeiten (`sessions#edit=<id>`). Ein Klick auf einen
+  Ladeort öffnet dessen Bearbeiten-Dialog gleich auf der Karte.
 - **Legende als Filter** (Ladeorte/Ladevorgänge einzeln ausblenden), der
   bestehende Zeitraum-Filter wirkt auch auf der Karte, und ein Knopf zoomt
   auf den eigenen Standort.
