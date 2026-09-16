@@ -364,7 +364,11 @@ h2 { font-size: 16px; color: var(--muted); margin: 24px 0 12px; }
   background: rgba(5, 8, 15, 0.7);
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  /* Ueber ALLES, auch ueber die Karte: Leaflet vergibt seinen Ebenen und
+     Bedienelementen z-index-Werte bis 1000 - mit dem frueheren Wert 100 lag
+     ein geoeffneter Dialog auf der Kartenseite unsichtbar hinter den
+     Kartenkacheln. */
+  z-index: 1100;
   padding: 24px;
 }
 .modal.open { display: flex; }
@@ -724,4 +728,196 @@ details.panel > summary .count {
 
   .filter-row input[type="date"] { flex: 1 1 45%; }
   .modal { padding: 12px; }
+}
+
+/* --------------------------------------------------------------------------
+   Kartenansicht (map.html)
+
+   Aufbau nach dem Vorbild von MapOverviewView.swift in der iOS-App: Ladeorte
+   als blaue Marker mit ihrem Matching-Radius als Kreis, Ladevorgaenge als
+   kleinere Punkte bzw. Zahlen-Cluster, Legende und Standort-Knopf liegen als
+   Overlay ueber der Karte statt daneben - sonst frisst die Bedienleiste auf
+   dem Handy die halbe Kartenflaeche.
+   -------------------------------------------------------------------------- */
+.maparea {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* Feste Hoehe aus der Viewport-Hoehe abzueglich Leiste, Ueberschrift und
+   Filterzeile: eine Karte in einem mitwachsenden Container hat beim Laden
+   die Hoehe 0 und bleibt grau. */
+#map {
+  height: clamp(360px, calc(100vh - 300px), 780px);
+  background: var(--bg);
+}
+
+/* Die OSM-Standardkacheln sind fuer helle Oberflaechen gezeichnet und
+   leuchten in dieser dunklen sonst wie ein Scheinwerfer. Nur leicht
+   abgedunkelt statt invertiert - eine invertierte Karte liest sich zwar
+   "dunkel", aber Wald, Wasser und Autobahnen bekommen dabei Farben, die
+   niemand erwartet. Der Filter liegt ausschliesslich auf der Kachelebene,
+   Marker und Kreise darueber behalten ihre volle Farbe. */
+.leaflet-tile-pane { filter: brightness(0.82) saturate(0.85) contrast(1.05); }
+
+.leaflet-container { font: inherit; background: var(--bg); }
+.leaflet-container a { color: var(--accent2); }
+.leaflet-popup-content-wrapper, .leaflet-tooltip {
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.leaflet-tooltip::before { display: none; }
+.leaflet-bar a, .leaflet-bar a:hover {
+  background: var(--card);
+  color: var(--text);
+  border-bottom-color: var(--border);
+}
+.leaflet-control-attribution {
+  background: rgba(15, 20, 32, 0.8);
+  color: var(--muted);
+}
+
+/* Marker: divIcon ohne eigenen Hintergrund, die Form steckt im inneren
+   <span>. iconAnchor sitzt in der Mitte, deshalb ist der Punkt selbst
+   zentriert und braucht keine Spitze wie ein klassischer Pin. */
+.map-pin-wrap { background: none; border: none; }
+.map-pin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+}
+/* Ladeort: klassischer Pin mit Spitze auf dem Punkt - die Ladevorgaenge
+   sitzen als Punkt genau auf derselben Koordinate, ohne den Versatz nach
+   oben verdeckt der eine den anderen. */
+.pin-location { position: relative; background: var(--accent2); }
+.pin-location::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 8px solid #fff;
+}
+.pin-session { background: #6b7690; border-width: 1.5px; }
+.pin-cluster { background: var(--accent2); }
+/* Orange wie das needs_review-Flag in Tabelle und Liste: ein noch nicht
+   gepruefter Vorgang soll auf der Karte genauso auffallen. */
+.pin-review { background: var(--warn); }
+
+/* Legende und Standort-Knopf teilen sich den unteren Rand: die Legende
+   mittig, der Knopf rechts - so ueberlappen sie sich auf keiner Breite. */
+.map-legend {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  z-index: 500;
+  display: flex;
+  gap: 6px;
+  padding: 5px;
+  background: rgba(23, 30, 46, 0.92);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+.legend-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: none;
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  /* Durchgestrichen statt nur blass, wie die LegendToggle in der iOS-App:
+     "ausgeblendet" ist damit auch ohne Farbvergleich erkennbar. */
+  text-decoration: line-through;
+}
+.legend-toggle.on { color: var(--text); text-decoration: none; }
+.legend-toggle .dot { width: 9px; height: 9px; border-radius: 50%; }
+.legend-toggle .dot-location { background: var(--accent2); }
+.legend-toggle .dot-session { background: #6b7690; }
+
+.map-locate {
+  position: absolute;
+  right: 12px;
+  /* Ueber der Zeile mit dem Attributionshinweis, nicht darauf - der Hinweis
+     auf OpenStreetMap muss lesbar bleiben. */
+  bottom: 30px;
+  z-index: 900;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  font-size: 18px;
+  border-radius: 10px;
+}
+
+.map-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 20, 32, 0.72);
+}
+.map-overlay .card { text-align: center; max-width: 420px; }
+.map-overlay p { margin-top: 0; }
+
+.map-hint { color: var(--muted); font-size: 12px; margin-top: 10px; }
+
+/* Wertetabelle der Ladevorgangs-Vorschau: zwei Spalten, Label links. */
+.detail-list {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 16px;
+  margin: 0 0 16px;
+  font-size: 14px;
+}
+.detail-list dt { color: var(--muted); }
+.detail-list dd { margin: 0; }
+
+/* Zeile der Cluster-Liste - dieselbe Rolle wie ClusterSessionListSheet in
+   der iOS-App: antippen oeffnet die Vorschau des Ladevorgangs. */
+.cluster-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.cluster-row:hover { border-color: var(--accent2); }
+.cluster-row small { display: block; color: var(--muted); font-size: 12px; }
+
+@media (max-width: 720px) {
+  /* Mobil zaehlt jede Zeile: die Karte bekommt den Rest des Bildschirms,
+     die Legende rutscht nach unten links, damit sie den Attributionshinweis
+     nicht verdeckt. */
+  #map { height: clamp(320px, calc(100vh - 260px), 640px); }
+  .map-legend { font-size: 11px; padding: 4px; }
+  .legend-toggle { padding: 5px 9px; }
+  .detail-list { grid-template-columns: 1fr; gap: 2px 0; }
+  .detail-list dd { margin-bottom: 8px; }
 }

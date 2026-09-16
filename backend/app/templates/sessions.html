@@ -398,11 +398,31 @@ document.getElementById('session-form').addEventListener('submit', async (e) => 
   }
 });
 
+// Die Kartenseite hat kein eigenes Bearbeiten-Formular und schickt hierher
+// (sessions#edit=<id>). Der Hash wird danach entfernt, sonst oeffnet ein
+// Neuladen der Seite denselben Eintrag wieder.
+async function openFromHash() {
+  const match = window.location.hash.match(/^#edit=(.+)$/);
+  if (!match) return;
+  history.replaceState(null, '', window.location.pathname + window.location.search);
+  const id = decodeURIComponent(match[1]);
+  // Die Karte laedt mehr Vorgaenge als diese Liste (limit=1000 statt der
+  // Standard-200) - der gesuchte Eintrag kann hier also noch fehlen.
+  if (!allSessions.some(s => s.id === id)) {
+    const params = appendFilterParams(new URLSearchParams());
+    params.set('limit', '1000');
+    allSessions = await (await fetch('api/sessions?' + params.toString())).json();
+    renderSessions();
+  }
+  startEdit(id);
+}
+
 (async () => {
   setupFormPanel();
   renderFilterBar('filter-bar', loadSessions);
   await loadDropdowns();
   await loadSessions();
+  await openFromHash();
 })();
 </script>
 {% endblock %}

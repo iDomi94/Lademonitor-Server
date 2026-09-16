@@ -702,9 +702,10 @@ horizontale Ueberlaeufe mehr auf irgendeiner Seite in beiden Sprachen.
 
 ## Web-UI: Seitenaufbau und Navigation (ab 2026-09-08, v0.13.0)
 
-**Hauptleiste: Dashboard, Ladevorgaenge, Einstellungen.** Der Import ist von
-dort verschwunden - er wird einmal beim Umstieg von Spritmonitor gebraucht und
-belegte dauerhaft einen von vier Plaetzen.
+**Hauptleiste: Dashboard, Ladevorgaenge, Einstellungen** (seit v0.20.0
+zusaetzlich **Karte**, siehe eigenen Abschnitt weiter unten). Der Import ist
+von dort verschwunden - er wird einmal beim Umstieg von Spritmonitor gebraucht
+und belegte dauerhaft einen von vier Plaetzen.
 
 **Die Einstellungen sind eine Uebersichtsseite**, kein Fliesstext mehr. Jeder
 Bereich ist ein `details.panel`, das **Liste UND Anlege-Formular** enthaelt
@@ -743,6 +744,62 @@ liest sich schmaler besser. Seitdem ab 1100 px Fensterbreite kein horizontaler
 Ueberlauf mehr. Inline-SVG statt Emoji, weil Emoji je nach Plattform in Groesse
 und Farbe auseinanderlaufen; `currentColor` laesst die Icons der Textfarbe des
 Knopfes folgen.
+
+## Kartenansicht (`templates/map.html`, ab 2026-09-15, v0.20.0)
+
+Vierter Punkt der Hauptleiste, Gegenstueck zum Karten-Tab der iOS-App
+(`Views/MapOverviewView.swift` im Repo `iDomi94/Lademonitor-App`). Die Seite
+ist bewusst eine **Nachbildung** dieser Ansicht, nicht eine eigene Idee -
+Marker-Rollen, Cluster-Schwelle und das Verhalten beim Antippen sind aus dem
+Swift-Code uebernommen, damit App und Web sich gleich anfuehlen.
+
+**Leaflet liegt lokal** unter `static/vendor/leaflet/` (Version 1.9.4, JS +
+CSS + `images/`), NICHT an einem CDN: der Rest der Oberflaeche kommt seit der
+Chart.js-Entfernung ohne externe Skriptquellen aus (ein Client hatte keinen
+CDN-Zugriff), und eine Karte ohne Bedienlogik waere derselbe Fehlerfall. Nur
+die **Kacheln** muessen naturgemaess von `tile.openstreetmap.org` kommen -
+damit ist die Karte die zweite Ausnahme von der "kein Cloud-Dienst"-Linie
+neben der Nominatim-Adresssuche, allerdings eine, die nur der Browser macht
+(der Server ruft nichts auf). Dafuer ein Hinweis unter der Karte und ein
+eigener Punkt in der Datenschutzerklaerung: OpenStreetMap erfaehrt IP und
+Kartenausschnitt, also mittelbar, wo geladen wird.
+
+**Was gezeigt wird:** Ladeorte als blauer Pin plus ihr `radius_m` als Kreis
+(macht sichtbar, wie nah ein Vorgang liegen muss, damit `match_location()`
+greift), Ladevorgaenge mit Koordinaten als graue Punkte bzw. Zahlen-Cluster,
+`needs_review` orange. Der Zeitraumfilter (`filter.js`) wirkt nur auf die
+Ladevorgaenge - Ladeorte sind Stammdaten. Die Sessions werden mit
+`limit=1000` geladen statt der 200 der Listenansicht: eine Karte mit Luecken
+waere schwer als solche zu erkennen.
+
+**Clustering** ist dieselbe Single-Linkage-Rechnung wie in der App (Schwelle
+= 6 % der sichtbaren Kantenlaenge, neu gebildet bei jedem `moveend`) - keine
+Clustering-Bibliothek, das waere die schwerere Loesung fuer dasselbe
+Ergebnis. Klick auf ein Cluster zoomt hinein, solange sich die Punkte
+auftrennen lassen; liegen sie enger als ~11 m beieinander (mehrfach an
+derselben Wallbox), oeffnet stattdessen eine Liste - Zoomen wuerde dort
+nichts mehr trennen.
+
+**Zwei Fallen, beide im Browser aufgefallen und behoben:**
+
+1. `.modal` hatte `z-index: 100`, Leaflet vergibt seinen Ebenen und
+   Bedienelementen bis 1000 - jeder Dialog lag unsichtbar HINTER den
+   Kartenkacheln. Der Wert steht jetzt auf 1100 (gilt auch fuer das
+   Changelog-Modal, dort folgenlos).
+2. Ladeort-Marker und Session-Cluster liegen an einem bekannten Ladeort
+   zwangslaeufig auf derselben Koordinate, der obere verdeckte den unteren
+   komplett (inkl. Klickflaeche). Deshalb haengt der Ladeort als Pin mit
+   Spitze UEBER dem Punkt (`iconAnchor: [13, 34]` plus CSS-Spitze in
+   `.pin-location::after`), die Ladevorgaenge sitzen mittig darauf.
+
+**Bearbeitet wird nicht doppelt:** ein Klick auf einen Ladeort oeffnet dessen
+Formular direkt auf der Karte (dieselben Felder wie in den Einstellungen), ein
+Ladevorgang dagegen fuehrt ueber die Vorschau nach `sessions#edit=<id>` - die
+Ladevorgaenge-Seite hat das vollstaendige Formular bereits, eine zweite Kopie
+davon wuerde frueher oder spaeter auseinanderlaufen. `openFromHash()` dort
+laedt notfalls mit `limit=1000` nach, falls der Eintrag ausserhalb der ersten
+200 liegt. Die Vorschau bietet ausserdem "Bestaetigen" (`needs_review` weg,
+ohne das Formular zu oeffnen) - wie die Detailansicht in der App.
 
 ## E-Mail (`mailer.py`, `notifications.py`, `routers/email.py`, ab 2026-09-08, v0.14.0)
 

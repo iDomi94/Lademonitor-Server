@@ -6,6 +6,39 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.20.0] — 2026-09-15
+
+### Added
+- **Kartenansicht** (neue Seite „Karte“ in der Hauptnavigation): zeigt alle
+  bekannten Ladeorte und alle Ladevorgänge mit eigenen Koordinaten gemeinsam
+  auf einer OpenStreetMap-Karte – das Gegenstück zum Karten-Tab der iOS-App
+  (`MapOverviewView.swift`), das es im Web bislang gar nicht gab. Ladeorte
+  tragen ihren Matching-Radius als Kreis, damit sichtbar wird, wie nah ein
+  Ladevorgang liegen muss, um automatisch diesem Ort zugeordnet zu werden.
+- **Zoom-abhängiges Clustering der Ladevorgänge** (dieselbe Single-Linkage-
+  Logik wie in der App): ein Klick auf einen Zahlen-Marker zoomt hinein,
+  solange sich die Punkte noch auftrennen lassen – liegen sie praktisch am
+  selben Punkt (mehrfach an derselben Wallbox geladen), öffnet sich
+  stattdessen eine Liste der betroffenen Ladevorgänge. Noch nicht geprüfte
+  Einträge (`needs_review`) sind orange statt blau.
+- **Vorschau und Schnellaktionen**: ein Klick auf einen einzelnen
+  Ladevorgang öffnet eine Detailvorschau; von dort lässt er sich direkt
+  bestätigen (nimmt das Prüf-Flag, ohne das Formular zu öffnen) oder auf der
+  Ladevorgänge-Seite bearbeiten (`sessions#edit=<id>`). Ein Klick auf einen
+  Ladeort öffnet dessen Bearbeiten-Dialog gleich auf der Karte.
+- **Legende als Filter** (Ladeorte/Ladevorgänge einzeln ausblenden), der
+  bestehende Zeitraum-Filter wirkt auch auf der Karte, und ein Knopf zoomt
+  auf den eigenen Standort.
+
+### Changed
+- **Leaflet liegt lokal im Image** (`backend/app/static/vendor/leaflet/`)
+  statt an einem CDN – dieselbe Überlegung wie bei der seinerzeitigen
+  Entfernung von Chart.js, weil nicht jede Installation CDN-Zugriff hat. Nur
+  die Kartenkacheln selbst kommen naturgemäß von openstreetmap.org.
+- **Datenschutzerklärung** um einen Abschnitt zu den Kartenkacheln ergänzt
+  (der Browser kontaktiert dabei OpenStreetMap direkt; die Ladedaten selbst
+  werden nicht übermittelt).
+
 ## [0.19.0] — 2026-09-14
 
 ### Added
