@@ -17,15 +17,20 @@ folgen [Semantic Versioning](https://semver.org/).
   Ladevorgang liegen muss, um automatisch diesem Ort zugeordnet zu werden.
 - **Zoom-abhängiges Clustering der Ladevorgänge** (dieselbe Single-Linkage-
   Logik wie in der App): ein Klick auf einen Zahlen-Marker zoomt hinein,
-  solange sich die Punkte noch auftrennen lassen – liegen sie praktisch am
-  selben Punkt (mehrfach an derselben Wallbox geladen), öffnet sich
-  stattdessen eine Liste der betroffenen Ladevorgänge. Noch nicht geprüfte
-  Einträge (`needs_review`) sind orange statt blau.
+  solange sich die Punkte noch auftrennen lassen – sonst öffnet sich eine
+  Liste der betroffenen Ladevorgänge. Ob sich etwas auftrennen lässt,
+  entscheidet sich in Bildschirmpixeln bei maximalem Zoom, nicht an einer
+  festen Entfernung: die GPS-Punkte mehrerer Ladevorgänge an derselben
+  Wallbox streuen um einige zehn Meter. Noch nicht geprüfte Einträge
+  (`needs_review`) sind orange statt blau.
 - **Vorschau und Schnellaktionen**: ein Klick auf einen einzelnen
   Ladevorgang öffnet eine Detailvorschau; von dort lässt er sich direkt
   bestätigen (nimmt das Prüf-Flag, ohne das Formular zu öffnen) oder auf der
-  Ladevorgänge-Seite bearbeiten (`sessions#edit=<id>`). Ein Klick auf einen
-  Ladeort öffnet dessen Bearbeiten-Dialog gleich auf der Karte.
+  Ladevorgänge-Seite bearbeiten (`sessions#edit=<id>`).
+- **Ein Klick auf einen Ladeort listet dessen Ladevorgänge auf** – inklusive
+  der Vorgänge, die im Radius liegen, aber noch keinem Ort zugeordnet sind.
+  Eine Zeile öffnet die Vorschau, das Bearbeiten des Ortes liegt als Knopf
+  unter der Liste.
 - **Legende als Filter** (Ladeorte/Ladevorgänge einzeln ausblenden), der
   bestehende Zeitraum-Filter wirkt auch auf der Karte, und ein Knopf zoomt
   auf den eigenen Standort.

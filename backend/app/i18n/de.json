@@ -554,5 +554,6 @@
   "map.status.checked": "Geprüft",
   "map.action.confirm": "Bestätigen",
   "map.location.title": "Ladeort bearbeiten",
-  "map.location.session_count": "{count} Ladevorgänge hier"
+  "map.location.session_count": "{count} Ladevorgänge hier",
+  "map.location.no_sessions": "An diesem Ladeort ist im gewählten Zeitraum kein Ladevorgang erfasst."
 }

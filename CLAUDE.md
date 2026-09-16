@@ -776,9 +776,18 @@ waere schwer als solche zu erkennen.
 = 6 % der sichtbaren Kantenlaenge, neu gebildet bei jedem `moveend`) - keine
 Clustering-Bibliothek, das waere die schwerere Loesung fuer dasselbe
 Ergebnis. Klick auf ein Cluster zoomt hinein, solange sich die Punkte
-auftrennen lassen; liegen sie enger als ~11 m beieinander (mehrfach an
-derselben Wallbox), oeffnet stattdessen eine Liste - Zoomen wuerde dort
-nichts mehr trennen.
+auftrennen lassen, sonst oeffnet eine Liste.
+
+**Ob sich etwas auftrennen laesst, entscheidet sich in BILDSCHIRMPIXELN bei
+maximalem Zoom** (`handleClusterClick`), nicht an einer festen Entfernung:
+die iOS-Vorlage nimmt dafuer ~11 m (`sameSpotEpsilon = 0.0001`), und genau
+das war im Web unbrauchbar - die GPS-Punkte mehrerer Ladevorgaenge an
+derselben Wallbox streuen um einige zehn Meter, liegen also fast immer
+DARUEBER. Folge: es kam praktisch nie eine Liste, man zoomte bis zum Anschlag
+und stand dann vor einem Cluster, das sich nicht mehr aufloeste. Jetzt:
+Liste, sobald die aeussersten Punkte auch bei `map.getMaxZoom()` naeher als
+60 px beieinanderlaegen (zwei Marker sind je ~30 px breit) ODER der Zoom
+bereits am Anschlag ist.
 
 **Zwei Fallen, beide im Browser aufgefallen und behoben:**
 
@@ -792,8 +801,18 @@ nichts mehr trennen.
    Spitze UEBER dem Punkt (`iconAnchor: [13, 34]` plus CSS-Spitze in
    `.pin-location::after`), die Ladevorgaenge sitzen mittig darauf.
 
-**Bearbeitet wird nicht doppelt:** ein Klick auf einen Ladeort oeffnet dessen
-Formular direkt auf der Karte (dieselben Felder wie in den Einstellungen), ein
+**Ein Klick auf einen Ladeort zeigt zuerst dessen Ladevorgaenge**
+(`openLocationSessions`), das Bearbeiten liegt als Knopf unter der Liste.
+Anders herum (direkt ins Formular, wie die iOS-Vorlage es macht) war der
+haeufigere Fall - nachsehen, was man dort geladen hat - ueberhaupt nicht
+erreichbar. `sessionsAtLocation()` nimmt neben `location_id` auch Vorgaenge
+mit, die im Radius liegen und noch KEINEM Ort zugeordnet sind (genau die, die
+das Geo-Matching vergeben wuerde); wer schon an einem ANDEREN Ort haengt,
+bleibt aussen vor, sonst taucht derselbe Vorgang an zwei Orten auf. Dieselbe
+Liste (`openSessionList`) dient dem nicht auftrennbaren Cluster.
+
+**Bearbeitet wird nicht doppelt:** das Ladeort-Formular steht auf der Karte
+selbst (dieselben Felder wie in den Einstellungen), ein
 Ladevorgang dagegen fuehrt ueber die Vorschau nach `sessions#edit=<id>` - die
 Ladevorgaenge-Seite hat das vollstaendige Formular bereits, eine zweite Kopie
 davon wuerde frueher oder spaeter auseinanderlaufen. `openFromHash()` dort
