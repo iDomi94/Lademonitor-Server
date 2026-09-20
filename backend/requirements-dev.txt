@@ -1,0 +1,2 @@
+# Nur fuer die Tests (siehe backend/tests/) und die CI - NICHT im Image.
+pytest==8.3.3

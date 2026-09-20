@@ -336,6 +336,48 @@ class ChargingSession(Base):
     location: Mapped["ChargingLocation"] = relationship(back_populates="sessions")
 
 
+class SyncEntityType(str, enum.Enum):
+    """Die vier Kern-Entitaeten, die App und Web-UI spiegeln (siehe DeletedRecord)."""
+
+    VEHICLE = "vehicle"
+    PROVIDER = "provider"
+    LOCATION = "location"
+    SESSION = "session"
+
+
+class DeletedRecord(Base):
+    """Grabstein ("Tombstone") fuer eine geloeschte Zeile einer der vier
+    Kern-Entitaeten.
+
+    Existiert, weil die Apps (iOS/Android) ihren lokalen Spiegel sonst nie
+    erfahren, dass ein Datensatz auf dem Server - z.B. ueber die Web-UI oder
+    ein zweites Geraet - geloescht wurde. Aus der blossen ABWESENHEIT in einer
+    Pull-Antwort darf eine App das nicht schliessen: jede Luecke (Serverfehler,
+    unerwartet leere Antwort, abgebrochene Uebertragung) haette sonst stillen,
+    unwiderruflichen Datenverlust bedeutet - genau deshalb hatten beide Apps
+    das Aufraeumen bewusst abgeschaltet und lebten stattdessen mit
+    "Geisterzeilen". Ein Grabstein ist das Gegenteil davon: ein POSITIVES,
+    ausdrueckliches Signal "diese ID ist geloescht", das eine unvollstaendige
+    Antwort nicht erfinden kann.
+
+    Bewusst ohne Ablauf/Aufraeum-Job: eine Zeile ist ein paar Dutzend Byte, und
+    ein Grabstein, der zu frueh verschwindet, bringt die Geisterzeile still
+    zurueck (ein Geraet, das laenger als die Aufbewahrungsfrist offline war,
+    wuerde die Loeschung nie sehen). Der Bestand waechst nur mit der Anzahl
+    tatsaechlicher Loeschungen, nicht mit der Datenmenge.
+    """
+
+    __tablename__ = "deleted_records"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_uuid)
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    entity_type: Mapped[SyncEntityType] = mapped_column(Enum(SyncEntityType))
+    # Die ID der geloeschten Zeile - bewusst KEIN Fremdschluessel (die Zeile,
+    # auf die er zeigen wuerde, ist ja gerade weg).
+    entity_id: Mapped[str] = mapped_column(String, index=True)
+    deleted_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+
 class WebdavBackupConfig(Base):
     """Ein Konfigurationssatz pro Nutzer (passend zur Pro-Nutzer-
     Datentrennung im Rest der App - jeder Nutzer sichert nur seine eigenen

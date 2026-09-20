@@ -6,6 +6,30 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.22.0] — 2026-09-20
+
+### Added
+- **Web-Oberfläche als App installierbar** ("Zum Startbildschirm hinzufügen"):
+  Web-App-Manifest und ein bewusst nicht zwischenspeichernder Service Worker.
+- **`GET /api/sync/deletions`**: meldet ausdrücklich, welche Datensätze auf dem
+  Server gelöscht wurden, damit die Apps ihren lokalen Spiegel aufräumen können,
+  ohne das aus dem Fehlen eines Eintrags raten zu müssen.
+- **Automatisierte Tests** (`backend/tests/`) und ein GitHub-Actions-Workflow
+  dafür. Nicht Teil des Images.
+
+### Fixed
+- **Ladevorgangs-Liste zeigte überall nur die 200 neuesten Einträge** – in der
+  Web-Oberfläche, auf der Karte, in der iOS- und in der Android-App.
+  `GET /api/sessions` hatte `limit=200` als Vorgabe, und kein Client schickte je
+  einen Wert mit. Nach einem Spritmonitor-Import mit mehreren hundert Vorgängen
+  waren die älteren nicht erreichbar und wurden von den Apps nie gespiegelt; die
+  Statistik zeigte trotzdem vollständige Zahlen, weil sie serverseitig
+  aggregiert wird. Ohne Angabe liefert der Endpunkt jetzt alles,
+  `limit`/`offset` bleiben für seitenweises Laden verfügbar.
+- **Serverseitige Löschungen kamen in den Apps nie an** ("Geisterzeilen"):
+  gelöschte Ladevorgänge, Fahrzeuge, Anbieter und Ladeorte verschwinden jetzt
+  beim nächsten Abgleich auch auf dem Gerät.
+
 ## [0.21.0] — 2026-09-16
 
 ### Changed

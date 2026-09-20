@@ -91,6 +91,13 @@ def _purge_owned_data(db: Session, user_id: str) -> None:
     db.query(models.EmailLogEntry).filter(
         models.EmailLogEntry.user_id == user_id
     ).delete(synchronize_session=False)
+    # Grabsteine (siehe models.DeletedRecord): haengen per Fremdschluessel am
+    # Nutzer und muessen deshalb mit weg. Sie ohne den Nutzer aufzubewahren
+    # brauechte auch niemand - wer sie abfragen koennte, ist gerade geloescht
+    # worden.
+    db.query(models.DeletedRecord).filter(
+        models.DeletedRecord.user_id == user_id
+    ).delete(synchronize_session=False)
 
 
 def _other_admin_exists(db: Session, user_id: str) -> bool:

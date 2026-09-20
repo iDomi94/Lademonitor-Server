@@ -23,6 +23,11 @@
   <link rel="icon" type="image/png" sizes="32x32" href="static/favicon-32.png?v={{ version|default('dev') }}">
   <link rel="icon" type="image/png" sizes="16x16" href="static/favicon-16.png?v={{ version|default('dev') }}">
   <link rel="apple-touch-icon" href="static/apple-touch-icon.png?v={{ version|default('dev') }}">
+  {# PWA: macht die Oberflaeche installierbar (eigenes Fenster statt Browser-Tab).
+     Beides liegt auf oberster Ebene und nicht unter static/ - warum, steht in
+     main.py::web_app_manifest() bzw. service_worker(). #}
+  <link rel="manifest" href="manifest.webmanifest?v={{ version|default('dev') }}">
+  <meta name="theme-color" content="#0f1420">
   <link rel="stylesheet" href="static/style.css?v={{ version|default('dev') }}">
   <style>
     .auth-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
@@ -47,6 +52,17 @@
     .auth-foot a { color: var(--muted); }
     .auth-foot a:hover { color: var(--text); }
   </style>
+  <script>
+    // Registrierung bewusst ohne Fehlerbehandlung ausser dem Verschlucken:
+    // scheitert sie (kein HTTPS, alter Browser, abgeschaltet), soll die Seite
+    // trotzdem ganz normal funktionieren - der Service Worker bringt nichts
+    // ausser der Installierbarkeit (siehe static/sw.js).
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('sw.js').catch(function () {});
+      });
+    }
+  </script>
 </head>
 <body>
   <div class="auth-wrap">

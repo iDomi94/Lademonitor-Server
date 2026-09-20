@@ -8,6 +8,7 @@ from .models import (
     ReviewDigestFrequency,
     SessionSource,
     SmtpSecurity,
+    SyncEntityType,
     WebdavBackupFrequency,
 )
 
@@ -555,3 +556,24 @@ class EmailLogOut(BaseModel):
     kind: str
     status: str
     error: str | None
+
+
+# ---------- Sync: Grabsteine geloeschter Datensaetze ----------
+
+class DeletedRecordOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    entity_type: SyncEntityType
+    entity_id: str
+    deleted_at: datetime
+
+
+class DeletionsOut(BaseModel):
+    """Antwort von GET /api/sync/deletions.
+
+    `server_time` ist der Cursor fuer den naechsten Aufruf: die Uhr des Servers
+    zum Zeitpunkt der Abfrage, nicht die des Geraets. Sonst wuerde jede Abweichung
+    der Geraeteuhr (Zeitzone, Drift, manuelle Umstellung) entweder Grabsteine
+    ueberspringen oder sie endlos erneut liefern."""
+
+    server_time: datetime
+    deletions: list[DeletedRecordOut]

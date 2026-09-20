@@ -54,3 +54,12 @@ def is_rate_limited(key: str, max_attempts: int, window_seconds: int) -> bool:
             return True
         bucket.append(now)
         return False
+
+
+def reset() -> None:
+    """Leert alle Zaehler. Gedacht fuer die Tests: der Zustand liegt im
+    Prozessspeicher und wuerde sonst von einem Test in den naechsten
+    ueberlaufen (fuenf Registrierungen pro Stunde sind nach ein paar Tests
+    aufgebraucht)."""
+    with _lock:
+        _attempts.clear()

@@ -5,6 +5,17 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.22.0",
+        "date": "2026-09-20",
+        "title": "Alle Ladevorgänge statt nur 200, gelöschte Einträge, Installierbarkeit",
+        "changes": [
+            "Die Ladevorgangs-Liste zeigte überall stillschweigend nur die 200 neuesten Einträge - in der Web-Oberfläche, auf der Karte, in der iOS- und in der Android-App. Wer von Spritmonitor mehrere hundert Vorgänge importiert hatte, kam an die älteren gar nicht mehr heran; die Apps spiegelten sie entsprechend nie. Dass die Statistik trotzdem die vollständigen Zahlen zeigte (sie wird serverseitig über alle Vorgänge gerechnet), machte die Lücke besonders schwer zu bemerken. Ohne ausdrückliche Angabe liefert der Server jetzt alles; wer seitenweise laden will, kann `limit` und `offset` weiterhin selbst setzen. Für App und Web-Oberfläche ist nichts einzustellen - es wirkt sofort.",
+            "Auf dem Server gelöschte Ladevorgänge, Fahrzeuge, Anbieter und Ladeorte verschwinden jetzt auch aus den Apps. Bisher blieben sie dort als \"Geisterzeilen\" stehen, bis man sie auch in der App löschte: die Apps durften aus dem bloßen Fehlen eines Eintrags in der Server-Antwort nicht auf eine Löschung schließen, weil jede unvollständige Antwort (Serverfehler, Abbruch) sonst still lokale Daten vernichtet hätte. Der Server merkt sich eine Löschung jetzt ausdrücklich und meldet sie beim nächsten Abgleich - ein Signal, das eine kaputte Antwort nicht erfinden kann.",
+            "Die Web-Oberfläche lässt sich jetzt als App installieren (\"Zum Startbildschirm hinzufügen\") und startet dann in einem eigenen Fenster statt im Browser-Tab. Dafür fehlten bisher schlicht die nötigen Dateien, obwohl die passenden Symbole längst vorhanden waren. Bewusst ohne Zwischenspeicher: die App wird serverseitig gerendert, ein zwischenspeichernder Dienst wäre nur eine dritte Cache-Ebene, die man nicht mit einem Neuladen loswird.",
+            "Erstmals automatisierte Tests im Projekt (41 Stück) samt GitHub-Actions-Workflow: Verbrauchsberechnung mit ihrer fünfstufigen Fallback-Kette, die Rückdatierung des Ladebeginns inklusive beider Wächter, Backup-Export/-Import samt der beiden Fehler von 2026-08-31, die Ladevorgangs-Liste und die Löschmeldungen. Betrifft nur die Entwicklung, nicht den Betrieb - die Tests liegen nicht im Image.",
+        ],
+    },
+    {
         "version": "0.21.0",
         "date": "2026-09-16",
         "title": "Karte: Ladevorgänge eines Ortes",

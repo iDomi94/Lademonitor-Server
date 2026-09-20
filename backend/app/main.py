@@ -4,7 +4,7 @@ import os
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -37,6 +37,7 @@ from .routers import (
     providers,
     sessions,
     stats,
+    sync,
     vehicles,
     webdav_backup,
 )
@@ -154,6 +155,7 @@ app.include_router(providers.router, dependencies=[Depends(get_current_user)])
 app.include_router(locations.router, dependencies=[Depends(get_current_user)])
 app.include_router(sessions.router, dependencies=[Depends(get_current_user)])
 app.include_router(stats.router, dependencies=[Depends(get_current_user)])
+app.include_router(sync.router, dependencies=[Depends(get_current_user)])
 app.include_router(importer.router, dependencies=[Depends(get_current_user)])
 app.include_router(geocoding.router, dependencies=[Depends(get_current_user)])
 app.include_router(backup.router, dependencies=[Depends(get_current_user)])
@@ -345,6 +347,65 @@ def privacy_page(request: Request, db: Session = Depends(get_db)):
         request, db, "privacy.html",
         controller=controller,
         controller_configured=bool(controller["name"] and controller["email"]),
+    )
+
+
+@app.get("/manifest.webmanifest", include_in_schema=False)
+def web_app_manifest():
+    """Macht die Web-Oberflaeche installierbar ("Zum Startbildschirm
+    hinzufuegen" mit eigenem Fenster statt Browser-Tab).
+
+    Liegt bewusst auf OBERSTER Ebene und nicht unter `/static/`: `start_url`
+    und `scope` werden relativ zur Adresse DES MANIFESTS aufgeloest - unter
+    `/static/manifest.webmanifest` waere der Geltungsbereich der App also
+    `/static/`, und ein Start wuerde im Dateiverzeichnis landen statt im
+    Dashboard. Aus demselben Grund stehen hier ausschliesslich relative Pfade
+    (`.`, `static/...`): damit das Ganze sowohl am Domain-Root (Unraid+Nginx)
+    als auch unter dem Home-Assistant-Ingress-Unterpfad aufgeht - dieselbe
+    Regel wie fuer alle Seiten und fetch()-Aufrufe (siehe CLAUDE.md).
+
+    Ohne Anmeldung erreichbar: der Browser holt das Manifest teils ohne die
+    Cookies der Seite, und die Login-Seite selbst soll installierbar sein.
+    Personenbezogene Daten stehen nicht drin.
+    """
+    return JSONResponse(
+        {
+            "name": "Lademonitor",
+            "short_name": "Lademonitor",
+            "description": "Ladevorgang-Tracking für E-Autos",
+            "start_url": ".",
+            "scope": ".",
+            "display": "standalone",
+            # Wie style.css (--bg / --brand) - sonst blitzt beim Start ein
+            # weisser Rahmen um die dunkle Oberflaeche auf.
+            "background_color": "#0f1420",
+            "theme_color": "#3bf07c",
+            "icons": [
+                {"src": "static/icon-192.png", "sizes": "192x192", "type": "image/png"},
+                {"src": "static/icon-512.png", "sizes": "512x512", "type": "image/png"},
+                {
+                    "src": "static/icon-512.png",
+                    "sizes": "512x512",
+                    "type": "image/png",
+                    "purpose": "maskable",
+                },
+            ],
+        },
+        media_type="application/manifest+json",
+    )
+
+
+@app.get("/sw.js", include_in_schema=False)
+def service_worker():
+    """Der Service Worker muss vom WURZELPFAD der App ausgeliefert werden, nicht
+    aus `/static/`: sein Geltungsbereich ist standardmaessig sein eigenes
+    Verzeichnis, unter `/static/sw.js` wuerde er also nur fuer Dateien gelten
+    und die App bliebe nicht installierbar. Inhaltlich ist er ein reiner
+    Durchreicher ohne Cache - Begruendung steht in static/sw.js selbst."""
+    return FileResponse(
+        "app/static/sw.js",
+        media_type="application/javascript",
+        headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "./"},
     )
 
 

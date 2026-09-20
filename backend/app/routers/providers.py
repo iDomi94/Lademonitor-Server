@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from .. import models, schemas
 from ..auth import get_current_user
 from ..database import get_db
+from ..sync import record_deletion
 
 router = APIRouter(prefix="/api/providers", tags=["providers"])
 
@@ -60,6 +61,8 @@ def delete_provider(
     user: models.User = Depends(get_current_user),
 ):
     provider = _get_owned(db, user, provider_id)
+    # Grabstein VOR dem Loeschen, im selben Commit - siehe sync.record_deletion().
+    record_deletion(db, user.id, models.SyncEntityType.PROVIDER, provider.id)
     db.delete(provider)
     db.commit()
 

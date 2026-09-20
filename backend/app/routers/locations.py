@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from .. import models, schemas
 from ..auth import get_current_user
 from ..database import get_db
+from ..sync import record_deletion
 
 router = APIRouter(prefix="/api/locations", tags=["locations"])
 
@@ -82,6 +83,8 @@ def delete_location(
     user: models.User = Depends(get_current_user),
 ):
     location = _get_owned(db, user, location_id)
+    # Grabstein VOR dem Loeschen, im selben Commit - siehe sync.record_deletion().
+    record_deletion(db, user.id, models.SyncEntityType.LOCATION, location.id)
     db.delete(location)
     db.commit()
 

@@ -38,9 +38,19 @@ via TestFlight: [testflight.apple.com/join/NMbyFTEK](https://testflight.apple.co
   locations, charging sessions), designed for re-setting up the server
 - Multi-user capable: registration, login, each user has their own, fully
   isolated dataset
+- **Map view** (since 0.20.0) of your charging locations (including their
+  matching radius) and every charging session that has coordinates, with
+  clustering, previews and a legend that doubles as a filter. Leaflet ships
+  locally inside the image; only the map tiles come from OpenStreetMap – noted
+  below the map and in the privacy policy.
+- **Installable as an app**: the web UI ships a web app manifest and can be
+  added to the home screen (its own window instead of a browser tab).
+  Deliberately without caching, so an update takes effect immediately.
 - Server-rendered web UI (no separate frontend build needed), pure REST API
-  for Home Assistant and the
-  [iOS app](https://github.com/iDomi94/Lademonitor-App) (separate repo)
+  for Home Assistant, the
+  [iOS app](https://github.com/iDomi94/Lademonitor-App) and the
+  [Android app](https://github.com/iDomi94/Lademonitor-Android) (separate
+  repos)
 
 ## Getting started / installation
 
@@ -104,6 +114,18 @@ the internal Postgres instance can optionally be overridden via `.env`
 (see `.env.example`) – the Compose-internal default is not sensitive, since
 Postgres is not exposed externally. `FIELD_ENCRYPTION_KEY` in the same
 `.env` is optional too, see [Security note](#security-note).
+
+### Tests
+
+Run without any container, against an in-memory SQLite:
+```bash
+pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+cd backend && python -m pytest
+```
+The same run happens on every push and pull request via
+`.github/workflows/tests.yml`. **The database migrations are not covered**
+(`run_light_migrations()`, deliberately Postgres-specific SQL) – keep checking
+those against a copy of the real database, see `CLAUDE.md`.
 
 ---
 
