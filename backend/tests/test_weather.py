@@ -152,16 +152,32 @@ def test_self_hosted_url_keeps_one_host_for_both_endpoints():
 # ---------------------------------------------------------------------------
 
 
-def test_value_is_interpolated_between_the_surrounding_hours():
-    client, _ = make_client(_series(datetime(2026, 1, 15, 0, 0), [float(i) for i in range(48)]))
-    # 12:30 UTC liegt genau zwischen 12:00 (=12.0) und 13:00 (=13.0).
-    query = weather.TempQuery("s1", datetime(2026, 1, 15, 12, 30), 48.80, 9.01)
+def test_the_value_is_the_daytime_mean_not_the_moment_of_plugging_in(monkeypatch):
+    """Der Wert soll die FAHRT beschreiben, nicht den Moment des Einsteckens.
 
-    result = weather.fetch_temperatures(
-        [query], client=client, today=datetime(2026, 1, 20).date()
-    )
+    Zwischen zwei Ladevorgaengen liegen hier leicht zwei Wochen und zwanzig
+    Fahrten - ein einzelner Messpunkt ist dafuer nur eine Tendenz. Der
+    Wetterdienst kann mitteln, also tut er es (ein Fahrzeugsensor kann es
+    nicht, dessen Werte bleiben deshalb unberuehrt).
+    """
+    monkeypatch.setenv("TZ", "UTC")
+    time.tzset()
+    try:
+        client, _ = make_client(
+            _series(datetime(2026, 1, 15, 0, 0), [float(i) for i in range(48)])
+        )
+        # Eingesteckt um 22:00 - der Wert dort waere 22.0. Gemittelt wird ueber
+        # 6-20 Uhr desselben Tages, also die Werte 6..20 -> 13.0.
+        query = weather.TempQuery("s1", datetime(2026, 1, 15, 22, 0), 48.80, 9.01)
 
-    assert result["s1"] == pytest.approx(12.5)
+        result = weather.fetch_temperatures(
+            [query], client=client, today=datetime(2026, 1, 20).date()
+        )
+
+        assert result["s1"] == pytest.approx(13.0)
+    finally:
+        monkeypatch.delenv("TZ", raising=False)
+        time.tzset()
 
 
 def test_local_wall_clock_is_converted_to_utc(monkeypatch):
@@ -180,7 +196,9 @@ def test_local_wall_clock_is_converted_to_utc(monkeypatch):
         client, _ = make_client(
             _series(datetime(2026, 7, 1, 0, 0), [float(i) for i in range(48)])
         )
-        # Sommerzeit: 14:00 lokal ist 12:00 UTC, der Wert dort ist 12.0.
+        # Sommerzeit (UTC+2): lokal 6-20 Uhr ist UTC 04:00..18:00, also die
+        # Werte 4..18 -> Mittel 11.0. Ohne Umrechnung kaeme das UTC-Fenster
+        # 6..20 heraus und damit 13.0.
         naive_local = datetime(2026, 7, 1, 14, 0)
 
         result = weather.fetch_temperatures(
@@ -189,23 +207,33 @@ def test_local_wall_clock_is_converted_to_utc(monkeypatch):
             today=datetime(2026, 7, 10).date(),
         )
 
-        assert result["s1"] == pytest.approx(12.0)
+        assert result["s1"] == pytest.approx(11.0)
     finally:
         monkeypatch.delenv("TZ", raising=False)
         time.tzset()
 
 
-def test_timezone_aware_timestamps_are_converted_too():
-    client, _ = make_client(_series(datetime(2026, 7, 1, 0, 0), [float(i) for i in range(48)]))
-    aware = datetime(2026, 7, 1, 14, 0, tzinfo=timezone(timedelta(hours=2)))  # 12:00 UTC
+def test_timezone_aware_timestamps_are_converted_too(monkeypatch):
+    """Eine zonenbehaftete Angabe (aus einem API-Payload) muss denselben
+    lokalen Ladetag treffen wie eine naive aus der Datenbank."""
+    monkeypatch.setenv("TZ", "Europe/Berlin")
+    time.tzset()
+    try:
+        client, _ = make_client(
+            _series(datetime(2026, 7, 1, 0, 0), [float(i) for i in range(48)])
+        )
+        aware = datetime(2026, 7, 1, 14, 0, tzinfo=timezone(timedelta(hours=2)))
 
-    result = weather.fetch_temperatures(
-        [weather.TempQuery("s1", aware, 48.80, 9.01)],
-        client=client,
-        today=datetime(2026, 7, 10).date(),
-    )
+        result = weather.fetch_temperatures(
+            [weather.TempQuery("s1", aware, 48.80, 9.01)],
+            client=client,
+            today=datetime(2026, 7, 10).date(),
+        )
 
-    assert result["s1"] == pytest.approx(12.0)
+        assert result["s1"] == pytest.approx(11.0)
+    finally:
+        monkeypatch.delenv("TZ", raising=False)
+        time.tzset()
 
 
 def test_a_failing_service_yields_no_value_and_no_exception():
@@ -289,7 +317,7 @@ def test_applying_the_backfill_marks_the_source(client, db_session):
     assert report.written == 1
     db_session.refresh(row)
     assert row.outside_temp_c == pytest.approx(7.5)
-    assert row.outside_temp_source == models.TemperatureSource.WEATHER
+    assert row.outside_temp_source == models.TemperatureSource.WEATHER_DAILY
 
 
 def test_existing_values_are_never_overwritten(client, db_session):
@@ -420,7 +448,7 @@ def test_autofill_skips_users_who_did_not_opt_in(client, db_session, monkeypatch
     assert len(calls) == 1
     db_session.refresh(row)
     assert row.outside_temp_c == pytest.approx(11.5)
-    assert row.outside_temp_source == models.TemperatureSource.WEATHER
+    assert row.outside_temp_source == models.TemperatureSource.WEATHER_DAILY
 
 
 def test_autofill_leaves_old_sessions_to_the_backfill_button(client, db_session, monkeypatch):
@@ -534,7 +562,7 @@ def test_backfill_endpoint_defaults_to_a_dry_run(client, db_session, monkeypatch
 
 
 # ---------------------------------------------------------------------------
-# Zeilen ohne Uhrzeit (Spritmonitor-Import)
+# Zeilen ohne Uhrzeit (Spritmonitor-Import) - der schaerfste Fall des Fensters
 # ---------------------------------------------------------------------------
 
 
@@ -556,9 +584,7 @@ def test_a_row_without_a_time_gets_the_daytime_mean_not_the_midnight_value(monke
         client, _ = make_client(
             _series(datetime(2026, 1, 15, 0, 0), [float(i) for i in range(48)])
         )
-        query = weather.TempQuery(
-            "s1", datetime(2026, 1, 15, 0, 0), 48.80, 9.01, date_only=True
-        )
+        query = weather.TempQuery("s1", datetime(2026, 1, 15, 0, 0), 48.80, 9.01)
 
         result = weather.fetch_temperatures(
             [query], client=client, today=datetime(2026, 1, 20).date()
@@ -570,25 +596,10 @@ def test_a_row_without_a_time_gets_the_daytime_mean_not_the_midnight_value(monke
         time.tzset()
 
 
-def test_a_real_timestamp_at_midnight_stays_a_point_value():
-    """Gegenprobe zum Fenster: wer die Uhrzeit gesetzt hat, bekommt sie auch.
-    Das Fenster ist ein Notbehelf fuer fehlende Information, keine generelle
-    Glaettung."""
-    client, _ = make_client(
-        _series(datetime(2026, 1, 15, 0, 0), [float(i) for i in range(48)])
-    )
-    query = weather.TempQuery("s1", datetime(2026, 1, 15, 0, 0), 48.80, 9.01)
-
-    result = weather.fetch_temperatures(
-        [query], client=client, today=datetime(2026, 1, 20).date()
-    )
-
-    assert result["s1"] == pytest.approx(0.0)
-
-
-def test_imported_midnight_rows_are_marked_as_weather_daily(client, db_session):
-    """Die Herkunft muss die beiden Arten unterscheiden: ein Tagesmittel ist
-    nicht dasselbe wie ein Wert zu einem Zeitpunkt."""
+def test_every_fetched_row_is_marked_as_a_daily_mean(client, db_session):
+    """Die Herkunft muss die Arten unterscheiden: ein Tagesmittel ist nicht
+    dasselbe wie ein Fahrzeugsensor, der zwangslaeufig punktuell misst.
+    Unabhaengig davon, ob die Zeile eine Uhrzeit traegt."""
     register(client)
     vehicle = create_vehicle(client)
     user = db_session.query(models.User).first()
@@ -601,11 +612,11 @@ def test_imported_midnight_rows_are_marked_as_weather_daily(client, db_session):
         latitude=48.80,
         longitude=9.01,
     )
-    manual = _session_row(
+    with_time = _session_row(
         db_session,
         user.id,
         vehicle["id"],
-        start_time=datetime(2026, 1, 16, 0, 0),
+        start_time=datetime(2026, 1, 16, 17, 30),
         source=models.SessionSource.MANUAL,
         latitude=48.80,
         longitude=9.01,
@@ -615,9 +626,9 @@ def test_imported_midnight_rows_are_marked_as_weather_daily(client, db_session):
     weather.backfill_sessions(db_session, user, dry_run=False, client=http)
 
     db_session.refresh(imported)
-    db_session.refresh(manual)
+    db_session.refresh(with_time)
     assert imported.outside_temp_source == models.TemperatureSource.WEATHER_DAILY
-    assert manual.outside_temp_source == models.TemperatureSource.WEATHER
+    assert with_time.outside_temp_source == models.TemperatureSource.WEATHER_DAILY
 
 
 def test_refresh_replaces_weather_values_but_not_vehicle_or_manual_ones(client, db_session):
@@ -724,3 +735,39 @@ def test_the_refresh_preview_shows_the_previous_value(client, db_session):
 
     assert report.preview[0]["previous_temp_c"] == pytest.approx(-2.0)
     assert report.preview[0]["temp_c"] == pytest.approx(7.5)
+
+
+def test_autofill_never_touches_a_vehicle_value(client, db_session, monkeypatch):
+    """Die Grenze zwischen beiden Welten: der Wetterdienst mittelt ueber den
+    Tag, ein Fahrzeugsensor misst beim Einstecken. Ein vorhandener
+    Fahrzeugwert darf deshalb nie still durch ein Tagesmittel ersetzt
+    werden - sonst haette dieselbe Spalte zwei Bedeutungen."""
+    register(client)
+    vehicle = create_vehicle(client)
+    user = db_session.query(models.User).first()
+    user.weather_autofill_enabled = True
+    row = _session_row(
+        db_session,
+        user.id,
+        vehicle["id"],
+        start_time=datetime.utcnow() - timedelta(days=1),
+        latitude=48.80,
+        longitude=9.01,
+        outside_temp_c=3.0,
+        outside_temp_source=models.TemperatureSource.VEHICLE,
+    )
+    db_session.commit()
+
+    calls: list[list] = []
+
+    def fake_fetch(queries, **kwargs):
+        calls.append(queries)
+        return {q.session_id: 11.5 for q in queries}
+
+    monkeypatch.setattr(weather, "fetch_temperatures", fake_fetch)
+
+    assert weather.autofill_new_sessions(db_session) == 0
+    assert calls == [], "fuer eine Zeile mit Fahrzeugwert darf nichts abgefragt werden"
+    db_session.refresh(row)
+    assert row.outside_temp_c == pytest.approx(3.0)
+    assert row.outside_temp_source == models.TemperatureSource.VEHICLE

@@ -88,21 +88,27 @@ MAX_REQUESTS_PER_RUN = 50
 # getrennt holen.
 CLUSTER_GAP_DAYS = 60
 
-# Fenster fuer Zeilen, die gar keine Uhrzeit tragen (siehe TempQuery.date_only).
-# 6-20 Uhr LOKALZEIT, als Mittel ueber die Stundenwerte.
+# Fenster, ueber das JEDER vom Wetterdienst geholte Wert gemittelt wird:
+# 6-20 Uhr LOKALZEIT, als Mittel der Stundenwerte des Ladetages.
 #
-# Warum ueberhaupt ein Fenster: ein Spritmonitor-Import steht auf 00:00, und das
-# ist keine Angabe, sondern das Fehlen einer Angabe. Nimmt man sie beim Wort,
-# trifft man das Tagesminimum - an echten Stundendaten (Raum Stuttgart, 60 Tage)
-# im Mittel 3,9 K unter dem 6-20-Mittel, in der Spitze 8,8 K. Das ist ein
-# EINSEITIGER Fehler auf genau der Haelfte der Daten, also genau die Sorte, die
-# eine Trendlinie kippt.
+# Warum ein Fenster statt des Werts zum Ladebeginn: die Temperatur soll die
+# FAHRT beschreiben, nicht den Moment des Einsteckens (siehe Abschnitt
+# "Verbrauch nach Aussentemperatur" in CLAUDE.md, Punkt 1). Zwischen zwei
+# Ladevorgaengen liegen hier leicht zwei Wochen und zwanzig Fahrten - ein
+# einzelner Messpunkt ist dafuer nur eine Tendenz, ein Tagesmittel die
+# ehrlichere Auskunft. Der Wetterdienst KANN mitteln; ein Fahrzeugsensor kann
+# es nicht, deshalb bleiben dessen Werte (HA-Push, MyŠkoda-Poller) unberuehrt.
 #
-# Warum 6-20 und nicht 24 h: nachts wird kaum gefahren, und der Wert soll die
-# FAHRT beschreiben. Das 24-h-Mittel laege nochmal 1,6 K darunter. Die Grenzen
-# sind eine bewusste Vereinfachung - fuer eine Zeile ohne Uhrzeit gibt es keine
-# bessere Information, nur genauere Schaetzungen ueber die Gewohnheiten des
-# Fahrers, die wir nicht haben.
+# Besonders schlimm war der Punktwert bei Spritmonitor-Importen: die stehen
+# alle auf 00:00 (das ist das Fehlen einer Angabe, nicht die Angabe "kurz nach
+# Mitternacht"), und beim Wort genommen trifft man damit das TAGESMINIMUM - an
+# echten Stundendaten (Raum Stuttgart, 60 Tage) im Mittel 3,9 K unter dem
+# 6-20-Mittel, in der Spitze 8,8 K. Ein einseitiger Fehler auf genau der
+# Haelfte der Daten, also genau die Sorte, die eine Trendlinie kippt.
+#
+# Warum 6-20 und nicht 24 h: nachts wird kaum gefahren. Das 24-h-Mittel laege
+# nochmal rund 1,6 K darunter. Die Grenzen sind eine bewusste Vereinfachung -
+# genauere Schaetzungen ueber die Gewohnheiten des Fahrers haben wir nicht.
 DAILY_WINDOW_START_HOUR = 6
 DAILY_WINDOW_END_HOUR = 20
 
@@ -125,10 +131,6 @@ class TempQuery:
     when: datetime
     latitude: float
     longitude: float
-    # True, wenn `when` nur ein DATUM traegt und die 00:00 keine Messung sind
-    # (Spritmonitor-Import). Dann wird nicht auf die Stunde interpoliert,
-    # sondern ueber das Tagesfenster gemittelt - siehe DAILY_WINDOW_START_HOUR.
-    date_only: bool = False
 
 
 def round_coord(value: float) -> float:
@@ -178,34 +180,19 @@ def _cluster_dates(dates: list[date]) -> list[tuple[date, date]]:
     return ranges
 
 
-def _interpolate(series: dict[datetime, float], when: datetime) -> float | None:
-    """Wert zu einem Zeitpunkt aus Stundenwerten.
-
-    Zwischen den beiden umgebenden Stunden wird linear interpoliert - auf die
-    volle Stunde zu runden traegt sonst eine Treppe in die Streuung, die gar
-    nicht im Wetter steckt.
-    """
-    floor = when.replace(minute=0, second=0, microsecond=0)
-    ceil = floor + timedelta(hours=1)
-    low = series.get(floor)
-    high = series.get(ceil)
-    if low is None:
-        return high
-    if high is None:
-        return low
-    fraction = (when - floor).total_seconds() / 3600
-    return low + (high - low) * fraction
-
-
 def _daily_window_utc(when: datetime) -> tuple[datetime, datetime]:
-    """Tagesfenster (lokal 6-20 Uhr) einer Zeile ohne Uhrzeit, in naiver UTC.
+    """Tagesfenster (lokal 6-20 Uhr) zum Ladetag, in naiver UTC.
 
-    Gerechnet wird ueber die LOKALE Kalenderdatum-Angabe: `when` traegt bei
-    diesen Zeilen 00:00 Lokalzeit, und genau dieser Tag ist gemeint. Erst die
-    beiden Fenstergrenzen werden nach UTC geschoben - in Mitteleuropa liegt
-    lokal 00:00 bereits im UTC-Vortag, ein Umweg ueber die UTC-Datumsangabe
-    haette also den falschen Tag erwischt.
+    Gerechnet wird ueber das LOKALE Kalenderdatum von `when`: das ist der Tag,
+    an dem geladen wurde. Erst die beiden Fenstergrenzen werden nach UTC
+    geschoben - in Mitteleuropa liegt lokal 00:00 bereits im UTC-Vortag, ein
+    Umweg ueber die UTC-Datumsangabe haette also den falschen Tag erwischt.
     """
+    # Eine zonenbehaftete Angabe (aus einem API-Payload) zuerst in lokale
+    # Wandzeit holen: sonst waere der Tag der ihres Offsets, nicht der, an dem
+    # hier geladen wurde. Aus der DB kommt start_time ohnehin naiv.
+    if when.tzinfo is not None:
+        when = when.astimezone().replace(tzinfo=None)
     day = when.date()
     start_local = datetime.combine(day, dt_time(hour=DAILY_WINDOW_START_HOUR))
     end_local = datetime.combine(day, dt_time(hour=DAILY_WINDOW_END_HOUR))
@@ -218,8 +205,8 @@ def _window_mean(
     """Mittel aller Stundenwerte im Fenster [start, end], Grenzen einschliesslich.
 
     Fehlen einzelne Stunden, wird ueber die vorhandenen gemittelt - ein
-    unvollstaendiges Fenster ist immer noch naeher dran als der Mitternachtswert,
-    den es ersetzt. Gar keine Stunde im Fenster ergibt None.
+    unvollstaendiges Fenster ist immer noch naeher dran als ein einzelner
+    Punktwert. Gar keine Stunde im Fenster ergibt None.
     """
     values = [value for hour, value in series.items() if start <= hour <= end]
     if not values:
@@ -269,23 +256,22 @@ def fetch_temperatures(
     today = today or datetime.utcnow().date()
     archive_before = today - timedelta(days=ARCHIVE_SWITCH_DAYS)
 
-    # (Endpunkt, lat, lon) -> {Tag -> [(Anfrage, Beginn, Ende)]}. `Ende` ist
-    # None bei einem Zeitpunkt und gesetzt bei einer Zeile ohne Uhrzeit, fuer
-    # die ueber das Tagesfenster gemittelt wird.
-    Entry = tuple[TempQuery, datetime, "datetime | None"]
+    # (Endpunkt, lat, lon) -> {Tag -> [(Anfrage, Fensterbeginn, Fensterende)]}.
+    # Gemittelt wird immer ueber das Tagesfenster, nie ueber einen Zeitpunkt -
+    # siehe DAILY_WINDOW_START_HOUR.
+    Entry = tuple[TempQuery, datetime, datetime]
     buckets: dict[tuple[str, float, float], dict[date, list[Entry]]] = {}
     for query in queries:
-        if query.date_only:
-            when_utc, window_end = _daily_window_utc(query.when)
-        else:
-            when_utc, window_end = _to_utc(query.when), None
-        day = when_utc.date()
+        window_start, window_end = _daily_window_utc(query.when)
+        day = window_start.date()
         # Alles juenger als ARCHIVE_SWITCH_DAYS holt der Vorhersage-Endpunkt
         # (kein Verzug), alles aeltere das Archiv. Die Grenze liegt in beiden
         # Fenstern, es faellt also nichts dazwischen.
         endpoint = "archive" if day < archive_before else "forecast"
         key = (endpoint, round_coord(query.latitude), round_coord(query.longitude))
-        buckets.setdefault(key, {}).setdefault(day, []).append((query, when_utc, window_end))
+        buckets.setdefault(key, {}).setdefault(day, []).append(
+            (query, window_start, window_end)
+        )
 
     owns_client = client is None
     client = client or httpx.Client(timeout=REQUEST_TIMEOUT_SECONDS)
@@ -311,9 +297,8 @@ def fetch_temperatures(
                     "hourly": "temperature_2m",
                     "timezone": "UTC",
                     "start_date": start.isoformat(),
-                    # Einen Tag Puffer: eine Stunde kurz vor Mitternacht UTC
-                    # braucht zum Interpolieren noch den ersten Wert des
-                    # Folgetags.
+                    # Einen Tag Puffer: das lokale Fenster eines Tages reicht
+                    # je nach Zeitzone in den UTC-Folgetag hinein.
                     "end_date": (end + timedelta(days=1)).isoformat(),
                 }
                 try:
@@ -328,11 +313,8 @@ def fetch_temperatures(
                 for day in sorted(by_day):
                     if not (start <= day <= end):
                         continue
-                    for query, when_utc, window_end in by_day[day]:
-                        if window_end is not None:
-                            value = _window_mean(series, when_utc, window_end)
-                        else:
-                            value = _interpolate(series, when_utc)
+                    for query, window_start, window_end in by_day[day]:
+                        value = _window_mean(series, window_start, window_end)
                         if value is not None:
                             result[query.session_id] = round(value, 1)
     finally:
@@ -344,28 +326,6 @@ def fetch_temperatures(
 # ---------------------------------------------------------------------------
 # Anwendung auf Ladevorgaenge
 # ---------------------------------------------------------------------------
-
-
-def is_date_only(session: models.ChargingSession) -> bool:
-    """Traegt der Vorgang nur ein Datum, aber keine echte Uhrzeit?
-
-    Trifft auf Spritmonitor-Importe zu: die Export-Datei hat keine Uhrzeit,
-    der Importer setzt deshalb 00:00. Das ist das FEHLEN einer Angabe, nicht
-    die Angabe "kurz nach Mitternacht" - wer sie beim Wort nimmt, trifft
-    systematisch das Tagesminimum (siehe DAILY_WINDOW_START_HOUR).
-
-    Die Erkennung ist bewusst eng: NUR importierte Zeilen, und nur die exakte
-    Mitternacht. Ein von Hand um 00:00 angelegter Vorgang bleibt ein
-    Zeitpunkt - dort hat der Nutzer die Uhrzeit ja gesetzt. Dass ein Import
-    zufaellig wirklich um Mitternacht begann, kommt vor; das Fenster ist dann
-    die schlechtere Auskunft, aber eben nur in diesem einen Fall statt in
-    allen anderen.
-    """
-    return (
-        session.source == models.SessionSource.IMPORT
-        and session.start_time is not None
-        and session.start_time.time() == dt_time(0, 0)
-    )
 
 
 def coordinates_for(session: models.ChargingSession) -> tuple[float, float] | None:
@@ -401,14 +361,13 @@ class BackfillReport:
 PREVIEW_LIMIT = 50
 
 
-def _source_for(date_only: bool) -> models.TemperatureSource:
-    return (
-        models.TemperatureSource.WEATHER_DAILY
-        if date_only
-        else models.TemperatureSource.WEATHER
-    )
+# Jeder hier geholte Wert ist ein Tagesmittel (siehe DAILY_WINDOW_START_HOUR),
+# nie eine Messung zu einem Zeitpunkt.
+WRITTEN_SOURCE = models.TemperatureSource.WEATHER_DAILY
 
-
+# Beide gelten als "vom Wetterdienst geholt" und sind damit durch einen
+# Korrekturlauf ersetzbar. WEATHER steht nur noch fuer Bestandszeilen aus der
+# Zeit vor v0.24.1, als der Wert zum Ladebeginn geholt wurde.
 WEATHER_SOURCES = (
     models.TemperatureSource.WEATHER,
     models.TemperatureSource.WEATHER_DAILY,
@@ -471,7 +430,6 @@ def backfill_sessions(
                 when=session.start_time,
                 latitude=coords[0],
                 longitude=coords[1],
-                date_only=is_date_only(session),
             )
         )
         by_id[session.id] = session
@@ -496,7 +454,7 @@ def backfill_sessions(
         if dry_run:
             continue
         session.outside_temp_c = value
-        session.outside_temp_source = _source_for(is_date_only(session))
+        session.outside_temp_source = WRITTEN_SOURCE
         report.written += 1
 
     if not dry_run and report.written:
@@ -543,8 +501,7 @@ def autofill_new_sessions(db: Session) -> int:
                     when=session.start_time,
                     latitude=coords[0],
                     longitude=coords[1],
-                    date_only=is_date_only(session),
-                )
+                    )
             )
             by_id[session.id] = session
         if not queries:
@@ -554,7 +511,7 @@ def autofill_new_sessions(db: Session) -> int:
         ).items():
             session = by_id[session_id]
             session.outside_temp_c = value
-            session.outside_temp_source = _source_for(is_date_only(session))
+            session.outside_temp_source = WRITTEN_SOURCE
             filled += 1
         db.commit()
     return filled

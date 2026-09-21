@@ -8,20 +8,26 @@ folgen [Semantic Versioning](https://semver.org/).
 
 ## [0.24.1] — 2026-09-21
 
+### Changed
+- **Der Wetterdienst liefert jetzt das Tagesmittel** (6–20 Uhr Lokalzeit,
+  `weather.DAILY_WINDOW_START_HOUR`) statt des Werts zum Ladebeginn – für
+  JEDEN geholten Wert, nicht nur für Sonderfälle. Der Verbrauch eines
+  Ladevorgangs stammt von der Fahrt davor, und zwischen zwei Ladevorgängen
+  liegen leicht zwei Wochen und zwanzig Fahrten; ein Punktwert ist dafür nur
+  eine Tendenz. Werte aus dem Fahrzeug (HA-Push, MyŠkoda-Poller) bleiben
+  unberührt – ein Fahrzeugsensor kann nicht mitteln.
+- **`TemperatureSource.weather_daily`** ist damit der Normalfall für alles,
+  was der Wetterdienst schreibt; `weather` steht nur noch für Bestandszeilen
+  aus der Zeit davor. Ohne die Unterscheidung lägen zwei verschiedene
+  Messgrößen unbemerkt in derselben Spalte.
+
 ### Fixed
-- **Temperatur-Nachtrag für Spritmonitor-Importe**: diese Zeilen tragen keine
-  Uhrzeit (der Importer setzt 00:00). Der Nachtrag hat die Mitternacht beim
-  Wort genommen und damit systematisch das Tagesminimum geholt – an echten
-  Stundendaten im Mittel 3,9 K zu kalt, in der Spitze 8,8 K, und zwar
-  einseitig auf genau der Hälfte der Daten. Solche Zeilen bekommen jetzt das
-  Mittel über 6–20 Uhr Lokalzeit (`weather.DAILY_WINDOW_START_HOUR`). Die
-  Erkennung ist eng: nur `source == import` UND exakt 00:00 – ein von Hand
-  gesetzter Zeitpunkt bleibt ein Zeitpunkt.
+- **Spritmonitor-Importe** tragen keine Uhrzeit (der Importer setzt 00:00).
+  Beim Wort genommen traf der alte Punktwert dort systematisch das
+  Tagesminimum – an echten Stundendaten im Mittel 3,9 K zu kalt, in der
+  Spitze 8,8 K, einseitig auf genau der Hälfte der Daten.
 
 ### Added
-- **`TemperatureSource.weather_daily`**: vierter Wert für genau diese Zeilen.
-  Ein Tagesmittel ist keine Messung zu einem Zeitpunkt; ohne eigene Herkunft
-  würden beide Arten in `temperature.py` unbemerkt vermischt.
 - **`POST /api/weather/backfill?refresh=true`**: Korrekturlauf für alle, die
   den Nachtrag vor dieser Änderung haben laufen lassen. Holt Werte neu, deren
   Herkunft `weather`/`weather_daily` ist – `vehicle` und `manual` bleiben

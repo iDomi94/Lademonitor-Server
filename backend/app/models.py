@@ -42,15 +42,15 @@ class TemperatureSource(str, enum.Enum):
 
     VEHICLE = "vehicle"
     MANUAL = "manual"
+    # Nur noch Bestandszeilen: bis v0.24.1 holte der Wetterdienst den Wert zum
+    # Ladebeginn. Neue Abrufe schreiben ausschliesslich WEATHER_DAILY.
     WEATHER = "weather"
-    # Wie WEATHER, aber als Mittel ueber die Tagstunden geholt statt zu einem
-    # Zeitpunkt - fuer Zeilen, die gar keine Uhrzeit tragen (Spritmonitor-
-    # Importe stehen alle auf 00:00). Eigener Wert, weil das eine andere
-    # Messgroesse ist: Mitternacht liegt im Jahresmittel mehrere Grad unter dem
-    # Tagesmittel, ein Punktwert waere dort also systematisch zu kalt, und ein
-    # Fenstermittel ist entsprechend unschaerfer als ein echter Zeitpunkt.
-    # Sichtbar in der Detailansicht, filterbar in der Auswertung, mit einem
-    # UPDATE wieder entfernbar.
+    # Vom Wetterdienst, aber als Mittel ueber die Tagstunden (6-20 Uhr) statt
+    # zu einem Zeitpunkt - seit v0.24.1 der Normalfall fuer JEDEN geholten
+    # Wert. Eigener Wert, weil das eine andere Messgroesse ist als ein
+    # Fahrzeugsensor: der misst zwangslaeufig punktuell und kann nicht mitteln,
+    # ein Tagesmittel ist dafuer unschaerfer als ein echter Zeitpunkt. Ohne die
+    # Unterscheidung wuerden beide Arten in temperature.py unbemerkt vermischt.
     WEATHER_DAILY = "weather_daily"
 
 
