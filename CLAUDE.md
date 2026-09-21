@@ -637,10 +637,16 @@ Icon/Tooltip-Logik in der SessionsList-View.
   Local-Only-Modus; Android brauchte dafuer die Room-Migration 1->2). Dass ein
   App-Speichern OHNE das Feld den Wert nicht loescht, haengt allein an
   `exclude_unset` in `update_session()` und ist in
-  `tests/test_temperature.py` festgehalten. **Weiterhin offen:** die
-  Auswertung selbst (Streudiagramm, Trend) gibt es nur im Web-Dashboard - sie
-  in den Apps anzubieten hiesse, `temperature.py` ein drittes Mal nachzubauen,
-  wie schon bei `LocalConsumptionCalculator`.
+  `tests/test_temperature.py` festgehalten. **Ebenfalls erledigt seit 2026-09-21:** die
+  Auswertung selbst (Streudiagramm, Klassenmittel, Trend, Jahreszeiten) gibt es
+  jetzt auch in beiden Apps - aber **nur im Server-Modus**, als fertige Antwort
+  von `GET /api/stats/temperature`. Sie lokal nachzurechnen hiesse,
+  `temperature.py` ein drittes Mal nachzubauen (wie schon bei
+  `LocalConsumptionCalculator`), mit der Aussicht, dass App und Web frueher oder
+  spaeter andere Zahlen zeigen. Im Local-Only-Modus bleibt der Abschnitt daher
+  weg, ebenso wenn der Abruf scheitert (aelterer Server ohne den Endpunkt) -
+  das Dashboard ist deshalb nicht fehlgeschlagen. **Weiterhin offen:** dieselbe
+  Auswertung im Local-Only-Modus.
 - **Xcode-Beta-Umgebung des Nutzers:** macOS 27 Beta + Xcode 27 Beta
   (Erstbeta, Stand Aug 2026). Es gab einen `dyld_shared_cache_extract_dylibs`
   Bug beim Installieren auf echtem Gerät - gelöst durch Löschen von
