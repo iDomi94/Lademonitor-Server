@@ -171,6 +171,50 @@
   </div>
 </details>
 
+<details class="panel" id="weather-panel">
+  <summary>{{ t('settings.weather.heading') }}</summary>
+  <div class="inner">
+    <p style="color:var(--muted); font-size:0.9em; margin-top:0">{{ t('settings.weather.description') }}</p>
+
+    {# Was den Server verlaesst, steht direkt ueber dem Schalter und nicht in
+       einer Fussnote: der Schalter ist die Einwilligung, die Erklaerung
+       gehoert daneben. #}
+    <details class="help">
+      <summary>{{ t('settings.weather.privacy_summary') }}</summary>
+      <p>{{ t('settings.weather.privacy_text') }}</p>
+      <p><strong>{{ t('settings.weather.privacy_target') }}</strong> <span id="w-effective-url">–</span></p>
+    </details>
+
+    <form class="inline-form" id="weather-form">
+      <div class="form-row-wide">
+        <label><input type="checkbox" id="w-enabled" style="width:auto; display:inline-block; margin-right:6px">{{ t('settings.weather.enabled') }}</label>
+      </div>
+      <div class="form-row-wide">
+        <label>{{ t('settings.weather.api_url') }}</label>
+        <input type="text" id="w-url" placeholder="https://api.open-meteo.com">
+        <small style="color:var(--muted)">{{ t('settings.weather.api_url_hint') }}</small>
+      </div>
+      <div class="form-actions">
+        <button type="submit">{{ t('settings.weather.save') }}</button>
+      </div>
+    </form>
+    <div id="weather-status" style="font-size:0.9em"></div>
+
+    <details class="panel plain" id="weather-backfill-panel">
+      <summary>{{ t('settings.weather.backfill_heading') }}</summary>
+      <div class="inner">
+        <p style="color:var(--muted); font-size:0.9em">{{ t('settings.weather.backfill_description') }}</p>
+        <div class="form-actions">
+          <button type="button" id="w-preview">{{ t('settings.weather.backfill_preview') }}</button>
+          <button type="button" id="w-apply" hidden>{{ t('settings.weather.backfill_apply') }}</button>
+        </div>
+        <div id="weather-backfill-status" style="font-size:0.9em"></div>
+        <div class="tablewrap"><table id="weather-backfill-table"></table></div>
+      </div>
+    </details>
+  </div>
+</details>
+
 <details class="panel" id="notifications-panel">
   <summary>{{ t('settings.notifications.heading') }}</summary>
   <div class="inner">
@@ -304,6 +348,15 @@ const T = {
   locationSearching: {{ t('settings.location.searching')|tojson }},
   locationNoResults: {{ t('settings.location.no_results')|tojson }},
   locationAppliedPrefix: {{ t('settings.location.applied_prefix')|tojson }},
+
+  weatherSaved: {{ t('settings.weather.saved')|tojson }},
+  weatherRunning: {{ t('settings.weather.running')|tojson }},
+  weatherPreviewSummary: {{ t('settings.weather.preview_summary')|tojson }},
+  weatherApplied: {{ t('settings.weather.applied')|tojson }},
+  weatherNothingToDo: {{ t('settings.weather.nothing_to_do')|tojson }},
+  weatherConfirmApply: {{ t('settings.weather.confirm_apply')|tojson }},
+  weatherColDate: {{ t('settings.weather.col_date')|tojson }},
+  weatherColTemp: {{ t('settings.weather.col_temp')|tojson }},
 
   usersRoleAdmin: {{ t('settings.users.role_admin')|tojson }},
   usersRoleUser: {{ t('settings.users.role_user')|tojson }},
@@ -778,6 +831,105 @@ async function loadMe() {
   renderNotifications();
 }
 
+// ---------- Aussentemperatur vom Wetterdienst ----------
+// Der Nachtrag laeuft immer ZWEISTUFIG: erst ein Probelauf, der wirklich
+// abfragt aber nichts schreibt, dann das Uebernehmen. Eine Vorschau, die nur
+// zaehlt, wieviele Vorgaenge in Frage kaemen, saehe auch dann gut aus, wenn
+// der Dienst gar keine Werte liefert.
+let weatherPreviewCount = 0;
+
+async function loadWeather() {
+  const res = await fetch('api/weather/settings');
+  if (!res.ok) return;
+  const cfg = await res.json();
+  document.getElementById('w-enabled').checked = cfg.enabled;
+  document.getElementById('w-url').value = cfg.api_url || '';
+  document.getElementById('w-effective-url').textContent = cfg.effective_api_url;
+}
+
+function renderBackfill(result) {
+  const table = document.getElementById('weather-backfill-table');
+  if (!result.preview.length) {
+    table.innerHTML = '';
+    return;
+  }
+  const head = `<tr><th>${T.weatherColDate}</th><th>${T.weatherColTemp}</th></tr>`;
+  const rows = result.preview.map((item) => {
+    // Gleiches Format wie in der Ladevorgangs-Liste (sessions.html), damit
+    // man die Zeile dort wiederfindet - insbesondere ohne Sekunden.
+    const when = new Date(item.start_time).toLocaleString(window.LADEMONITOR_LANG,
+      { dateStyle: 'medium', timeStyle: 'short' });
+    return `<tr><td>${when}</td><td>${item.temp_c.toFixed(1)} °C</td></tr>`;
+  }).join('');
+  table.innerHTML = head + rows;
+}
+
+function backfillSummary(result) {
+  return T.weatherPreviewSummary
+    .replace('{resolved}', result.resolved)
+    .replace('{considered}', result.considered)
+    .replace('{already}', result.already_set)
+    .replace('{nocoords}', result.without_coordinates)
+    .replace('{unresolved}', result.unresolved);
+}
+
+async function runBackfill(dryRun) {
+  const status = document.getElementById('weather-backfill-status');
+  const apply = document.getElementById('w-apply');
+  status.textContent = T.weatherRunning;
+  status.style.color = 'var(--muted)';
+  const res = await fetch('api/weather/backfill?dry_run=' + (dryRun ? 'true' : 'false'), {
+    method: 'POST',
+  });
+  if (!res.ok) {
+    status.textContent = T.errorPrefix + await res.text();
+    status.style.color = 'var(--danger)';
+    return;
+  }
+  const result = await res.json();
+  renderBackfill(result);
+  weatherPreviewCount = result.resolved;
+  if (dryRun) {
+    status.textContent = backfillSummary(result);
+    status.style.color = 'var(--muted)';
+    apply.hidden = result.resolved === 0;
+    if (!result.resolved) status.textContent = T.weatherNothingToDo;
+  } else {
+    status.textContent = T.weatherApplied.replace('{written}', result.written);
+    status.style.color = 'var(--accent)';
+    apply.hidden = true;
+  }
+}
+
+document.getElementById('weather-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const status = document.getElementById('weather-status');
+  const res = await fetch('api/weather/settings', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      enabled: document.getElementById('w-enabled').checked,
+      api_url: document.getElementById('w-url').value.trim() || null,
+    })
+  });
+  if (!res.ok) {
+    status.textContent = T.errorPrefix + await res.text();
+    status.style.color = 'var(--danger)';
+    return;
+  }
+  const cfg = await res.json();
+  document.getElementById('w-effective-url').textContent = cfg.effective_api_url;
+  status.textContent = T.weatherSaved;
+  status.style.color = 'var(--accent)';
+});
+
+document.getElementById('w-preview').addEventListener('click', () => runBackfill(true));
+document.getElementById('w-apply').addEventListener('click', () => {
+  // Zweite Ruecksprache vor dem Schreiben: der Lauf beruehrt potenziell
+  // hunderte Bestandsvorgaenge auf einmal.
+  if (!confirm(T.weatherConfirmApply.replace('{count}', weatherPreviewCount))) return;
+  runBackfill(false);
+});
+
 document.getElementById('email-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const status = document.getElementById('email-status');
@@ -877,6 +1029,7 @@ document.getElementById('language-form').addEventListener('submit', async (e) =>
 
 (async () => {
   await loadMe();
+  await loadWeather();
   await loadVehicles();
   await loadProviders();
   await loadLocations();

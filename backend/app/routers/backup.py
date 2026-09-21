@@ -56,6 +56,10 @@ SESSION_FIELDS = [
     # aber eine aeltere Backup-ZIP OHNE diese Spalte soll sich weiterhin
     # einlesen lassen, und ein Diff zweier Exporte bleibt so lesbar.
     "outside_temp_c",
+    # Ebenfalls hinten angehaengt (siehe oben): eine ZIP ohne diese Spalte -
+    # jedes Backup vor v0.24.0 - bleibt importierbar, die Herkunft ist dann
+    # eben unbekannt.
+    "outside_temp_source",
 ]
 
 README_TEMPLATE = """Lademonitor Backup
@@ -209,6 +213,7 @@ def build_backup_zip(db: Session, user: models.User) -> bytes:
             "external_session_id": _c(s.external_session_id), "notes": _c(s.notes),
             "created_at": _c(s.created_at), "updated_at": _c(s.updated_at),
             "outside_temp_c": _c(s.outside_temp_c),
+            "outside_temp_source": _c(s.outside_temp_source),
         }
         for s in sessions
     ]
@@ -522,6 +527,16 @@ async def import_backup(
         charging_type_raw = _parse_str(row.get("charging_type"))
         charging_type = models.ChargingType(charging_type_raw) if charging_type_raw else None
         source = models.SessionSource(_parse_str(row.get("source")) or "import")
+        # Fehlt die Spalte (Backup vor v0.24.0) oder traegt sie einen
+        # unbekannten Wert, bleibt die Herkunft NULL statt geraten zu werden -
+        # ein falsches "vom Fahrzeug" waere schlimmer als gar keine Angabe.
+        temp_source_raw = _parse_str(row.get("outside_temp_source"))
+        try:
+            temp_source = (
+                models.TemperatureSource(temp_source_raw) if temp_source_raw else None
+            )
+        except ValueError:
+            temp_source = None
 
         db.add(
             models.ChargingSession(
@@ -539,6 +554,7 @@ async def import_backup(
                 energy_is_estimated=_parse_bool(row.get("energy_is_estimated")),
                 odometer_km=_parse_int(row.get("odometer_km")),
                 outside_temp_c=_parse_float(row.get("outside_temp_c")),
+                outside_temp_source=temp_source,
                 price_total=_parse_float(row.get("price_total")),
                 price_per_kwh=_parse_float(row.get("price_per_kwh")),
                 latitude=_parse_float(row.get("latitude")),

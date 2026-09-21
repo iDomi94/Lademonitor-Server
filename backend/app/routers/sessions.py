@@ -175,6 +175,10 @@ def create_session(
     session = models.ChargingSession(
         **payload.model_dump(), source=models.SessionSource.MANUAL, user_id=user.id
     )
+    # Wer eine Temperatur schickt, ohne ihre Herkunft zu nennen, hat sie von
+    # Hand eingetragen - kein Client muss das Feld dafuer kennen.
+    if session.outside_temp_c is not None and session.outside_temp_source is None:
+        session.outside_temp_source = models.TemperatureSource.MANUAL
     if not session.location_id:
         resolve_location(session, user.id, db)
     estimate_energy_kwh(session, vehicle)
@@ -209,8 +213,20 @@ def update_session(
 
     fields = payload.model_dump(exclude_unset=True)
     previous_energy = session.energy_kwh
+    previous_temp = session.outside_temp_c
     for field, value in fields.items():
         setattr(session, field, value)
+
+    # Herkunft der Temperatur nachziehen. Dieselbe Vorsicht wie beim
+    # energy_is_estimated-Flag weiter unten: Web-UI und Apps schicken
+    # outside_temp_c bei JEDEM Speichern mit, ein blosses Oeffnen und Speichern
+    # darf einen vom Wetterdienst geholten Wert also nicht zu "von Hand"
+    # umetikettieren. Nur eine tatsaechliche Wertaenderung zaehlt.
+    if "outside_temp_source" not in fields and "outside_temp_c" in fields:
+        if session.outside_temp_c is None:
+            session.outside_temp_source = None
+        elif previous_temp is None or abs(session.outside_temp_c - previous_temp) > 1e-6:
+            session.outside_temp_source = models.TemperatureSource.MANUAL
 
     # Korrigiert der Nutzer eine geschaetzte Energiemenge (z.B. abgelesen aus der
     # App des Ladeanbieters), ist der Wert nicht mehr geschaetzt - sonst bliebe die
@@ -309,6 +325,12 @@ def push_auto_session(
         soc_end=payload.soc_end,
         odometer_km=payload.odometer_km,
         outside_temp_c=payload.outside_temp_c,
+        # Home Assistant liest den Wert am Fahrzeug- oder Wettersensor des
+        # Nutzers aus, nicht bei einem fremden Dienst - fuer die Auswertung
+        # zaehlt er wie ein Fahrzeugwert.
+        outside_temp_source=(
+            models.TemperatureSource.VEHICLE if payload.outside_temp_c is not None else None
+        ),
         latitude=payload.latitude,
         longitude=payload.longitude,
         energy_kwh=payload.energy_kwh,
