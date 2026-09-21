@@ -304,6 +304,7 @@ def _reset_open_session(config: models.MySkodaConfig) -> None:
     config.open_charging_type = None
     config.open_max_power_kw = None
     config.open_odometer_km = None
+    config.open_outside_temp_c = None
     config.open_latitude = None
     config.open_longitude = None
     config.open_poll_count = 0
@@ -360,6 +361,7 @@ def _create_session(
     soc_end: int | None,
     charging_type: models.ChargingType | None,
     odometer_km: int | None,
+    outside_temp_c: float | None,
     latitude: float | None,
     longitude: float | None,
     notes: str,
@@ -403,6 +405,7 @@ def _create_session(
         soc_start=soc_start,
         soc_end=soc_end,
         odometer_km=odometer_km,
+        outside_temp_c=outside_temp_c,
         latitude=latitude,
         longitude=longitude,
         external_session_id=external_id,
@@ -438,6 +441,10 @@ def _start_open_session(
     config.open_charging_type = snapshot.charge_type
     config.open_max_power_kw = snapshot.charge_power_kw
     config.open_odometer_km = snapshot.odometer_km
+    # Genau jetzt gemessen - siehe models.ChargingSession.outside_temp_c:
+    # der Verbrauch dieses Vorgangs beschreibt die Fahrt DAVOR, und die endet
+    # in diesem Moment. Liefert die API keine Temperatur, bleibt es bei None.
+    config.open_outside_temp_c = snapshot.outside_temp_c
     config.open_poll_count = 1
     config.open_gap_before_seconds = gap_seconds
     config.open_in_saved_location = snapshot.is_in_saved_location
@@ -545,6 +552,14 @@ def _finish_open_session(
         soc_end=soc_end,
         charging_type=_charging_type(config.open_charging_type),
         odometer_km=snapshot.odometer_km or config.open_odometer_km,
+        # Der beim Einstecken gemerkte Wert hat Vorrang; nur wenn es ihn nicht
+        # gibt (Konfiguration aus der Zeit vor dieser Spalte, oder die API hat
+        # ihn damals nicht geliefert), der jetzige als Notbehelf.
+        outside_temp_c=(
+            config.open_outside_temp_c
+            if config.open_outside_temp_c is not None
+            else snapshot.outside_temp_c
+        ),
         latitude=config.open_latitude,
         longitude=config.open_longitude,
         notes=notes,
@@ -668,6 +683,9 @@ def _detect_missed_session(
         soc_end=snapshot.soc_percent,
         charging_type=None,
         odometer_km=snapshot.odometer_km,
+        # Nacherkennung: es gab nie ein beobachtetes Einstecken, also auch
+        # keinen gemerkten Wert - der aktuelle Abruf ist alles, was vorliegt.
+        outside_temp_c=snapshot.outside_temp_c,
         latitude=snapshot.coordinates[0] if snapshot.coordinates else None,
         longitude=snapshot.coordinates[1] if snapshot.coordinates else None,
         notes=notes,

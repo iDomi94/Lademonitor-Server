@@ -5,6 +5,19 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.23.0",
+        "date": "2026-09-21",
+        "title": "Verbrauch nach Außentemperatur",
+        "changes": [
+            "Neu im Dashboard: „Verbrauch nach Außentemperatur\". Jeder Punkt im Diagramm ist eine Fahrt, dazu der Mittelwert je 5-°C-Klasse und eine Ausgleichsgerade durch alle Punkte. Darüber steht die eigentliche Antwort als eine Zahl: wieviel Prozent mehr das Fahrzeug bei 0 °C braucht als bei 20 °C - für das eigene Auto gerechnet statt aus einer Faustformel. Dazu ein Vergleich der vier Jahreszeiten.",
+            "Ladevorgänge können dafür eine Außentemperatur tragen. Sie wird BEIM LADEBEGINN gemessen, und das ist kein Detail: der Verbrauch, den ein Ladevorgang ausweist, stammt von der Fahrt davor - und die endet im Moment des Einsteckens. Eine beim Ladeende gemessene Temperatur wäre nach Stunden an der Wallbox eine andere. Der Temperaturwert einer Fahrt ist entsprechend das Mittel aus den Werten beim Einstecken davor und danach.",
+            "Home Assistant liefert die Temperatur ab Lademonitor-HA 0.5.0 mit: der Dienst „Ladevorgang beginnen\" merkt sie sich zusammen mit SoC-Start und Lade-Art, der Blueprint hat dafür einen neuen, optionalen Eingang „Außentemperatur-Sensor\" (Fahrzeugsensor, Wetter-Integration oder eigenes Thermometer - alles möglich). Von Hand lässt sich der Wert beim Anlegen oder Bearbeiten eines Ladevorgangs eintragen.",
+            "Der MyŠkoda-Poller liest die Temperatur mit, falls die API sie liefert - ob sie das tut, ist an einer echten Antwort noch nicht nachgewiesen. Das Debug-Protokoll zeigt es ab jetzt an, und ohne Temperatur ändert sich schlicht nichts.",
+            "Die Auswertung lässt Ladevorgänge ohne Temperatur aus und nennt ihre Anzahl unter dem Diagramm - Bestandsdaten haben naturgemäß keine, die Aussage wird also erst mit der Zeit belastbar. Eine Ausgleichsgerade erscheint bewusst erst ab fünf Fahrten und einem Temperaturbereich von mindestens 8 °C: aus vier Punkten zwischen 18 und 20 °C lässt sich nichts über den Winter sagen. Zusätzlich steht das Bestimmtheitsmaß R² dabei, also wieviel der Streuung die Temperatur überhaupt erklärt.",
+            "Die Außentemperatur wandert auch in den Backup-Export; eine ältere Backup-ZIP ohne diese Spalte lässt sich weiterhin importieren.",
+        ],
+    },
+    {
         "version": "0.22.0",
         "date": "2026-09-20",
         "title": "Alle Ladevorgänge statt nur 200, gelöschte Einträge, Installierbarkeit",

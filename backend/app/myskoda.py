@@ -271,6 +271,47 @@ class VehicleSnapshot:
         return lat, lon
 
     @property
+    def outside_temp_c(self) -> float | None:
+        """Aussentemperatur in Grad Celsius, falls die Antwort sie enthaelt.
+
+        **Unverifiziert:** ob und wo die Public API diesen Wert liefert, ist
+        an einer echten Antwort noch nicht nachgewiesen - im Gegensatz zu den
+        uebrigen Feldern hier. Die Klimatisierungsdaten anderer Skoda-APIs
+        fuehren ihn als `airConditioning.outsideTemperature`, teils als
+        Objekt (`{temperatureValue, unitInCar}`), teils als blanke Zahl,
+        weshalb hier beide Formen und mehrere plausible Stellen abgeklopft
+        werden. Findet sich nichts, ist das Ergebnis None und der Ladevorgang
+        bekommt schlicht keine Temperatur - kein Fehler.
+
+        Wer wissen will, ob die eigene API sie liefert: das Debug-Protokoll
+        (`MySkodaLogEntry.payload`, Einstellungen -> API & Debug) enthaelt die
+        komplette Rohantwort. Taucht die Temperatur dort unter einem anderen
+        Pfad auf, gehoert er hier ergaenzt.
+
+        Der zuverlaessige Weg bleibt Home Assistant: dort ist die
+        Aussentemperatur eine gewoehnliche Entitaet und wird beim Einstecken
+        mitgeschickt (siehe schemas.AutoSessionPush.outside_temp_c).
+        """
+        candidates = (
+            self._part("airConditioning").get("outsideTemperature"),
+            self._part("airConditioning").get("status", {}).get("outsideTemperature")
+            if isinstance(self._part("airConditioning").get("status"), dict)
+            else None,
+            self._part("status").get("outsideTemperature"),
+        )
+        for candidate in candidates:
+            if isinstance(candidate, dict):
+                candidate = candidate.get("temperatureValue", candidate.get("value"))
+            value = _as_float(candidate)
+            # Kelvin statt Celsius kommt bei Fahrzeug-APIs vor; ein Wert
+            # jenseits von 200 kann keine Aussentemperatur in Grad sein.
+            if value is not None and value > 200:
+                value = round(value - 273.15, 1)
+            if value is not None and -60 <= value <= 60:
+                return value
+        return None
+
+    @property
     def error_types(self) -> list[str]:
         return [str(e.get("type")) for e in self.errors if e.get("type")]
 
@@ -295,6 +336,7 @@ class VehicleSnapshot:
             "target_soc_percent": self.target_soc_percent,
             "is_in_saved_location": self.is_in_saved_location,
             "odometer_km": self.odometer_km,
+            "outside_temp_c": self.outside_temp_c,
             "parking_state": self.parking_state,
             "latitude": coords[0] if coords else None,
             "longitude": coords[1] if coords else None,

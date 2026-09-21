@@ -308,6 +308,7 @@ def push_auto_session(
         soc_start=payload.soc_start,
         soc_end=payload.soc_end,
         odometer_km=payload.odometer_km,
+        outside_temp_c=payload.outside_temp_c,
         latitude=payload.latitude,
         longitude=payload.longitude,
         energy_kwh=payload.energy_kwh,

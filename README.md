@@ -42,6 +42,12 @@ Beta über TestFlight: [testflight.apple.com/join/NMbyFTEK](https://testflight.a
   bei fehlgeschlagenem Backup, bei abgelaufenem MyŠkoda-API-Key, als
   Sammelmeldung über zu prüfende Ladevorgänge und als Monatsbericht. Jede
   Meldung ist pro Nutzer abschaltbar.
+- **Verbrauch nach Außentemperatur** (seit 0.23.0): Streudiagramm aller
+  Fahrten über der Temperatur, mit Mittelwert je 5-°C-Klasse und
+  Ausgleichsgerade – darüber als Kennzahl, wie viel mehr das Fahrzeug bei
+  0 °C braucht als bei 20 °C, dazu ein Vergleich der Jahreszeiten. Die
+  Temperatur liefert Home Assistant (ab Lademonitor-HA 0.5.0) oder man trägt
+  sie von Hand ein.
 - **Kartenansicht** (seit 0.20.0) über die eigenen Ladeorte (mit
   Matching-Radius) und alle Ladevorgänge mit Koordinaten, mit Clustern,
   Vorschau und Legende als Filter. Leaflet liegt lokal im Image, nur die

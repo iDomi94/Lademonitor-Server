@@ -305,6 +305,18 @@ class ChargingSession(Base):
 
     odometer_km: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
+    # Aussentemperatur in Grad Celsius zum Zeitpunkt des Ladebeginns.
+    # NICHT verschluesselt (siehe crypto.py): eine Temperatur ist kein
+    # personenbezogenes Datum, und die Auswertung (temperature.py) filtert und
+    # sortiert per SQL danach - auf einer Fernet-Spalte ginge beides nicht.
+    #
+    # Warum der Wert BEIM EINSTECKEN gemessen wird und nicht waehrend des
+    # Ladens: interessant ist er fuer die Verbrauchsanalyse, und der Verbrauch
+    # eines Vorgangs beschreibt die Strecke DAVOR (siehe consumption.py). Der
+    # Moment des Einsteckens liegt unmittelbar am Ende dieser Fahrt und ist
+    # damit der beste Einzelwert, den man ohne Fahrtaufzeichnung bekommt.
+    outside_temp_c: Mapped[float | None] = mapped_column(Float, nullable=True)
+
     price_total: Mapped[float | None] = mapped_column(Float, nullable=True)
     price_per_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
 
@@ -527,6 +539,11 @@ class MySkodaConfig(Base):
     open_charging_type: Mapped[str | None] = mapped_column(String, nullable=True)
     open_max_power_kw: Mapped[float | None] = mapped_column(Float, nullable=True)
     open_odometer_km: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Aussentemperatur beim Einstecken - aus demselben Grund zwischengespeichert
+    # wie soc_start: beim Ladeende ist sie eine andere als die, unter der die
+    # Fahrt davor stattfand (siehe ChargingSession.outside_temp_c). Nicht
+    # verschluesselt, ebenfalls aus demselben Grund wie dort.
+    open_outside_temp_c: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Verschluesselt (siehe crypto.py) - dieselbe GPS-Position wie
     # ChargingSession.latitude/longitude, nur als Zwischenspeicher fuer den
     # noch laufenden Vorgang (wird 1:1 dorthin kopiert, sobald er

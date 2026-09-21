@@ -625,6 +625,17 @@ Icon/Tooltip-Logik in der SessionsList-View.
   Diese Datei ist die einzige Wissensquelle fuer das Projekt - sie
   mitzupflegen gehoert zu jedem groesseren Schritt, nicht in einen spaeteren
   Aufraeumlauf.
+- **Aussentemperatur: noch keine Werte in Bestandsdaten.** Die Auswertung
+  (siehe Abschnitt "Verbrauch nach Aussentemperatur") beginnt bei null und
+  wird erst ueber die Monate belastbar - fuer alte Vorgaenge laesst sich der
+  Wert nicht nachtraeglich ermitteln, ein geratener waere schlimmer als
+  keiner. **Offen ausserdem:** ob die MyŠkoda Public API die Temperatur
+  ueberhaupt liefert, ist an einer echten Antwort nicht nachgewiesen (die
+  Auswertung klopft mehrere plausible Stellen ab) - beim naechsten Poll ins
+  Debug-Protokoll sehen. Und die beiden Apps kennen das Feld noch nicht: im
+  Server-Modus bleibt es unberuehrt (`SessionUpdate` arbeitet mit
+  `exclude_unset`, ein App-Speichern loescht den Wert also nicht), im
+  Local-Only-Modus gibt es ihn schlicht nicht.
 - **Xcode-Beta-Umgebung des Nutzers:** macOS 27 Beta + Xcode 27 Beta
   (Erstbeta, Stand Aug 2026). Es gab einen `dyld_shared_cache_extract_dylibs`
   Bug beim Installieren auf echtem Gerät - gelöst durch Löschen von
@@ -1366,6 +1377,89 @@ foreign_keys=ON` schaltet das ein - ohne das waere der FK-Fehler in der
 Loeschfunktion von 2026-09-09 gruen durchgelaufen), und der TestClient laeuft
 ohne `with`, damit der `lifespan` und mit ihm die drei Hintergrund-Scheduler
 nicht anspringen und nebenher auf derselben DB arbeiten.
+
+## Verbrauch nach Aussentemperatur (`temperature.py`, ab 2026-09-21, v0.23.0)
+
+Beantwortet fuer das eigene Fahrzeug, was sonst als Faustformel kursiert: wie
+viel mehr braucht es im Winter. Drei Entscheidungen tragen den Rest.
+
+**1. Wann die Temperatur gemessen wird: BEIM LADEBEGINN.** Das ist der Kern,
+nicht ein Detail. `consumption.py` rechnet den Verbrauch eines Vorgangs N aus
+der Strecke zwischen N-1 und N - der Wert beschreibt also eine FAHRT. Die endet
+im Moment des Einsteckens; eine beim Ladeende gemessene Temperatur waere nach
+Stunden an der Wallbox eine voellig andere. Deshalb merkt sich auch Home
+Assistant den Wert beim `begin_charging_session` (wie SoC-Start und Lade-Art)
+und der MyŠkoda-Poller in `MySkodaConfig.open_outside_temp_c`.
+
+**2. Welche Temperatur zu welcher Fahrt gehoert: das Mittel beider Enden.**
+`temp(N-1)` liegt ungefaehr am Anfang der Fahrt, `temp(N)` an ihrem Ende - also
+das Mittel, wenn beide bekannt sind, sonst `temp(N)` allein. Fehlt `temp(N)`,
+wird der Punkt verworfen statt auf `temp(N-1)` auszuweichen: zwischen dem
+Einstecken davor und dieser Fahrt koennen Tage liegen.
+
+**3. Gewichtet wird mit Kilometern**, wie beim Monatsdurchschnitt in
+`routers/stats.py` - sonst zieht eine 5-km-Kurzstrecke mit unplausiblem Wert
+eine ganze Temperaturklasse schief.
+
+**Wo die Werte herkommen** (alle drei optional, alle drei gleichwertig):
+Home-Assistant-Push (`schemas.AutoSessionPush.outside_temp_c`, ab
+Lademonitor-HA 0.5.0), MyŠkoda-Poller (`myskoda.VehicleSnapshot.outside_temp_c`
+- **unverifiziert**, ob die Public API sie ueberhaupt liefert; die Auswertung
+klopft mehrere plausible Stellen ab und faellt sonst auf None zurueck, das
+Debug-Protokoll zeigt das Ergebnis), oder von Hand im
+Ladevorgangs-Formular.
+
+**Nicht verschluesselt** (siehe crypto.py): eine Temperatur ist kein
+personenbezogenes Datum, und die Auswertung filtert/sortiert per SQL danach.
+
+**Wann bewusst NICHTS ausgewiesen wird.** Eine Ausgleichsgerade erscheint erst
+ab `MIN_POINTS_FOR_TREND` (5) Fahrten UND `MIN_TEMP_SPAN_FOR_TREND_C` (8 Grad)
+Spannweite. Vier Punkte zwischen 18 und 20 Grad ergeben rechnerisch auch eine
+Steigung - nur sagt die nichts ueber den Winter, und einer Zahl sieht man das
+nicht an. Zusaetzlich steht `r2` dabei (wieviel der Streuung die Temperatur
+ueberhaupt erklaert). Vorgaenge ohne Temperatur werden gezaehlt und unter dem
+Diagramm genannt, statt sie stillschweigend wegzulassen - Bestandsdaten haben
+naturgemaess keine.
+
+**Jahreszeiten** sind meteorologisch (Monatsgrenzen, Nordhalbkugel) - eine
+bewusste Vereinfachung; die Temperaturklassen daneben sind davon unabhaengig
+und bleiben ueberall richtig.
+
+**Regression von Hand** (fuenf Summen fuer eine Gerade) statt numpy/scipy:
+scipy haengt zwar ueber `reverse_geocoder` ohnehin im Image, ist aber genau
+das Paket, das beim Bauen fuer fremde Architekturen schon Aerger gemacht hat.
+
+### Darstellung (`templates/index.html`)
+
+Drei Marken in einem Bild, weil erst sie zusammen die Frage beantworten: ein
+Punkt je Fahrt (die Streuung - ohne sie wirkt jede Trendlinie ueberzeugender
+als die Daten hergeben), das Mittel je 5-Grad-Klasse (das, was man ablesen
+soll) und die Ausgleichsgerade (die Zusammenfassung). Darueber die eine Zahl
+als Kennzahl: Mehrverbrauch bei 0 statt 20 Grad.
+
+**Farben:** dieselben drei Farbtoene wie im Rest der Oberflaeche, aber je eine
+Stufe dunkler (`#3d8ee0`/`#2ea87f`/`#bd8a26` statt `#5aa9ff`/`#4fd1a5`/
+`#f2b84b`). Die hellen Toene sind fuer einzelne Balken und Badges gedacht; als
+Feld aus ueber hundert Punkten auf dem dunklen Kartenhintergrund blenden sie.
+Die drei Werte sind gegen den Kartenhintergrund auf Helligkeitsband,
+Farbabstand bei Farbfehlsichtigkeit (Delta E >= 8) und Kontrast geprueft.
+
+**Kein punktgenaues Zeigen:** der Tooltip sucht den naechstgelegenen Punkt im
+Umkreis von ~24 px, ein 8-px-Ziel mittig zu treffen ist keine Bedienung. Die
+Tabellenansicht unter dem Diagramm ist der barrierefreie Zwilling - jeder Wert
+ist auch ohne Zeigegeraet erreichbar.
+
+**Seitenverhaeltnis haengt an der Breite:** das SVG skaliert mit fester
+Proportion, 720x320 wird auf 360 px Breite zu einem 160 px hohen Streifen. Unter
+520 px bekommt es deshalb ein fast quadratisches Feld - und damit groessere
+Schrift, weil die Einheiten mitskalieren.
+
+**Jahreszeiten als liegende Balken**, nullbasiert. Der Unterschied zwischen
+15,4 und 17,9 sieht auf einer Nullachse klein aus - das ist er auch; die Achse
+abzuschneiden wuerde ihn kuenstlich vergroessern. Die Zahlen stehen direkt an
+den Balken. (Die Balken stehen wie alle Diagramme dieser Art mittig in der
+Karte statt sie auszufuellen - das haengt am gemeinsamen `renderBarChart` und
+betrifft auch die Monatsdiagramme; bewusst nicht hier mitgeaendert.)
 
 ## Backup-Export/-Import (`routers/backup.py`)
 

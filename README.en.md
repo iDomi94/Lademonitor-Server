@@ -38,6 +38,11 @@ via TestFlight: [testflight.apple.com/join/NMbyFTEK](https://testflight.apple.co
   locations, charging sessions), designed for re-setting up the server
 - Multi-user capable: registration, login, each user has their own, fully
   isolated dataset
+- **Consumption by outside temperature** (since 0.23.0): a scatter plot of
+  every drive against temperature, with the average per 5 °C band and a fitted
+  line – headlined by how much more the car uses at 0 °C than at 20 °C, plus a
+  comparison of the seasons. The temperature comes from Home Assistant (from
+  Lademonitor-HA 0.5.0) or you enter it by hand.
 - **Map view** (since 0.20.0) of your charging locations (including their
   matching radius) and every charging session that has coordinates, with
   clustering, previews and a legend that doubles as a filter. Leaflet ships

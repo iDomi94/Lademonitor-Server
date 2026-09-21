@@ -91,3 +91,25 @@ def test_html_pages_are_not_cached(client):
     register(client)
 
     assert client.get("/sessions").headers["cache-control"] == "no-store"
+
+
+def test_dashboard_contains_the_temperature_section(client):
+    register(client)
+
+    body = client.get("/").text
+
+    assert "temp-scatter" in body
+    assert "temp-seasons" in body
+    # Die Tabellenansicht ist der barrierefreie Zwilling des Diagramms und
+    # darf nicht wegfallen, wenn jemand am Markup aufraeumt.
+    assert "temp-table" in body
+
+
+def test_session_form_offers_a_temperature_field(client):
+    """Die Auswertung verspricht in ihrem Hinweistext, dass sich der Wert von
+    Hand nachtragen laesst - dann muss das Feld auch da sein."""
+    register(client)
+
+    body = client.get("/sessions").text
+
+    assert 'id="f-temp"' in body

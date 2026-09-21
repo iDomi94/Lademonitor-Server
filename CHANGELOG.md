@@ -6,6 +6,23 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.23.0] — 2026-09-21
+
+### Added
+- **Verbrauch nach Außentemperatur** im Dashboard: Streudiagramm (eine Fahrt =
+  ein Punkt) mit Mittelwert je 5-°C-Klasse und Ausgleichsgerade, darüber als
+  Kennzahl der Mehrverbrauch bei 0 °C gegenüber 20 °C, dazu ein Vergleich der
+  vier Jahreszeiten. Neuer Endpunkt `GET /api/stats/temperature`.
+- **`ChargingSession.outside_temp_c`**: Außentemperatur beim Ladebeginn –
+  wahlweise von Home Assistant (ab Lademonitor-HA 0.5.0), vom MyŠkoda-Poller
+  (falls die API sie liefert) oder von Hand im Ladevorgangs-Formular. Wandert
+  in den Backup-Export; ältere Backup-ZIPs bleiben importierbar.
+
+### Notes
+- Die Auswertung berücksichtigt nur Ladevorgänge mit Temperatur und nennt die
+  Anzahl der übrigen. Eine Ausgleichsgerade gibt es erst ab fünf Fahrten und
+  mindestens 8 °C Spannweite, zusammen mit dem Bestimmtheitsmaß R².
+
 ## [0.22.0] — 2026-09-20
 
 ### Added
