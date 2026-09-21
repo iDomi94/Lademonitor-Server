@@ -168,6 +168,19 @@ def run_light_migrations() -> None:
             )
         )
 
+        # Aussentemperatur beim Ladebeginn (siehe models.ChargingSession und
+        # temperature.py). Bewusst OHNE Backfill: fuer Bestandsvorgaenge laesst
+        # sich der Wert nicht nachtraeglich ermitteln, und ein geratener waere
+        # in einer Verbrauchsauswertung schlimmer als gar keiner. Die Analyse
+        # laesst Vorgaenge ohne Temperatur deshalb einfach aussen vor und
+        # nennt ihre Anzahl.
+        conn.execute(
+            text(
+                "ALTER TABLE charging_sessions "
+                "ADD COLUMN IF NOT EXISTS outside_temp_c DOUBLE PRECISION"
+            )
+        )
+
         # i18n: UI-Sprache pro Nutzer (siehe models.User.language). DEFAULT 'de'
         # deckt sowohl neue Zeilen als auch - via UPDATE - bereits bestehende
         # Nutzer ab, die die Spalte noch nicht hatten (Postgres setzt den
@@ -206,6 +219,13 @@ def run_light_migrations() -> None:
             text(
                 "UPDATE myskoda_configs SET backdate_max_gap_minutes = 0 "
                 "WHERE backdate_max_gap_minutes IS NULL"
+            )
+        )
+
+        conn.execute(
+            text(
+                "ALTER TABLE myskoda_configs "
+                "ADD COLUMN IF NOT EXISTS open_outside_temp_c DOUBLE PRECISION"
             )
         )
 

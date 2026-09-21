@@ -38,6 +38,40 @@
 <h2>{{ t('dashboard.consumption_per_month') }}</h2>
 <div class="card" id="chart-consumption"></div>
 
+<h2>{{ t('temp.heading') }}</h2>
+
+<details class="help">
+  <summary>{{ t('temp.help.summary') }}</summary>
+  <p>{{ t('temp.help.text') }}</p>
+</details>
+
+<div class="card" id="temp-card">
+  <p class="tempempty" id="temp-empty">{{ t('temp.empty') }}</p>
+
+  <div class="temphero" id="temp-hero" hidden>
+    <div class="temphero-figure" id="temp-hero-figure">–</div>
+    <div>
+      <div class="temphero-label">{{ t('temp.hero.label') }}</div>
+      <div class="temphero-detail" id="temp-hero-detail"></div>
+    </div>
+  </div>
+
+  <div id="temp-scatter" class="scatterwrap"></div>
+  <div class="chartlegend" id="temp-legend" hidden></div>
+
+  <details class="help" id="temp-table-panel" hidden>
+    <summary>{{ t('temp.table.summary') }}</summary>
+    <div class="tablewrap"><table id="temp-table"></table></div>
+  </details>
+
+  <p class="chartnote" id="temp-missing"></p>
+</div>
+
+<h2>{{ t('temp.seasons_heading') }}</h2>
+<div class="card" id="temp-seasons-card">
+  <div id="temp-seasons"></div>
+</div>
+
 <script>
 function setText(id, value) {
   const el = document.getElementById(id);
@@ -49,6 +83,20 @@ function setText(id, value) {
 const LOCALE = {{ lang|default('de')|tojson }} === 'en' ? 'en-US' : 'de-DE';
 const NO_DATA_TEXT = {{ t('dashboard.js.no_data')|tojson }};
 const OTHER_PROVIDERS_LABEL = {{ t('dashboard.other_providers')|tojson }};
+
+const TEMP_T = {
+  axisX: {{ t('temp.axis_x')|tojson }},
+  axisY: {{ t('temp.axis_y')|tojson }},
+  legendPoints: {{ t('temp.legend.points')|tojson }},
+  legendBuckets: {{ t('temp.legend.buckets')|tojson }},
+  legendTrend: {{ t('temp.legend.trend')|tojson }},
+  heroDetail: {{ t('temp.hero.detail')|tojson }},
+  missing: {{ t('temp.missing')|tojson }},
+  tableRange: {{ t('temp.table.range')|tojson }},
+  tableConsumption: {{ t('temp.table.consumption')|tojson }},
+  tableSessions: {{ t('temp.table.sessions')|tojson }},
+  tableKm: {{ t('temp.table.km')|tojson }},
+};
 
 const MONTH_NAMES = {{ t('dashboard.month_names')|tojson }}.split('|');
 const MONTH_NAMES_SHORT = {{ t('dashboard.month_names_short')|tojson }}.split('|');
@@ -205,6 +253,235 @@ function renderGauge(containerId, acKwh, dcKwh) {
     </div>`;
 }
 
+/* ---------- Verbrauch nach Temperatur ----------
+ *
+ * Drei Marken in einem Bild, weil sie zusammen die Frage beantworten:
+ *   - jeder Punkt eine Fahrt (zeigt die Streuung - ohne sie sieht eine
+ *     Trendlinie ueberzeugender aus, als die Daten hergeben),
+ *   - das Mittel je 5-Grad-Klasse (das, was man ablesen soll),
+ *   - die Ausgleichsgerade (die Zusammenfassung in einer Zahl).
+ *
+ * Farben: dieselben drei Farbtoene wie im Rest der Oberflaeche, aber je eine
+ * Stufe dunkler. Die hellen Toene (#5aa9ff/#f2b84b/#4fd1a5) sind fuer
+ * einzelne Balken und Badges gedacht; als Feld aus Dutzenden Punkten auf dem
+ * dunklen Kartenhintergrund blenden sie. Die drei Werte hier sind gegen den
+ * Kartenhintergrund (#171e2e) auf Helligkeitsband, Farbabstand bei
+ * Farbfehlsichtigkeit und Kontrast geprueft.
+ */
+const TEMP_COLORS = {
+  points: '#3d8ee0',   // Fahrten
+  trend: '#bd8a26',    // Ausgleichsgerade
+  buckets: '#2ea87f',  // Mittel je Temperaturklasse
+};
+const SURFACE = '#171e2e';
+const INK = '#e6e9f0';
+const MUTED = '#8b95ab';
+const GRID = '#2a3348';
+
+const SEASON_LABELS = {{ t('temp.season_names')|tojson }}.split('|');
+const SEASON_KEYS = ['winter', 'spring', 'summer', 'autumn'];
+
+function niceTicks(min, max, count) {
+  const span = max - min || 1;
+  const raw = span / count;
+  const pow = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [10, 5, 2, 1].map(m => m * pow).filter(v => v >= raw).pop() || pow;
+  const ticks = [];
+  for (let v = Math.ceil(min / step) * step; v <= max + 1e-9; v += step) {
+    ticks.push(Math.round(v * 1000) / 1000);
+  }
+  return ticks;
+}
+
+function renderTemperatureScatter(data) {
+  const host = document.getElementById('temp-scatter');
+  const legend = document.getElementById('temp-legend');
+  if (!host) return;
+  host.innerHTML = '';
+  if (!data.points.length) { legend.hidden = true; return; }
+  legend.hidden = false;
+
+  /* Seitenverhaeltnis an die Breite koppeln: das SVG skaliert mit fester
+     Proportion, ein 720x320-Bild wird auf einem 360 px breiten Schirm also
+     160 px hoch - ein Streifen, in dem sich nichts mehr unterscheiden laesst.
+     Schmal bekommt es deshalb ein fast quadratisches Feld (und damit auch
+     groessere Schrift, weil die Einheiten mitskalieren). */
+  const narrow = host.clientWidth > 0 && host.clientWidth < 520;
+  const W = narrow ? 400 : 720;
+  const H = narrow ? 340 : 320;
+  const padL = 52, padR = 16, padT = 22, padB = 46;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+
+  const temps = data.points.map(p => p.temp_c);
+  const values = data.points.map(p => p.consumption_kwh_per_100km);
+  // Etwas Luft an allen Seiten, sonst kleben Punkte auf den Achsen.
+  const xMin = Math.min(...temps) - 2, xMax = Math.max(...temps) + 2;
+  const yMin = Math.max(0, Math.min(...values) * 0.9), yMax = Math.max(...values) * 1.05;
+  const x = t => padL + (t - xMin) / (xMax - xMin || 1) * plotW;
+  const y = v => padT + plotH - (v - yMin) / (yMax - yMin || 1) * plotH;
+
+  let svg = '';
+
+  // Gitter: durchgezogene Haarlinien, eine Stufe ueber dem Hintergrund -
+  // gestrichelt laese sich wie ein Schwellwert, ist aber nur ein Gitter.
+  for (const tick of niceTicks(yMin, yMax, 4)) {
+    svg += `<line x1="${padL}" y1="${y(tick)}" x2="${W - padR}" y2="${y(tick)}" stroke="${GRID}" stroke-width="1"></line>`
+         + `<text x="${padL - 8}" y="${y(tick) + 4}" fill="${MUTED}" font-size="11" text-anchor="end">${tick}</text>`;
+  }
+  for (const tick of niceTicks(xMin, xMax, 6)) {
+    svg += `<text x="${x(tick)}" y="${H - padB + 18}" fill="${MUTED}" font-size="11" text-anchor="middle">${tick}°</text>`;
+  }
+  // Achsentitel: der waagerechte mittig unter die Skala (am linken Rand stand
+  // er direkt unter der ersten Zahl und las sich wie deren Beschriftung), der
+  // senkrechte als Einheit oben links statt gedreht - eine um 90 Grad
+  // gekippte Beschriftung ist fuer zwei Worte mehr Aufwand als Nutzen.
+  svg += `<text x="${padL + plotW / 2}" y="${H - 4}" fill="${MUTED}" font-size="11" text-anchor="middle">${TEMP_T.axisX}</text>`
+       + `<text x="${padL - 44}" y="${padT - 2}" fill="${MUTED}" font-size="11">${TEMP_T.axisY}</text>`;
+
+  // Punkte zuerst, damit Klassenmittel und Gerade darueber liegen.
+  data.points.forEach((p, i) => {
+    svg += `<circle class="scatterdot" data-i="${i}" cx="${x(p.temp_c)}" cy="${y(p.consumption_kwh_per_100km)}" r="4"`
+         + ` fill="${TEMP_COLORS.points}" stroke="${SURFACE}" stroke-width="2"></circle>`;
+  });
+
+  if (data.trend) {
+    const y1 = data.trend.slope * xMin + data.trend.intercept;
+    const y2 = data.trend.slope * xMax + data.trend.intercept;
+    svg += `<line x1="${x(xMin)}" y1="${y(y1)}" x2="${x(xMax)}" y2="${y(y2)}"`
+         + ` stroke="${TEMP_COLORS.trend}" stroke-width="2" stroke-linecap="round"></line>`;
+  }
+
+  if (data.buckets.length > 1) {
+    const pts = data.buckets.map(b =>
+      `${x((b.from_c + b.to_c) / 2)},${y(b.avg_consumption_kwh_per_100km)}`).join(' ');
+    svg += `<polyline points="${pts}" fill="none" stroke="${TEMP_COLORS.buckets}"`
+         + ` stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></polyline>`;
+  }
+  data.buckets.forEach(b => {
+    svg += `<circle cx="${x((b.from_c + b.to_c) / 2)}" cy="${y(b.avg_consumption_kwh_per_100km)}" r="5"`
+         + ` fill="${TEMP_COLORS.buckets}" stroke="${SURFACE}" stroke-width="2"></circle>`;
+  });
+
+  host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="xMidYMid meet">${svg}</svg>`
+                 + `<div class="charttip" id="temp-tip" hidden></div>`;
+
+  // Naechstgelegener Punkt statt punktgenauem Treffer: ein 8-px-Punkt, den man
+  // mittig treffen muss, ist keine Bedienung (und auf dem Handy unmoeglich).
+  const svgEl = host.querySelector('svg');
+  const tip = host.querySelector('#temp-tip');
+  svgEl.addEventListener('pointermove', (ev) => {
+    const box = svgEl.getBoundingClientRect();
+    const sx = (ev.clientX - box.left) / box.width * W;
+    const sy = (ev.clientY - box.top) / box.height * H;
+    let best = null, bestDist = Infinity;
+    data.points.forEach((p, i) => {
+      const dist = (x(p.temp_c) - sx) ** 2 + (y(p.consumption_kwh_per_100km) - sy) ** 2;
+      if (dist < bestDist) { bestDist = dist; best = { p, i }; }
+    });
+    // ~24 px Fangradius im SVG-Koordinatensystem.
+    if (!best || bestDist > 24 * 24) { tip.hidden = true; return; }
+    const p = best.p;
+    tip.innerHTML = `<strong>${fmtNumber(p.temp_c, 1)} °C · ${fmtNumber(p.consumption_kwh_per_100km, 1)} kWh/100 km</strong><br>`
+                  + `<span class="muted">${formatDate(p.start_time)} · ${fmtNumber(p.km, 0)} km</span>`;
+    tip.hidden = false;
+    const left = (x(p.temp_c) / W) * box.width;
+    const top = (y(p.consumption_kwh_per_100km) / H) * box.height;
+    tip.style.left = Math.min(Math.max(8, left + 12), box.width - tip.offsetWidth - 8) + 'px';
+    tip.style.top = Math.min(Math.max(8, top + 12), box.height - tip.offsetHeight - 8) + 'px';
+  });
+  svgEl.addEventListener('pointerleave', () => { tip.hidden = true; });
+
+  legend.innerHTML = [
+    [TEMP_COLORS.points, TEMP_T.legendPoints],
+    [TEMP_COLORS.buckets, TEMP_T.legendBuckets.replace('{width}', data.bucket_width_c)],
+    [TEMP_COLORS.trend, TEMP_T.legendTrend],
+  ].map(([color, label]) =>
+    `<span><i class="dot" style="background:${color}"></i>${label}</span>`).join('');
+}
+
+// Nach dem Drehen/Groesseaendern neu zeichnen, sonst bleibt das fuer die alte
+// Breite gewaehlte Seitenverhaeltnis stehen. Entprellt, weil `resize` bei
+// gezogenem Fenster im Dutzend feuert und jedes Neuzeichnen die Punkte neu
+// aufbaut.
+let tempResizeTimer = null;
+let lastTemperatureData = null;
+window.addEventListener('resize', () => {
+  if (!lastTemperatureData) return;
+  clearTimeout(tempResizeTimer);
+  tempResizeTimer = setTimeout(() => renderTemperatureScatter(lastTemperatureData), 150);
+});
+
+function fmtNumber(value, digits) {
+  return value == null ? '–' : Number(value).toLocaleString(LOCALE,
+    { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}
+
+function formatDate(iso) {
+  return new Date(iso).toLocaleDateString(LOCALE, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+function renderTemperatureTable(data) {
+  const panel = document.getElementById('temp-table-panel');
+  const table = document.getElementById('temp-table');
+  if (!panel || !table) return;
+  panel.hidden = !data.buckets.length;
+  if (!data.buckets.length) return;
+  table.innerHTML =
+    `<thead><tr><th>${TEMP_T.tableRange}</th><th>${TEMP_T.tableConsumption}</th>`
+    + `<th>${TEMP_T.tableSessions}</th><th>${TEMP_T.tableKm}</th></tr></thead><tbody>`
+    + data.buckets.map(b => `<tr>
+        <td>${b.from_c}…${b.to_c} °C</td>
+        <td>${fmtNumber(b.avg_consumption_kwh_per_100km, 1)}</td>
+        <td>${b.session_count}</td>
+        <td>${fmtNumber(b.km, 0)}</td>
+      </tr>`).join('')
+    + '</tbody>';
+}
+
+async function loadTemperature() {
+  const res = await fetch('api/stats/temperature' + filterQueryString());
+  const data = await res.json();
+
+  const empty = document.getElementById('temp-empty');
+  const hero = document.getElementById('temp-hero');
+  empty.hidden = data.points.length > 0;
+  hero.hidden = !data.trend;
+
+  if (data.trend) {
+    const sign = data.trend.extra_pct_at_0c >= 0 ? '+' : '';
+    setText('temp-hero-figure', `${sign}${fmtNumber(data.trend.extra_pct_at_0c, 0)} %`);
+    setText('temp-hero-detail', TEMP_T.heroDetail
+      .replace('{cold}', fmtNumber(data.trend.consumption_at_0c, 1))
+      .replace('{warm}', fmtNumber(data.trend.consumption_at_20c, 1))
+      .replace('{r2}', fmtNumber(data.trend.r2, 2)));
+  }
+
+  lastTemperatureData = data;
+  renderTemperatureScatter(data);
+  renderTemperatureTable(data);
+
+  const missing = document.getElementById('temp-missing');
+  missing.textContent = data.sessions_without_temp
+    ? TEMP_T.missing.replace('{count}', data.sessions_without_temp) : '';
+
+  const seasons = SEASON_KEYS
+    .map(key => data.seasons.find(s => s.season === key))
+    .filter(Boolean);
+  // Liegende Balken statt Saeulen: bei nur vier Kategorien stuende ein
+  // Saeulendiagramm als schmaler Block mitten in einer leeren Karte, und die
+  // Beschriftung liest sich nebeneinander ohnehin besser. Eine Reihe, eine
+  // Farbe - die Balken dunkler zu faerben, wo sie hoeher sind, wuerde die
+  // Balkenlaenge ein zweites Mal verschluesseln.
+  renderBarChart(
+    'temp-seasons',
+    seasons.map(s => `${SEASON_LABELS[SEASON_KEYS.indexOf(s.season)]} (${s.session_count})`),
+    seasons.map(s => s.avg_consumption_kwh_per_100km),
+    TEMP_COLORS.points,
+    ' kWh/100 km',
+  );
+  document.getElementById('temp-seasons-card').hidden = seasons.length === 0;
+}
+
 async function loadStats() {
   try {
     const res = await fetch('api/stats/summary' + filterQueryString());
@@ -256,7 +533,11 @@ async function loadStats() {
     console.error('Fehler beim Laden der Statistiken:', err);
   }
 }
-renderFilterBar('filter-bar', loadStats);
-loadStats();
+function loadAll() {
+  loadStats();
+  loadTemperature();
+}
+renderFilterBar('filter-bar', loadAll);
+loadAll();
 </script>
 {% endblock %}

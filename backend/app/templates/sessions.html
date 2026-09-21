@@ -69,6 +69,11 @@
     <label>{{ t('sessions.form.odometer') }}</label>
     <input type="number" id="f-odo">
   </div>
+  <div>
+    <label>{{ t('sessions.form.outside_temp') }}</label>
+    <input type="number" step="0.1" min="-60" max="60" id="f-temp"
+           placeholder="{{ t('sessions.form.outside_temp_placeholder') }}">
+  </div>
   <div class="form-actions">
     <button type="button" id="cancel-edit-btn" style="background:var(--muted); display:none">{{ t('sessions.form.cancel') }}</button>
     <button type="submit" id="submit-btn">{{ t('sessions.form.submit_new') }}</button>
@@ -329,6 +334,7 @@ function startEdit(id) {
   document.getElementById('f-price-kwh').value = s.price_per_kwh ?? '';
   document.getElementById('f-price-total').value = s.price_total ?? '';
   document.getElementById('f-odo').value = s.odometer_km ?? '';
+  document.getElementById('f-temp').value = s.outside_temp_c ?? '';
 
   document.getElementById('form-heading').textContent = T.editHeading;
   document.getElementById('submit-btn').textContent = T.submitEdit;
@@ -367,6 +373,7 @@ document.getElementById('session-form').addEventListener('submit', async (e) => 
     price_per_kwh: document.getElementById('f-price-kwh').value || null,
     price_total: document.getElementById('f-price-total').value || null,
     odometer_km: document.getElementById('f-odo').value || null,
+    outside_temp_c: document.getElementById('f-temp').value || null,
   };
 
   let res;

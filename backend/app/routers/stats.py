@@ -8,6 +8,13 @@ from .. import models, schemas
 from ..auth import get_current_user
 from ..consumption import compute_vehicle_consumptions
 from ..database import get_db
+from ..temperature import (
+    BUCKET_WIDTH_C,
+    build_buckets,
+    build_seasons,
+    build_trend,
+    collect_points,
+)
 
 router = APIRouter(prefix="/api/stats", tags=["stats"])
 
@@ -147,4 +154,98 @@ def stats_summary(
         total_km_driven=total_km_driven,
         by_provider=by_provider,
         monthly=monthly,
+    )
+
+
+@router.get("/temperature", response_model=schemas.TemperatureStats)
+def stats_temperature(
+    vehicle_id: str | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Verbrauch gegen Aussentemperatur und Jahreszeit.
+
+    Eigener Endpunkt statt eines weiteren Feldes in `/summary`: die Antwort
+    enthaelt einen Punkt JE FAHRT (fuer das Streudiagramm) und waere damit um
+    ein Vielfaches groesser als die Kennzahlen, die das Dashboard sonst
+    braucht - die soll nicht jeder Seitenaufruf mitschleppen.
+
+    Wichtig beim Datumsfilter: anders als bei `/summary` wird hier NICHT die
+    gefilterte Menge gerechnet und dann ausgewertet. Die Verbrauchskette
+    braucht immer die vollstaendige Fahrzeughistorie (siehe consumption.py),
+    sonst bekaeme der erste Vorgang im Zeitraum den falschen Vorgaenger - und
+    fuer die Temperatur-Paarung gilt dasselbe. Gefiltert wird deshalb erst
+    danach, auf den fertigen Punkten.
+    """
+    sessions = (
+        db.query(models.ChargingSession)
+        .filter(models.ChargingSession.user_id == user.id)
+        .order_by(models.ChargingSession.start_time)
+        .all()
+    )
+    if vehicle_id:
+        sessions = [s for s in sessions if s.vehicle_id == vehicle_id]
+
+    capacity_by_vehicle_id = {
+        v.id: v.battery_capacity_kwh
+        for v in db.query(models.Vehicle).filter(models.Vehicle.user_id == user.id).all()
+    }
+
+    points, without_temp = collect_points(sessions, capacity_by_vehicle_id)
+
+    if start_date:
+        limit = datetime.combine(start_date, time.min)
+        points = [p for p in points if p.start_time >= limit]
+    if end_date:
+        limit = datetime.combine(end_date, time.max)
+        points = [p for p in points if p.start_time <= limit]
+
+    return schemas.TemperatureStats(
+        points=[
+            schemas.TempPointOut(
+                session_id=p.session_id,
+                start_time=p.start_time,
+                temp_c=p.temp_c,
+                consumption_kwh_per_100km=p.consumption,
+                km=round(p.km, 1),
+                consumption_method=p.method,
+                season=p.season,
+            )
+            for p in points
+        ],
+        buckets=[
+            schemas.TempBucketOut(
+                from_c=b.from_c,
+                to_c=b.to_c,
+                avg_consumption_kwh_per_100km=b.avg_consumption,
+                session_count=b.session_count,
+                km=b.km,
+            )
+            for b in build_buckets(points)
+        ],
+        seasons=[
+            schemas.SeasonStatOut(
+                season=s.season,
+                avg_consumption_kwh_per_100km=s.avg_consumption,
+                session_count=s.session_count,
+                km=s.km,
+            )
+            for s in build_seasons(points)
+        ],
+        trend=(
+            schemas.TempTrendOut(
+                slope=trend.slope,
+                intercept=trend.intercept,
+                r2=trend.r2,
+                consumption_at_0c=trend.consumption_at_0c,
+                consumption_at_20c=trend.consumption_at_20c,
+                extra_pct_at_0c=trend.extra_pct_at_0c,
+            )
+            if (trend := build_trend(points))
+            else None
+        ),
+        sessions_without_temp=without_temp,
+        bucket_width_c=BUCKET_WIDTH_C,
     )

@@ -1,0 +1,33 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        # Bewusst die echte requirements.txt und nicht nur die Test-Pakete: so
+        # faellt hier auch auf, wenn eine Abhaengigkeit fuer die Zielversion gar
+        # kein Wheel mehr hat (bei reverse_geocoder/scipy schon einmal ein
+        # Thema gewesen, siehe CLAUDE.md zum Unraid-Build).
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+
+      - name: Run tests
+        working-directory: backend
+        run: python -m pytest -q

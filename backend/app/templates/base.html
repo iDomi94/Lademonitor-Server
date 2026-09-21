@@ -14,6 +14,11 @@
   <link rel="apple-touch-icon" href="static/apple-touch-icon.png?v={{ version|default('dev') }}">
   <link rel="icon" type="image/png" sizes="192x192" href="static/icon-192.png?v={{ version|default('dev') }}">
   <link rel="icon" type="image/png" sizes="512x512" href="static/icon-512.png?v={{ version|default('dev') }}">
+  {# PWA: macht die Oberflaeche installierbar (eigenes Fenster statt Browser-Tab).
+     Beides liegt auf oberster Ebene und nicht unter static/ - warum, steht in
+     main.py::web_app_manifest() bzw. service_worker(). #}
+  <link rel="manifest" href="manifest.webmanifest?v={{ version|default('dev') }}">
+  <meta name="theme-color" content="#0f1420">
   <link rel="stylesheet" href="static/style.css?v={{ version|default('dev') }}">
   <script>
     // Kleine Uebersetzungstabelle fuer static/filter.js - die Datei ist ein
@@ -27,6 +32,17 @@
   <!-- Icons/Knoepfe der Tabellen-Aktionsspalten, von sessions.html und
        settings.html gemeinsam genutzt. -->
   <script src="static/ui.js?v={{ version|default('dev') }}"></script>
+  <script>
+    // Registrierung bewusst ohne Fehlerbehandlung ausser dem Verschlucken:
+    // scheitert sie (kein HTTPS, alter Browser, abgeschaltet), soll die Seite
+    // trotzdem ganz normal funktionieren - der Service Worker bringt nichts
+    // ausser der Installierbarkeit (siehe static/sw.js).
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('sw.js').catch(function () {});
+      });
+    }
+  </script>
 </head>
 <body>
   <nav class="topnav" id="topnav">

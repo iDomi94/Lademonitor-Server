@@ -922,3 +922,63 @@ details.panel > summary .count {
   .detail-list { grid-template-columns: 1fr; gap: 2px 0; }
   .detail-list dd { margin-bottom: 8px; }
 }
+
+/* ---------- Verbrauch nach Temperatur (index.html) ---------- */
+.temphero {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.temphero-figure {
+  /* Die eine Zahl, wegen der es den ganzen Abschnitt gibt. Dieselbe Schrift
+     wie ueberall - eine Auszeichnungsschrift allein fuer diese Stelle waere
+     Dekoration. Bewusst OHNE tabular-nums: gleich breite Ziffern lassen eine
+     grosse Zahl locker/auseinandergezogen wirken; die brauchen nur Spalten,
+     die untereinander stehen (Tabelle, Achsenbeschriftung). */
+  font-size: 48px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text);
+}
+.temphero-label { color: var(--text); font-size: 15px; }
+.temphero-detail { color: var(--muted); font-size: 13px; margin-top: 4px; }
+.tempempty { color: var(--muted); margin: 0; }
+
+.scatterwrap { position: relative; }
+.charttip {
+  position: absolute;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 9px;
+  font-size: 13px;
+  pointer-events: none;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  white-space: nowrap;
+}
+.charttip .muted { color: var(--muted); }
+
+/* Legende: Farbe traegt die Marke, nie der Text - deshalb ein Punkt daneben
+   und normale Textfarbe statt eingefaerbter Beschriftung. */
+.chartlegend {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.chartlegend .dot {
+  display: inline-block;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  margin-right: 6px;
+}
+.chartnote { color: var(--muted); font-size: 13px; margin: 10px 0 0; }
+.chartnote:empty { margin: 0; }
+
+@media (max-width: 720px) {
+  .temphero-figure { font-size: 38px; }
+}

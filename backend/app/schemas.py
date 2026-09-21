@@ -8,6 +8,7 @@ from .models import (
     ReviewDigestFrequency,
     SessionSource,
     SmtpSecurity,
+    SyncEntityType,
     WebdavBackupFrequency,
 )
 
@@ -254,6 +255,10 @@ class SessionBase(BaseModel):
     energy_kwh: float | None = None
     energy_is_estimated: bool = False
     odometer_km: int | None = None
+    # Aussentemperatur in Grad Celsius beim Ladebeginn. Grenzen bewusst weit
+    # (-60..60): sie sollen einen vertauschten Wert oder eine Fahrenheit-Angabe
+    # abfangen, nicht die Wetterlage bewerten.
+    outside_temp_c: float | None = Field(default=None, ge=-60, le=60)
     price_total: float | None = None
     price_per_kwh: float | None = None
     latitude: float | None = None
@@ -281,6 +286,7 @@ class SessionUpdate(BaseModel):
     energy_kwh: float | None = None
     energy_is_estimated: bool | None = None
     odometer_km: int | None = None
+    outside_temp_c: float | None = Field(default=None, ge=-60, le=60)
     price_total: float | None = None
     price_per_kwh: float | None = None
     latitude: float | None = None
@@ -317,6 +323,29 @@ class AutoSessionPush(BaseModel):
     latitude: float | None = None
     longitude: float | None = None
     energy_kwh: float | None = None
+    # Aussentemperatur beim Einstecken (siehe models.ChargingSession). Home
+    # Assistant merkt sie sich beim `begin_charging_session` und schickt sie
+    # beim Ladeende mit - genau wie SoC-Start und Lade-Art, und aus demselben
+    # Grund: zum Ladeende hat sich die Temperatur schon geaendert, und die
+    # Fahrt DAVOR ist das, was die Verbrauchsanalyse auswertet.
+    outside_temp_c: float | None = Field(default=None, ge=-60, le=60)
+
+    @field_validator("outside_temp_c", mode="before")
+    @classmethod
+    def _tolerate_unknown_temperature(cls, value: object) -> object:
+        """Wie bei der Lade-Art: ein unbrauchbarer Sensorwert ('unknown',
+        'unavailable', leerer String - in Home Assistant der Normalfall, wenn
+        eine Quelle kurz weg ist) darf den kompletten Push nicht per 422
+        verwerfen. Dann lieber ohne Temperatur annehmen."""
+        if isinstance(value, str):
+            value = value.strip()
+            if not value:
+                return None
+            try:
+                return float(value)
+            except ValueError:
+                return None
+        return value
 
     @field_validator("charging_type", mode="before")
     @classmethod
@@ -555,3 +584,76 @@ class EmailLogOut(BaseModel):
     kind: str
     status: str
     error: str | None
+
+
+# ---------- Sync: Grabsteine geloeschter Datensaetze ----------
+
+class DeletedRecordOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    entity_type: SyncEntityType
+    entity_id: str
+    deleted_at: datetime
+
+
+class DeletionsOut(BaseModel):
+    """Antwort von GET /api/sync/deletions.
+
+    `server_time` ist der Cursor fuer den naechsten Aufruf: die Uhr des Servers
+    zum Zeitpunkt der Abfrage, nicht die des Geraets. Sonst wuerde jede Abweichung
+    der Geraeteuhr (Zeitzone, Drift, manuelle Umstellung) entweder Grabsteine
+    ueberspringen oder sie endlos erneut liefern."""
+
+    server_time: datetime
+    deletions: list[DeletedRecordOut]
+
+
+# ---------- Verbrauch nach Temperatur / Jahreszeit ----------
+
+class TempPointOut(BaseModel):
+    """Ein Punkt im Streudiagramm: eine Fahrt mit Temperatur und Verbrauch."""
+
+    session_id: str
+    start_time: datetime
+    temp_c: float
+    consumption_kwh_per_100km: float
+    km: float
+    consumption_method: str
+    season: str
+
+
+class TempBucketOut(BaseModel):
+    from_c: float
+    to_c: float
+    avg_consumption_kwh_per_100km: float
+    session_count: int
+    km: float
+
+
+class SeasonStatOut(BaseModel):
+    # winter | spring | summer | autumn
+    season: str
+    avg_consumption_kwh_per_100km: float
+    session_count: int
+    km: float
+
+
+class TempTrendOut(BaseModel):
+    slope: float
+    intercept: float
+    r2: float
+    consumption_at_0c: float
+    consumption_at_20c: float
+    extra_pct_at_0c: float
+
+
+class TemperatureStats(BaseModel):
+    points: list[TempPointOut]
+    buckets: list[TempBucketOut]
+    seasons: list[SeasonStatOut]
+    # None, wenn zu wenige Punkte oder ein zu schmaler Temperaturbereich
+    # vorliegen - siehe temperature.build_trend().
+    trend: TempTrendOut | None = None
+    # Vorgaenge mit berechenbarem Verbrauch, aber ohne Temperatur. Macht
+    # sichtbar, wie vollstaendig die Grundlage ist.
+    sessions_without_temp: int = 0
+    bucket_width_c: int

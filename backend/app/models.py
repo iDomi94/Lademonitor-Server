@@ -305,6 +305,18 @@ class ChargingSession(Base):
 
     odometer_km: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
+    # Aussentemperatur in Grad Celsius zum Zeitpunkt des Ladebeginns.
+    # NICHT verschluesselt (siehe crypto.py): eine Temperatur ist kein
+    # personenbezogenes Datum, und die Auswertung (temperature.py) filtert und
+    # sortiert per SQL danach - auf einer Fernet-Spalte ginge beides nicht.
+    #
+    # Warum der Wert BEIM EINSTECKEN gemessen wird und nicht waehrend des
+    # Ladens: interessant ist er fuer die Verbrauchsanalyse, und der Verbrauch
+    # eines Vorgangs beschreibt die Strecke DAVOR (siehe consumption.py). Der
+    # Moment des Einsteckens liegt unmittelbar am Ende dieser Fahrt und ist
+    # damit der beste Einzelwert, den man ohne Fahrtaufzeichnung bekommt.
+    outside_temp_c: Mapped[float | None] = mapped_column(Float, nullable=True)
+
     price_total: Mapped[float | None] = mapped_column(Float, nullable=True)
     price_per_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
 
@@ -334,6 +346,48 @@ class ChargingSession(Base):
     vehicle: Mapped["Vehicle"] = relationship(back_populates="sessions")
     provider: Mapped["Provider"] = relationship(back_populates="sessions")
     location: Mapped["ChargingLocation"] = relationship(back_populates="sessions")
+
+
+class SyncEntityType(str, enum.Enum):
+    """Die vier Kern-Entitaeten, die App und Web-UI spiegeln (siehe DeletedRecord)."""
+
+    VEHICLE = "vehicle"
+    PROVIDER = "provider"
+    LOCATION = "location"
+    SESSION = "session"
+
+
+class DeletedRecord(Base):
+    """Grabstein ("Tombstone") fuer eine geloeschte Zeile einer der vier
+    Kern-Entitaeten.
+
+    Existiert, weil die Apps (iOS/Android) ihren lokalen Spiegel sonst nie
+    erfahren, dass ein Datensatz auf dem Server - z.B. ueber die Web-UI oder
+    ein zweites Geraet - geloescht wurde. Aus der blossen ABWESENHEIT in einer
+    Pull-Antwort darf eine App das nicht schliessen: jede Luecke (Serverfehler,
+    unerwartet leere Antwort, abgebrochene Uebertragung) haette sonst stillen,
+    unwiderruflichen Datenverlust bedeutet - genau deshalb hatten beide Apps
+    das Aufraeumen bewusst abgeschaltet und lebten stattdessen mit
+    "Geisterzeilen". Ein Grabstein ist das Gegenteil davon: ein POSITIVES,
+    ausdrueckliches Signal "diese ID ist geloescht", das eine unvollstaendige
+    Antwort nicht erfinden kann.
+
+    Bewusst ohne Ablauf/Aufraeum-Job: eine Zeile ist ein paar Dutzend Byte, und
+    ein Grabstein, der zu frueh verschwindet, bringt die Geisterzeile still
+    zurueck (ein Geraet, das laenger als die Aufbewahrungsfrist offline war,
+    wuerde die Loeschung nie sehen). Der Bestand waechst nur mit der Anzahl
+    tatsaechlicher Loeschungen, nicht mit der Datenmenge.
+    """
+
+    __tablename__ = "deleted_records"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_uuid)
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    entity_type: Mapped[SyncEntityType] = mapped_column(Enum(SyncEntityType))
+    # Die ID der geloeschten Zeile - bewusst KEIN Fremdschluessel (die Zeile,
+    # auf die er zeigen wuerde, ist ja gerade weg).
+    entity_id: Mapped[str] = mapped_column(String, index=True)
+    deleted_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
 
 
 class WebdavBackupConfig(Base):
@@ -485,6 +539,11 @@ class MySkodaConfig(Base):
     open_charging_type: Mapped[str | None] = mapped_column(String, nullable=True)
     open_max_power_kw: Mapped[float | None] = mapped_column(Float, nullable=True)
     open_odometer_km: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Aussentemperatur beim Einstecken - aus demselben Grund zwischengespeichert
+    # wie soc_start: beim Ladeende ist sie eine andere als die, unter der die
+    # Fahrt davor stattfand (siehe ChargingSession.outside_temp_c). Nicht
+    # verschluesselt, ebenfalls aus demselben Grund wie dort.
+    open_outside_temp_c: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Verschluesselt (siehe crypto.py) - dieselbe GPS-Position wie
     # ChargingSession.latitude/longitude, nur als Zwischenspeicher fuer den
     # noch laufenden Vorgang (wird 1:1 dorthin kopiert, sobald er

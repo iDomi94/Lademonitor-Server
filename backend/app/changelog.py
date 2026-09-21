@@ -5,6 +5,30 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.23.0",
+        "date": "2026-09-21",
+        "title": "Verbrauch nach Außentemperatur",
+        "changes": [
+            "Neu im Dashboard: „Verbrauch nach Außentemperatur\". Jeder Punkt im Diagramm ist eine Fahrt, dazu der Mittelwert je 5-°C-Klasse und eine Ausgleichsgerade durch alle Punkte. Darüber steht die eigentliche Antwort als eine Zahl: wieviel Prozent mehr das Fahrzeug bei 0 °C braucht als bei 20 °C - für das eigene Auto gerechnet statt aus einer Faustformel. Dazu ein Vergleich der vier Jahreszeiten.",
+            "Ladevorgänge können dafür eine Außentemperatur tragen. Sie wird BEIM LADEBEGINN gemessen, und das ist kein Detail: der Verbrauch, den ein Ladevorgang ausweist, stammt von der Fahrt davor - und die endet im Moment des Einsteckens. Eine beim Ladeende gemessene Temperatur wäre nach Stunden an der Wallbox eine andere. Der Temperaturwert einer Fahrt ist entsprechend das Mittel aus den Werten beim Einstecken davor und danach.",
+            "Home Assistant liefert die Temperatur ab Lademonitor-HA 0.5.0 mit: der Dienst „Ladevorgang beginnen\" merkt sie sich zusammen mit SoC-Start und Lade-Art, der Blueprint hat dafür einen neuen, optionalen Eingang „Außentemperatur-Sensor\" (Fahrzeugsensor, Wetter-Integration oder eigenes Thermometer - alles möglich). Von Hand lässt sich der Wert beim Anlegen oder Bearbeiten eines Ladevorgangs eintragen.",
+            "Der MyŠkoda-Poller liest die Temperatur mit, falls die API sie liefert - ob sie das tut, ist an einer echten Antwort noch nicht nachgewiesen. Das Debug-Protokoll zeigt es ab jetzt an, und ohne Temperatur ändert sich schlicht nichts.",
+            "Die Auswertung lässt Ladevorgänge ohne Temperatur aus und nennt ihre Anzahl unter dem Diagramm - Bestandsdaten haben naturgemäß keine, die Aussage wird also erst mit der Zeit belastbar. Eine Ausgleichsgerade erscheint bewusst erst ab fünf Fahrten und einem Temperaturbereich von mindestens 8 °C: aus vier Punkten zwischen 18 und 20 °C lässt sich nichts über den Winter sagen. Zusätzlich steht das Bestimmtheitsmaß R² dabei, also wieviel der Streuung die Temperatur überhaupt erklärt.",
+            "Die Außentemperatur wandert auch in den Backup-Export; eine ältere Backup-ZIP ohne diese Spalte lässt sich weiterhin importieren.",
+        ],
+    },
+    {
+        "version": "0.22.0",
+        "date": "2026-09-20",
+        "title": "Alle Ladevorgänge statt nur 200, gelöschte Einträge, Installierbarkeit",
+        "changes": [
+            "Die Ladevorgangs-Liste zeigte überall stillschweigend nur die 200 neuesten Einträge - in der Web-Oberfläche, auf der Karte, in der iOS- und in der Android-App. Wer von Spritmonitor mehrere hundert Vorgänge importiert hatte, kam an die älteren gar nicht mehr heran; die Apps spiegelten sie entsprechend nie. Dass die Statistik trotzdem die vollständigen Zahlen zeigte (sie wird serverseitig über alle Vorgänge gerechnet), machte die Lücke besonders schwer zu bemerken. Ohne ausdrückliche Angabe liefert der Server jetzt alles; wer seitenweise laden will, kann `limit` und `offset` weiterhin selbst setzen. Für App und Web-Oberfläche ist nichts einzustellen - es wirkt sofort.",
+            "Auf dem Server gelöschte Ladevorgänge, Fahrzeuge, Anbieter und Ladeorte verschwinden jetzt auch aus den Apps. Bisher blieben sie dort als \"Geisterzeilen\" stehen, bis man sie auch in der App löschte: die Apps durften aus dem bloßen Fehlen eines Eintrags in der Server-Antwort nicht auf eine Löschung schließen, weil jede unvollständige Antwort (Serverfehler, Abbruch) sonst still lokale Daten vernichtet hätte. Der Server merkt sich eine Löschung jetzt ausdrücklich und meldet sie beim nächsten Abgleich - ein Signal, das eine kaputte Antwort nicht erfinden kann.",
+            "Die Web-Oberfläche lässt sich jetzt als App installieren (\"Zum Startbildschirm hinzufügen\") und startet dann in einem eigenen Fenster statt im Browser-Tab. Dafür fehlten bisher schlicht die nötigen Dateien, obwohl die passenden Symbole längst vorhanden waren. Bewusst ohne Zwischenspeicher: die App wird serverseitig gerendert, ein zwischenspeichernder Dienst wäre nur eine dritte Cache-Ebene, die man nicht mit einem Neuladen loswird.",
+            "Erstmals automatisierte Tests im Projekt (41 Stück) samt GitHub-Actions-Workflow: Verbrauchsberechnung mit ihrer fünfstufigen Fallback-Kette, die Rückdatierung des Ladebeginns inklusive beider Wächter, Backup-Export/-Import samt der beiden Fehler von 2026-08-31, die Ladevorgangs-Liste und die Löschmeldungen. Betrifft nur die Entwicklung, nicht den Betrieb - die Tests liegen nicht im Image.",
+        ],
+    },
+    {
         "version": "0.21.0",
         "date": "2026-09-16",
         "title": "Karte: Ladevorgänge eines Ortes",

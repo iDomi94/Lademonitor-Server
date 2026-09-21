@@ -8,9 +8,15 @@ from ..auth import get_current_user
 from ..consumption import compute_vehicle_consumptions
 from ..database import get_db
 from ..geocode import reverse_geocode
+from ..sync import record_deletion
 from .locations import match_location
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
+
+# Obergrenze fuer ein AUSDRUECKLICH angefordertes `limit` (siehe list_sessions).
+# Kein Default - wer nichts angibt, bekommt alles. Der Wert begrenzt nur, wie
+# gross eine einzelne angeforderte Seite sein darf.
+MAX_PAGE_SIZE = 5000
 
 
 def attach_consumption(db: Session, user_id: str, sessions: list[models.ChargingSession]) -> None:
@@ -124,7 +130,18 @@ def list_sessions(
     # Fahrzeug-Historie, ist also von diesem Filter nicht betroffen.
     start_date: date | None = None,
     end_date: date | None = None,
-    limit: int = Query(default=200, le=1000),
+    # OHNE Angabe: vollstaendige Ergebnismenge. Frueher stand hier `limit=200` als
+    # Default - und KEIN Client hat je einen Wert mitgeschickt (Web-UI, iOS,
+    # Android). Wer von Spritmonitor mehrere hundert Vorgaenge importiert hatte,
+    # sah ueberall nur die 200 neuesten, ohne Hinweis und ohne Moeglichkeit, an
+    # die aelteren zu kommen; die Apps spiegelten sie entsprechend nie. Dass die
+    # Statistik (serverseitig aggregiert, siehe routers/stats.py) trotzdem die
+    # vollstaendigen Zahlen zeigte, machte die Luecke noch unauffaelliger.
+    # Unbegrenzt ist hier vertretbar, weil attach_consumption() unten ohnehin die
+    # KOMPLETTE Fahrzeughistorie laedt (die Verbrauchskette braucht sie) - ein
+    # Limit auf der Ergebnismenge sparte also noch nie die eigentliche Arbeit.
+    limit: int | None = Query(default=None, ge=1, le=MAX_PAGE_SIZE),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
@@ -137,7 +154,12 @@ def list_sessions(
         q = q.filter(models.ChargingSession.start_time >= datetime.combine(start_date, time.min))
     if end_date:
         q = q.filter(models.ChargingSession.start_time <= datetime.combine(end_date, time.max))
-    sessions = q.order_by(models.ChargingSession.start_time.desc()).limit(limit).all()
+    q = q.order_by(models.ChargingSession.start_time.desc())
+    if offset:
+        q = q.offset(offset)
+    if limit is not None:
+        q = q.limit(limit)
+    sessions = q.all()
     attach_consumption(db, user.id, sessions)
     return sessions
 
@@ -234,6 +256,8 @@ def delete_session(
     )
     if not session:
         raise HTTPException(404, "Ladevorgang nicht gefunden")
+    # Grabstein VOR dem Loeschen, im selben Commit - siehe sync.record_deletion().
+    record_deletion(db, user.id, models.SyncEntityType.SESSION, session.id)
     db.delete(session)
     db.commit()
 
@@ -284,6 +308,7 @@ def push_auto_session(
         soc_start=payload.soc_start,
         soc_end=payload.soc_end,
         odometer_km=payload.odometer_km,
+        outside_temp_c=payload.outside_temp_c,
         latitude=payload.latitude,
         longitude=payload.longitude,
         energy_kwh=payload.energy_kwh,

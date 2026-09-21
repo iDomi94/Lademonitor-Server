@@ -51,6 +51,11 @@ SESSION_FIELDS = [
     "soc_start", "soc_end", "energy_kwh", "energy_is_estimated", "odometer_km",
     "price_total", "price_per_kwh", "latitude", "longitude", "geocoded_place",
     "source", "needs_review", "external_session_id", "notes", "created_at", "updated_at",
+    # Ans Ende gehaengt statt neben odometer_km einsortiert: der Import liest
+    # die Spalten ueber ihren Namen (DictReader), die Reihenfolge ist ihm egal -
+    # aber eine aeltere Backup-ZIP OHNE diese Spalte soll sich weiterhin
+    # einlesen lassen, und ein Diff zweier Exporte bleibt so lesbar.
+    "outside_temp_c",
 ]
 
 README_TEMPLATE = """Lademonitor Backup
@@ -203,6 +208,7 @@ def build_backup_zip(db: Session, user: models.User) -> bytes:
             "source": _c(s.source), "needs_review": _c(s.needs_review),
             "external_session_id": _c(s.external_session_id), "notes": _c(s.notes),
             "created_at": _c(s.created_at), "updated_at": _c(s.updated_at),
+            "outside_temp_c": _c(s.outside_temp_c),
         }
         for s in sessions
     ]
@@ -532,6 +538,7 @@ async def import_backup(
                 energy_kwh=_parse_float(row.get("energy_kwh")),
                 energy_is_estimated=_parse_bool(row.get("energy_is_estimated")),
                 odometer_km=_parse_int(row.get("odometer_km")),
+                outside_temp_c=_parse_float(row.get("outside_temp_c")),
                 price_total=_parse_float(row.get("price_total")),
                 price_per_kwh=_parse_float(row.get("price_per_kwh")),
                 latitude=_parse_float(row.get("latitude")),

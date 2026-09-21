@@ -42,9 +42,25 @@ Beta über TestFlight: [testflight.apple.com/join/NMbyFTEK](https://testflight.a
   bei fehlgeschlagenem Backup, bei abgelaufenem MyŠkoda-API-Key, als
   Sammelmeldung über zu prüfende Ladevorgänge und als Monatsbericht. Jede
   Meldung ist pro Nutzer abschaltbar.
+- **Verbrauch nach Außentemperatur** (seit 0.23.0): Streudiagramm aller
+  Fahrten über der Temperatur, mit Mittelwert je 5-°C-Klasse und
+  Ausgleichsgerade – darüber als Kennzahl, wie viel mehr das Fahrzeug bei
+  0 °C braucht als bei 20 °C, dazu ein Vergleich der Jahreszeiten. Die
+  Temperatur liefert Home Assistant (ab Lademonitor-HA 0.5.0) oder man trägt
+  sie von Hand ein.
+- **Kartenansicht** (seit 0.20.0) über die eigenen Ladeorte (mit
+  Matching-Radius) und alle Ladevorgänge mit Koordinaten, mit Clustern,
+  Vorschau und Legende als Filter. Leaflet liegt lokal im Image, nur die
+  Kartenkacheln kommen von OpenStreetMap – dazu gibt es einen Hinweis unter
+  der Karte und einen Abschnitt in der Datenschutzerklärung.
+- **Als App installierbar**: die Web-Oberfläche bringt ein Web-App-Manifest mit
+  und lässt sich zum Startbildschirm hinzufügen (eigenes Fenster statt
+  Browser-Tab). Bewusst ohne Zwischenspeicher, damit ein Update sofort
+  durchschlägt.
 - Server-rendertes Web-UI (kein separates Frontend-Build nötig), reine
-  REST-API für Home Assistant und die
-  [iOS-App](https://github.com/iDomi94/Lademonitor-App) (separates Repo)
+  REST-API für Home Assistant, die
+  [iOS-App](https://github.com/iDomi94/Lademonitor-App) und die
+  [Android-App](https://github.com/iDomi94/Lademonitor-Android) (eigene Repos)
 
 ## Start / Installation
 
@@ -107,6 +123,19 @@ Postgres-Instanz lassen sich optional per `.env` überschreiben (siehe
 `.env.example`) – der Compose-interne Standard ist unkritisch, da Postgres
 nicht nach außen exponiert wird. `FIELD_ENCRYPTION_KEY` in derselben `.env`
 ist ebenfalls optional, siehe [Sicherheitshinweis](#sicherheitshinweis).
+
+### Tests
+
+Laufen ohne Container gegen ein SQLite-in-memory:
+```bash
+pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+cd backend && python -m pytest
+```
+Bei jedem Push und Pull Request läuft derselbe Lauf über
+`.github/workflows/tests.yml`. **Nicht abgedeckt sind die
+Datenbank-Migrationen** (`run_light_migrations()`, bewusst Postgres-eigenes
+SQL) – die weiterhin gegen eine Kopie der echten Datenbank prüfen, siehe
+`CLAUDE.md`.
 
 ---
 

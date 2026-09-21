@@ -6,6 +6,47 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.23.0] — 2026-09-21
+
+### Added
+- **Verbrauch nach Außentemperatur** im Dashboard: Streudiagramm (eine Fahrt =
+  ein Punkt) mit Mittelwert je 5-°C-Klasse und Ausgleichsgerade, darüber als
+  Kennzahl der Mehrverbrauch bei 0 °C gegenüber 20 °C, dazu ein Vergleich der
+  vier Jahreszeiten. Neuer Endpunkt `GET /api/stats/temperature`.
+- **`ChargingSession.outside_temp_c`**: Außentemperatur beim Ladebeginn –
+  wahlweise von Home Assistant (ab Lademonitor-HA 0.5.0), vom MyŠkoda-Poller
+  (falls die API sie liefert) oder von Hand im Ladevorgangs-Formular. Wandert
+  in den Backup-Export; ältere Backup-ZIPs bleiben importierbar.
+
+### Notes
+- Die Auswertung berücksichtigt nur Ladevorgänge mit Temperatur und nennt die
+  Anzahl der übrigen. Eine Ausgleichsgerade gibt es erst ab fünf Fahrten und
+  mindestens 8 °C Spannweite, zusammen mit dem Bestimmtheitsmaß R².
+
+## [0.22.0] — 2026-09-20
+
+### Added
+- **Web-Oberfläche als App installierbar** ("Zum Startbildschirm hinzufügen"):
+  Web-App-Manifest und ein bewusst nicht zwischenspeichernder Service Worker.
+- **`GET /api/sync/deletions`**: meldet ausdrücklich, welche Datensätze auf dem
+  Server gelöscht wurden, damit die Apps ihren lokalen Spiegel aufräumen können,
+  ohne das aus dem Fehlen eines Eintrags raten zu müssen.
+- **Automatisierte Tests** (`backend/tests/`) und ein GitHub-Actions-Workflow
+  dafür. Nicht Teil des Images.
+
+### Fixed
+- **Ladevorgangs-Liste zeigte überall nur die 200 neuesten Einträge** – in der
+  Web-Oberfläche, auf der Karte, in der iOS- und in der Android-App.
+  `GET /api/sessions` hatte `limit=200` als Vorgabe, und kein Client schickte je
+  einen Wert mit. Nach einem Spritmonitor-Import mit mehreren hundert Vorgängen
+  waren die älteren nicht erreichbar und wurden von den Apps nie gespiegelt; die
+  Statistik zeigte trotzdem vollständige Zahlen, weil sie serverseitig
+  aggregiert wird. Ohne Angabe liefert der Endpunkt jetzt alles,
+  `limit`/`offset` bleiben für seitenweises Laden verfügbar.
+- **Serverseitige Löschungen kamen in den Apps nie an** ("Geisterzeilen"):
+  gelöschte Ladevorgänge, Fahrzeuge, Anbieter und Ladeorte verschwinden jetzt
+  beim nächsten Abgleich auch auf dem Gerät.
+
 ## [0.21.0] — 2026-09-16
 
 ### Changed

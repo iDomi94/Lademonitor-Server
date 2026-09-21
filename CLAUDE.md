@@ -19,10 +19,14 @@ Moduswahl beim ersten Start statt erzwungenem Login. Grund: Nutzung auch ganz
 ohne eigene Server-Infrastruktur ermoeglichen. Details/Architektur siehe
 `ios/Lademonitor/CLAUDE.md` (falls vorhanden) bzw. die Local-Only-Implementierung
 in `ios/Lademonitor/Repositories/` und `ios/Lademonitor/Models/LocalModels.swift`.
-Der Server-Modus selbst bleibt online-only wie bisher; geplant (noch nicht
-umgesetzt) ist ein Sync-Service, der beim Wechsel Local-Only -> Server lokale
-Daten hochlaedt und im Server-Modus bei kurzzeitigem Verbindungsverlust
-puffert.
+**Nachtrag:** der dort als "geplant" notierte Sync-Service existiert inzwischen
+in BEIDEN Apps (`Repositories/SyncService.swift` bzw.
+`data/repo/SyncService.kt`) - bidirektional, Push vor Pull in
+FK-Reihenfolge, Konfliktregel "lokal dirty gewinnt", und der Wechsel
+Local-Only -> Server ist dort kein Sonderfall, sondern der erste normale
+Durchlauf (jede neue lokale Zeile startet `isDirty=true`/`serverId=nil`).
+Seit v0.22.0 kommen serverseitige Loeschungen ueber Grabsteine mit an - siehe
+Abschnitt "Sync: Grabsteine fuer geloeschte Datensaetze".
 
 ## Tech-Stack
 
@@ -30,7 +34,19 @@ puffert.
 - **Web-UI:** Server-rendered Jinja2, KEIN Chart.js/externe CDN-Libs mehr
   (wurden entfernt, weil Client keinen CDN-Zugriff hatte) - Charts sind
   selbstgebaute SVG-Balkendiagramme in reinem JS
-- **iOS-App:** SwiftUI, reiner REST-Client (kein SwiftData/CoreData), async/await
+- **iOS-App:** SwiftUI + SwiftData, async/await (eigenes Repo
+  [Lademonitor-App](https://github.com/iDomi94/Lademonitor-App)). **Nicht mehr
+  "reiner REST-Client"** - seit dem Local-Only-Modus (siehe
+  Architektur-Entscheidung oben) liegt ein vollstaendiger lokaler Speicher
+  darunter, der Server-Modus synchronisiert bidirektional dagegen
+  (`Repositories/SyncService.swift`).
+- **Android-App:** Kotlin + Jetpack Compose + Room, 1:1-Portierung der iOS-App
+  (eigenes Repo
+  [Lademonitor-Android](https://github.com/iDomi94/Lademonitor-Android)) -
+  gleiche zwei Modi, gleiche Sync-Logik, gleiche Verbrauchs-Fallback-Kette.
+- **Tests:** `backend/tests/` (pytest gegen SQLite-in-memory), CI in
+  `.github/workflows/tests.yml`. Siehe eigenen Abschnitt "Tests" weiter unten -
+  insbesondere, was dort bewusst NICHT abgedeckt ist.
 - **Deployment:** `docker compose up -d --build` im Projekt-Root auf Unraid,
   Compose-Projektname/Stack-Name beim Nutzer: "Lademonitor"
 
@@ -38,26 +54,31 @@ puffert.
 
 ```
 backend/app/
-  models.py          - SQLAlchemy: Vehicle, Provider, ChargingLocation, ChargingSession
+  models.py          - SQLAlchemy: Vehicle, Provider, ChargingLocation, ChargingSession,
+                          DeletedRecord (Grabsteine, siehe Abschnitt "Sync")
   schemas.py          - Pydantic Request/Response-Schemas
   routers/
     vehicles.py, providers.py, locations.py, sessions.py, stats.py, importer.py,
-    geocoding.py, backup.py, auth.py, webdav_backup.py, myskoda.py, email.py
+    geocoding.py, backup.py, auth.py, webdav_backup.py, myskoda.py, email.py,
+    sync.py
   auth.py            - Passwort-Hashing, Token-Handling, Auth-Dependencies
+  sync.py            - record_deletion(): Grabstein fuer eine geloeschte Zeile
   myskoda.py         - Client fuer die offizielle MyŠkoda Public API (sync httpx)
   myskoda_poller.py  - Zustandsmaschine der automatischen Ladeerkennung + Debug-Log
   mailer.py          - SMTP-Versand, Mail-Vorlagen, Versandprotokoll
   notifications.py   - Benachrichtigungen (ereignisgetrieben + zeitgesteuert)
-  templates/          - Jinja2 Web-UI (index=Dashboard, sessions, settings +
+  templates/          - Jinja2 Web-UI (index=Dashboard, sessions, map, settings +
                           die Unterseiten import, settings_backup, settings_api,
                           settings_email; auth_base.html fuer die Seiten ohne
                           Anmeldung; emails/ fuer die Mail-Vorlagen)
-  static/style.css, static/filter.js, static/ui.js
-ios/Lademonitor/
-  Models/Models.swift          - Swift-Pendant zu schemas.py
-  Networking/APIClient.swift, AppSettings.swift
-  Views/                       - Dashboard, SessionsList, AddEditSession, Settings, ContentView
+  static/style.css, static/filter.js, static/ui.js, static/sw.js,
+  static/vendor/leaflet/  - Leaflet 1.9.4 lokal (siehe Abschnitt "Kartenansicht")
+backend/tests/       - pytest (siehe Abschnitt "Tests")
 ```
+
+Die Clients liegen in eigenen Repos, nicht mehr unter `ios/` in diesem Repo:
+`Lademonitor-App` (iOS), `Lademonitor-Android`, `Lademonitor-HA` (HACS-
+Integration) und `Lademonitor-HA-Addon` (Server als HA-Add-on).
 
 ## Datenmodell-Kernpunkte
 
@@ -578,6 +599,48 @@ Icon/Tooltip-Logik in der SessionsList-View.
   Sprachen/Fahrzeugtypen ggf. weitere Aliase nötig
 - **iOS-App: Fahrzeug kann beim Bearbeiten nicht gewechselt werden** (by
   design, da `SessionUpdate`-Schema kein vehicle_id-Feld hat)
+- **Ladevorgangs-Liste war auf 200 Eintraege gedeckelt** - `GET /api/sessions`
+  hatte `limit=200` als Default und kein Client schickte je einen Wert.
+  **Erledigt seit 2026-09-20 (v0.22.0)**, siehe Abschnitt "Paginierung von
+  `GET /api/sessions`".
+- **Serverseitige Loeschungen erreichten die Apps nie** ("Geisterzeilen").
+  **Erledigt seit 2026-09-20 (v0.22.0)** ueber Grabsteine, siehe Abschnitt
+  "Sync: Grabsteine fuer geloeschte Datensaetze". **Noch offen davon:** ein
+  inkrementeller Delta-Pull auch fuer AENDERUNGEN - haengt daran, dass die
+  Verbrauchsberechnung ueber die Kette laeuft und eine Aenderung die Werte der
+  Nachbarn mitbewegt, ohne deren `updated_at` anzufassen (Begruendung im selben
+  Abschnitt).
+- **Keine automatisierten Tests** in keinem der fuenf Repos. **Teilweise
+  erledigt seit 2026-09-20 (v0.22.0)**: pytest im Server-Repo, siehe Abschnitt
+  "Tests". **Noch offen:** die Migrationen (`run_light_migrations()`, bewusst
+  ausgeklammert - Postgres-eigenes SQL), der MyŠkoda-Poller als Ganzes
+  (bisher nur `_backdated_start()`), die Leaflet-Logik der Kartenseite, sowie
+  Tests in den vier uebrigen Repos (iOS/Android/HA/HA-Addon haben keine).
+- **Web-Oberflaeche war nicht installierbar**, obwohl der Changelog von
+  "PWA-Installation" sprach - Manifest und Service Worker fehlten schlicht.
+  **Erledigt seit 2026-09-20 (v0.22.0)**, siehe Abschnitt "PWA".
+- **`CLAUDE.md` lief dem Code hinterher** (Tech-Stack nannte die iOS-App noch
+  einen "reinen REST-Client", die Android-App kam gar nicht vor, die
+  TODO-Liste endete bei v0.14 bei damals v0.21.0). **Aufgeraeumt 2026-09-20.**
+  Diese Datei ist die einzige Wissensquelle fuer das Projekt - sie
+  mitzupflegen gehoert zu jedem groesseren Schritt, nicht in einen spaeteren
+  Aufraeumlauf.
+- **Aussentemperatur: noch keine Werte in Bestandsdaten.** Die Auswertung
+  (siehe Abschnitt "Verbrauch nach Aussentemperatur") beginnt bei null und
+  wird erst ueber die Monate belastbar - fuer alte Vorgaenge laesst sich der
+  Wert nicht nachtraeglich ermitteln, ein geratener waere schlimmer als
+  keiner. **Offen ausserdem:** ob die MyŠkoda Public API die Temperatur
+  ueberhaupt liefert, ist an einer echten Antwort nicht nachgewiesen (die
+  Auswertung klopft mehrere plausible Stellen ab) - beim naechsten Poll ins
+  Debug-Protokoll sehen. **Erledigt seit 2026-09-21:** beide Apps kennen das
+  Feld inzwischen (erfassen, anzeigen, synchronisieren - auch im
+  Local-Only-Modus; Android brauchte dafuer die Room-Migration 1->2). Dass ein
+  App-Speichern OHNE das Feld den Wert nicht loescht, haengt allein an
+  `exclude_unset` in `update_session()` und ist in
+  `tests/test_temperature.py` festgehalten. **Weiterhin offen:** die
+  Auswertung selbst (Streudiagramm, Trend) gibt es nur im Web-Dashboard - sie
+  in den Apps anzubieten hiesse, `temperature.py` ein drittes Mal nachzubauen,
+  wie schon bei `LocalConsumptionCalculator`.
 - **Xcode-Beta-Umgebung des Nutzers:** macOS 27 Beta + Xcode 27 Beta
   (Erstbeta, Stand Aug 2026). Es gab einen `dyld_shared_cache_extract_dylibs`
   Bug beim Installieren auf echtem Gerät - gelöst durch Löschen von
@@ -1173,6 +1236,235 @@ Rohdatentraeger, nicht das CSV-Backup. Bewusst nicht in diesem ersten Schritt
 geloest (wuerde das dokumentierte, restore-faehige CSV-Format aendern);
 Kandidat fuer einen spaeteren Schritt waere ein optional verschluesseltes
 ZIP (z.B. Passwort-geschuetzt) speziell fuer den WebDAV-Weg.
+
+## Sync: Grabsteine fuer geloeschte Datensaetze (`sync.py`, `routers/sync.py`, ab 2026-09-20, v0.22.0)
+
+Beide Apps spiegeln die vier Kern-Entitaeten lokal (SwiftData bzw. Room). Eine
+Loeschung auf dem Server - ueber die Web-UI, ein zweites Geraet, einen anderen
+Client - kam dort bis v0.22.0 **nie** an: die Apps hatten das Aufraeumen
+ausdruecklich abgeschaltet (`removeVanishedMirrors()` war ein leerer Rumpf) und
+lebten stattdessen mit "Geisterzeilen".
+
+**Das war richtig so, und der Grund gilt weiter:** aus der ABWESENHEIT einer
+Zeile in einer Pull-Antwort darf man nicht auf eine Loeschung schliessen. Ein
+Serverfehler, eine unerwartet leere Antwort oder ein Fehler in der
+ID-Aufloesung beim vorangegangenen Push sehen genauso aus - und haetten still
+und unwiderruflich lokale Ladevorgaenge vernichtet.
+
+Die Loesung ist deshalb nicht, jene Pruefung wieder einzuschalten, sondern ein
+**positives** Signal: `models.DeletedRecord` haelt pro geloeschter Zeile einen
+Grabstein (`entity_type`, `entity_id`, `deleted_at`, `user_id`), angelegt in
+`sync.record_deletion()` direkt VOR dem `db.delete()` und im selben Commit -
+sonst gaebe es den Zustand "Zeile weg, Grabstein fehlt", also genau die Luecke,
+die der Mechanismus schliessen soll. `GET /api/sync/deletions?since=` liefert
+sie.
+
+**Bewusst ohne Ablauf/Aufraeum-Job.** Eine Zeile ist ein paar Dutzend Byte, und
+ein zu frueh entfernter Grabstein bringt die Geisterzeile still zurueck (ein
+Geraet, das laenger offline war als die Frist, saehe die Loeschung nie). Der
+Bestand waechst mit der Anzahl LOESCHUNGEN, nicht mit der Datenmenge.
+
+**Der Cursor ist ein roher String, kein Datum.** `server_time` wird von den Apps
+unveraendert zurueckgeschickt. Grund: der Server schreibt naive UTC-Zeitstempel
+(`datetime.utcnow()`), die Datums-Decoder beider Apps deuten einen Zeitstempel
+ohne Zone aber als LOKALE Zeit (bewusst, siehe `APIClient.swift` - fuer
+`start_time` ist das richtig). Einmal hin- und zurueckgewandelt waere der Cursor
+um den Zeitzonen-Offset verschoben und wuerde Loeschungen ueberspringen. Als
+unveraenderte Zeichenkette kann das nicht passieren. `server_time` wird
+ausserdem VOR der Abfrage genommen: ein Grabstein, der waehrenddessen entsteht,
+faellt dann ins naechste Fenster statt zwischen beide.
+
+**Der Grabstein gewinnt, auch gegen `isDirty`.** Die Zeile existiert auf dem
+Server nicht mehr, ein Push darauf liefe in ein 404, und sie stehenzulassen
+braechte die Geisterzeile zurueck. Die Apps setzen ihren Cursor erst NACH dem
+erfolgreichen Anwenden - eine bereits geloeschte Zeile erneut zu loeschen ist
+folgenlos, eine verpasste Loeschung waere dauerhaft. Gegen einen Server aelter
+als v0.22.0 (404 auf den Endpunkt) verhalten sich beide Apps wie bisher, statt
+den ganzen Sync als fehlgeschlagen zu melden.
+
+**Was bewusst NICHT umgesetzt ist: ein Delta-Pull fuer Aenderungen.** Naechster
+Gedanke waere, auch die vier Listen nur noch inkrementell zu holen
+(`?since=`, `updated_at` liegt auf `ChargingSession` schon vor). Bei den
+Ladevorgaengen geht das aber nicht ohne Weiteres: `consumption.py` berechnet
+den Verbrauch aus der KETTE (Vorgaenger, Vollladungs-Intervalle), eine
+Aenderung an einem Vorgang aendert also die Werte seiner Nachbarn mit, ohne
+deren `updated_at` anzufassen. Ein Delta-Pull wuerde dort veraltete
+Verbrauchswerte stehen lassen. Die Volluebertragung bleibt deshalb - sie ist
+seit dem Limit-Fix (siehe unten) ohnehin erst vollstaendig.
+
+**Nutzer loeschen:** `_purge_owned_data()` in `routers/auth.py` raeumt die
+Grabsteine mit weg - sie haengen per Fremdschluessel am Nutzer, eine
+verbliebene Zeile liesse das Loeschen des Kontos an Postgres scheitern (genau
+der Fehlertyp, der 2026-09-09 schon einmal in der Admin-Loeschfunktion steckte).
+
+## Paginierung von `GET /api/sessions` (Fix 2026-09-20, v0.22.0)
+
+Der Endpunkt hatte `limit: int = Query(default=200, le=1000)` - und **kein
+einziger Client** hat je einen Wert mitgeschickt: Web-UI (`sessions.html`),
+iOS (`APIClient.swift`), Android (`ApiClient.kt`). Wer mehr als 200
+Ladevorgaenge hatte (nach einem Spritmonitor-Import schnell der Fall), sah
+ueberall nur die neuesten 200, ohne Hinweis und ohne Weg zu den aelteren; die
+Apps spiegelten sie entsprechend nie. Dass die Statistik trotzdem die
+vollstaendigen Zahlen zeigte (`routers/stats.py` aggregiert serverseitig ueber
+alle Vorgaenge), machte die Luecke besonders schwer zu bemerken. Betraf auch
+die Kartenansicht, die ihre Punkte aus demselben Endpunkt zieht.
+
+Jetzt: **ohne Angabe die vollstaendige Ergebnismenge**, `limit` (1..5000) und
+`offset` optional fuer seitenweises Laden. Unbegrenzt ist hier vertretbar, weil
+`attach_consumption()` ohnehin die KOMPLETTE Fahrzeughistorie laedt (die
+Verbrauchskette braucht sie) - ein Limit auf der Ergebnismenge hat die
+eigentliche Arbeit also noch nie gespart. Die Clients mussten dafuer nicht
+angefasst werden: sie schickten ja nie einen Wert.
+
+## PWA: installierbare Web-Oberflaeche (ab 2026-09-20, v0.22.0)
+
+`icon-192.png`/`icon-512.png` lagen seit dem Logo-Wechsel (v0.18.0) im Repo und
+der Changelog sprach von "PWA-Installation" - es gab aber **weder ein Manifest
+noch einen Service Worker**, die Oberflaeche war also nirgends installierbar.
+
+Beide liegen bewusst auf OBERSTER Ebene (`main.py::web_app_manifest()`,
+`service_worker()`), nicht unter `/static/`:
+
+- Beim Manifest werden `start_url`/`scope` relativ zur Adresse DES MANIFESTS
+  aufgeloest - unter `/static/manifest.webmanifest` waere der Geltungsbereich
+  der App `/static/`, ein Start landete im Dateiverzeichnis.
+- Der Service Worker gilt standardmaessig nur fuer sein eigenes Verzeichnis;
+  aus `/static/` heraus deckte er die App gar nicht ab.
+
+Inhalte ausschliesslich relativ (`.`, `static/...`), damit beides am
+Domain-Root UND unter dem HA-Ingress-Unterpfad aufgeht. Beide Routen sind ohne
+Anmeldung erreichbar: der Browser holt das Manifest teils ohne die Cookies der
+Seite, und die Login-Seite soll installierbar sein.
+
+**Der Service Worker cacht bewusst NICHTS** (`static/sw.js`) - er existiert
+allein, weil Browser eine Installierbarkeit ohne ihn nicht anerkennen. Die App
+ist auf "nichts Veraltetes ausliefern" gebaut (`no-store` auf HTML, `no-cache`
+plus `?v=` auf statischen Dateien); ein cachender Worker waere eine dritte
+Cache-Ebene und die einzige, die ein Nutzer nicht mit einem Neuladen loswird -
+genau der Fehler, der 2026-09-06 schon einmal teuer war. Offline-Faehigkeit ist
+ohnehin kein Ziel: die Seiten werden serverseitig gerendert. Dafuer gibt es die
+beiden Apps mit lokalem Speicher.
+
+## Tests (`backend/tests/`, ab 2026-09-20, v0.22.0)
+
+Bis dahin gab es in KEINEM der fuenf Repos einen einzigen automatisierten Test.
+Jetzt pytest gegen ein SQLite-in-memory, ohne Container, plus
+`.github/workflows/tests.yml`. Abgedeckt sind bewusst die Stellen, an denen
+dieses Projekt real gestolpert ist:
+
+- `test_consumption.py` - die fuenfstufige Fallback-Kette, je Methode ein Fall,
+  der sie ausloesen MUSS, plus die Faelle, in denen es `unavailable` bleiben
+  muss (kein Vorgaenger, fallender Kilometerstand, fehlende Energie).
+- `test_backdating.py` - `_backdated_start()` samt beider Waechter, nachgebaut
+  an den echten DC-Vorgaengen vom 05./06.09.2026.
+- `test_backup_roundtrip.py` - Export/Import inkl. der beiden Fehler von
+  2026-08-31 (Import in ein zweites Konto; Idempotenz des Fixes dafuer).
+- `test_sessions_api.py` - die 200er-Grenze als Regressionstest.
+- `test_sync_deletions.py` - Grabsteine je Entitaet, `since`-Fenster (auch mit
+  zeitzonenbehaftetem Cursor), Trennung pro Nutzer.
+- `test_web_pages.py` - Manifest/Service Worker/Kartenseite, inkl. der Pruefung
+  auf ausschliesslich relative Pfade (Ingress).
+
+**Was bewusst NICHT getestet wird - und deshalb weiterhin von Hand gegen eine
+Kopie der Produktiv-DB geprueft werden MUSS:**
+`database.py::run_light_migrations()`. Das ist rohes, Postgres-eigenes SQL
+(`information_schema`, `pg_constraint`, `ADD COLUMN IF NOT EXISTS`) und
+scheitert auf SQLite schon an der Syntax; `conftest.py` ersetzt die Funktion
+deshalb durch einen No-Op und baut die Tabellen direkt aus den Modellen. Die
+Tests pruefen also das ZIEL-Schema, nicht den Weg dorthin - gerade bei der
+Verschluesselungs-Migration ist das der gefaehrliche Teil. Ebenfalls offen: die
+Kartenansicht hat ausser dem Ausliefern der Seite keine Tests (Leaflet-Logik im
+Browser), und die vier uebrigen Repos haben weiterhin gar keine.
+
+Zwei Dinge, die `conftest.py` bewusst tut und die man beim Erweitern kennen
+sollte: SQLite prueft Fremdschluessel standardmaessig NICHT (ein `PRAGMA
+foreign_keys=ON` schaltet das ein - ohne das waere der FK-Fehler in der
+Loeschfunktion von 2026-09-09 gruen durchgelaufen), und der TestClient laeuft
+ohne `with`, damit der `lifespan` und mit ihm die drei Hintergrund-Scheduler
+nicht anspringen und nebenher auf derselben DB arbeiten.
+
+## Verbrauch nach Aussentemperatur (`temperature.py`, ab 2026-09-21, v0.23.0)
+
+Beantwortet fuer das eigene Fahrzeug, was sonst als Faustformel kursiert: wie
+viel mehr braucht es im Winter. Drei Entscheidungen tragen den Rest.
+
+**1. Wann die Temperatur gemessen wird: BEIM LADEBEGINN.** Das ist der Kern,
+nicht ein Detail. `consumption.py` rechnet den Verbrauch eines Vorgangs N aus
+der Strecke zwischen N-1 und N - der Wert beschreibt also eine FAHRT. Die endet
+im Moment des Einsteckens; eine beim Ladeende gemessene Temperatur waere nach
+Stunden an der Wallbox eine voellig andere. Deshalb merkt sich auch Home
+Assistant den Wert beim `begin_charging_session` (wie SoC-Start und Lade-Art)
+und der MyŠkoda-Poller in `MySkodaConfig.open_outside_temp_c`.
+
+**2. Welche Temperatur zu welcher Fahrt gehoert: das Mittel beider Enden.**
+`temp(N-1)` liegt ungefaehr am Anfang der Fahrt, `temp(N)` an ihrem Ende - also
+das Mittel, wenn beide bekannt sind, sonst `temp(N)` allein. Fehlt `temp(N)`,
+wird der Punkt verworfen statt auf `temp(N-1)` auszuweichen: zwischen dem
+Einstecken davor und dieser Fahrt koennen Tage liegen.
+
+**3. Gewichtet wird mit Kilometern**, wie beim Monatsdurchschnitt in
+`routers/stats.py` - sonst zieht eine 5-km-Kurzstrecke mit unplausiblem Wert
+eine ganze Temperaturklasse schief.
+
+**Wo die Werte herkommen** (alle drei optional, alle drei gleichwertig):
+Home-Assistant-Push (`schemas.AutoSessionPush.outside_temp_c`, ab
+Lademonitor-HA 0.5.0), MyŠkoda-Poller (`myskoda.VehicleSnapshot.outside_temp_c`
+- **unverifiziert**, ob die Public API sie ueberhaupt liefert; die Auswertung
+klopft mehrere plausible Stellen ab und faellt sonst auf None zurueck, das
+Debug-Protokoll zeigt das Ergebnis), oder von Hand im
+Ladevorgangs-Formular.
+
+**Nicht verschluesselt** (siehe crypto.py): eine Temperatur ist kein
+personenbezogenes Datum, und die Auswertung filtert/sortiert per SQL danach.
+
+**Wann bewusst NICHTS ausgewiesen wird.** Eine Ausgleichsgerade erscheint erst
+ab `MIN_POINTS_FOR_TREND` (5) Fahrten UND `MIN_TEMP_SPAN_FOR_TREND_C` (8 Grad)
+Spannweite. Vier Punkte zwischen 18 und 20 Grad ergeben rechnerisch auch eine
+Steigung - nur sagt die nichts ueber den Winter, und einer Zahl sieht man das
+nicht an. Zusaetzlich steht `r2` dabei (wieviel der Streuung die Temperatur
+ueberhaupt erklaert). Vorgaenge ohne Temperatur werden gezaehlt und unter dem
+Diagramm genannt, statt sie stillschweigend wegzulassen - Bestandsdaten haben
+naturgemaess keine.
+
+**Jahreszeiten** sind meteorologisch (Monatsgrenzen, Nordhalbkugel) - eine
+bewusste Vereinfachung; die Temperaturklassen daneben sind davon unabhaengig
+und bleiben ueberall richtig.
+
+**Regression von Hand** (fuenf Summen fuer eine Gerade) statt numpy/scipy:
+scipy haengt zwar ueber `reverse_geocoder` ohnehin im Image, ist aber genau
+das Paket, das beim Bauen fuer fremde Architekturen schon Aerger gemacht hat.
+
+### Darstellung (`templates/index.html`)
+
+Drei Marken in einem Bild, weil erst sie zusammen die Frage beantworten: ein
+Punkt je Fahrt (die Streuung - ohne sie wirkt jede Trendlinie ueberzeugender
+als die Daten hergeben), das Mittel je 5-Grad-Klasse (das, was man ablesen
+soll) und die Ausgleichsgerade (die Zusammenfassung). Darueber die eine Zahl
+als Kennzahl: Mehrverbrauch bei 0 statt 20 Grad.
+
+**Farben:** dieselben drei Farbtoene wie im Rest der Oberflaeche, aber je eine
+Stufe dunkler (`#3d8ee0`/`#2ea87f`/`#bd8a26` statt `#5aa9ff`/`#4fd1a5`/
+`#f2b84b`). Die hellen Toene sind fuer einzelne Balken und Badges gedacht; als
+Feld aus ueber hundert Punkten auf dem dunklen Kartenhintergrund blenden sie.
+Die drei Werte sind gegen den Kartenhintergrund auf Helligkeitsband,
+Farbabstand bei Farbfehlsichtigkeit (Delta E >= 8) und Kontrast geprueft.
+
+**Kein punktgenaues Zeigen:** der Tooltip sucht den naechstgelegenen Punkt im
+Umkreis von ~24 px, ein 8-px-Ziel mittig zu treffen ist keine Bedienung. Die
+Tabellenansicht unter dem Diagramm ist der barrierefreie Zwilling - jeder Wert
+ist auch ohne Zeigegeraet erreichbar.
+
+**Seitenverhaeltnis haengt an der Breite:** das SVG skaliert mit fester
+Proportion, 720x320 wird auf 360 px Breite zu einem 160 px hohen Streifen. Unter
+520 px bekommt es deshalb ein fast quadratisches Feld - und damit groessere
+Schrift, weil die Einheiten mitskalieren.
+
+**Jahreszeiten als liegende Balken**, nullbasiert. Der Unterschied zwischen
+15,4 und 17,9 sieht auf einer Nullachse klein aus - das ist er auch; die Achse
+abzuschneiden wuerde ihn kuenstlich vergroessern. Die Zahlen stehen direkt an
+den Balken. (Die Balken stehen wie alle Diagramme dieser Art mittig in der
+Karte statt sie auszufuellen - das haengt am gemeinsamen `renderBarChart` und
+betrifft auch die Monatsdiagramme; bewusst nicht hier mitgeaendert.)
 
 ## Backup-Export/-Import (`routers/backup.py`)
 
