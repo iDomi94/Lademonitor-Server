@@ -39,8 +39,10 @@ from .routers import (
     stats,
     sync,
     vehicles,
+    weather,
     webdav_backup,
 )
+from .weather import run_due_autofill
 from .webdav_backup import run_due_backups
 
 # Feld-Verschluesselung ist opt-in (siehe crypto.py) - hier wird nur das
@@ -103,12 +105,30 @@ async def _notification_scheduler_loop() -> None:
         await asyncio.sleep(NOTIFICATION_SCHEDULER_INTERVAL_SECONDS)
 
 
+async def _weather_scheduler_loop() -> None:
+    """Aussentemperatur fuer frische Ladevorgaenge nachziehen (siehe weather.py).
+
+    Derselbe Takt wie beim WebDAV-Backup. Bewusst hier und nicht im
+    Request-Pfad von `POST /api/sessions/auto`: sonst haenge die Antwortzeit
+    des HA-Pushes an einem fremden Server, und ein langsamer Wetterdienst
+    liesse die Automation des Nutzers ins Timeout laufen. Nutzer ohne den
+    Schalter kommen in `autofill_new_sessions()` gar nicht erst vor - der
+    Durchlauf macht dann keinen einzigen Abruf."""
+    while True:
+        try:
+            await asyncio.to_thread(run_due_autofill)
+        except Exception:
+            logger.exception("Wetter-Scheduler-Durchlauf fehlgeschlagen")
+        await asyncio.sleep(WEBDAV_SCHEDULER_INTERVAL_SECONDS)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     tasks = [
         asyncio.create_task(_webdav_scheduler_loop()),
         asyncio.create_task(_myskoda_scheduler_loop()),
         asyncio.create_task(_notification_scheduler_loop()),
+        asyncio.create_task(_weather_scheduler_loop()),
     ]
     yield
     for task in tasks:
@@ -161,6 +181,7 @@ app.include_router(geocoding.router, dependencies=[Depends(get_current_user)])
 app.include_router(backup.router, dependencies=[Depends(get_current_user)])
 app.include_router(webdav_backup.router, dependencies=[Depends(get_current_user)])
 app.include_router(myskoda.router, dependencies=[Depends(get_current_user)])
+app.include_router(weather.router, dependencies=[Depends(get_current_user)])
 # email.router prueft pro Endpunkt selbst auf Admin (require_admin), braucht
 # hier also nur die allgemeine Anmeldepflicht wie die uebrigen Router.
 app.include_router(email.router, dependencies=[Depends(get_current_user)])

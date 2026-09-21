@@ -229,6 +229,26 @@ def run_light_migrations() -> None:
             )
         )
 
+        # Herkunft der Aussentemperatur (siehe models.TemperatureSource). Der
+        # Enum-Typ muss in Postgres existieren, BEVOR die Spalte ihn benutzt -
+        # gleiches Muster wie bei reviewdigestfrequency weiter unten.
+        # Bestandszeilen bleiben bewusst NULL: sie sind alle VEHICLE oder
+        # MANUAL, nur eben nicht mehr auseinanderzuhalten, und ein geratener
+        # Wert waere schlimmer als gar keiner.
+        conn.execute(
+            text(
+                "DO $$ BEGIN "
+                "CREATE TYPE temperaturesource AS ENUM ('VEHICLE', 'MANUAL', 'WEATHER'); "
+                "EXCEPTION WHEN duplicate_object THEN NULL; END $$"
+            )
+        )
+        conn.execute(
+            text(
+                "ALTER TABLE charging_sessions "
+                "ADD COLUMN IF NOT EXISTS outside_temp_source temperaturesource"
+            )
+        )
+
         # Multi-User-Umstellung: user_id auf allen vier Kern-Tabellen ergaenzen.
         # Bestehende Zeilen (aus der Zeit vor Multi-User) werden dem ERSTEN
         # jemals registrierten Nutzer zugeordnet - das ist zuverlaessig der
@@ -312,6 +332,12 @@ def run_light_migrations() -> None:
             ("review_digest", "reviewdigestfrequency", "'OFF'"),
             ("last_review_digest_at", "TIMESTAMP", None),
             ("last_monthly_report_at", "TIMESTAMP", None),
+            # Automatischer Temperatur-Abruf (siehe weather.py). Standard FALSE
+            # auch fuer Bestandsnutzer: der Schalter schickt Koordinaten an
+            # einen fremden Dienst, das darf eine Migration niemandem
+            # unterschieben.
+            ("weather_autofill_enabled", "BOOLEAN", "FALSE"),
+            ("weather_api_url", "VARCHAR", None),
         ):
             suffix = f" DEFAULT {default}" if default else ""
             conn.execute(

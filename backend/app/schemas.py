@@ -9,6 +9,7 @@ from .models import (
     SessionSource,
     SmtpSecurity,
     SyncEntityType,
+    TemperatureSource,
     WebdavBackupFrequency,
 )
 
@@ -67,6 +68,8 @@ class UserOut(BaseModel):
     notify_monthly_report: bool = False
     notify_new_registration: bool = True
     review_digest: ReviewDigestFrequency = ReviewDigestFrequency.OFF
+    weather_autofill_enabled: bool = False
+    weather_api_url: str | None = None
 
 
 class PasswordChange(BaseModel):
@@ -259,6 +262,11 @@ class SessionBase(BaseModel):
     # (-60..60): sie sollen einen vertauschten Wert oder eine Fahrenheit-Angabe
     # abfangen, nicht die Wetterlage bewerten.
     outside_temp_c: float | None = Field(default=None, ge=-60, le=60)
+    # Herkunft der Temperatur (siehe models.TemperatureSource). Clients muessen
+    # das Feld nicht setzen: wer einen Wert schickt, ohne die Quelle zu nennen,
+    # hat ihn von Hand eingetragen - der Server traegt dann MANUAL nach (siehe
+    # routers/sessions.py).
+    outside_temp_source: TemperatureSource | None = None
     price_total: float | None = None
     price_per_kwh: float | None = None
     latitude: float | None = None
@@ -287,6 +295,7 @@ class SessionUpdate(BaseModel):
     energy_is_estimated: bool | None = None
     odometer_km: int | None = None
     outside_temp_c: float | None = Field(default=None, ge=-60, le=60)
+    outside_temp_source: TemperatureSource | None = None
     price_total: float | None = None
     price_per_kwh: float | None = None
     latitude: float | None = None
@@ -657,3 +666,64 @@ class TemperatureStats(BaseModel):
     # sichtbar, wie vollstaendig die Grundlage ist.
     sessions_without_temp: int = 0
     bucket_width_c: int
+
+
+# ---------- Aussentemperatur vom Wetterdienst (weather.py) ----------
+
+class WeatherSettingsUpdate(BaseModel):
+    """Pro Nutzer, Standard aus - siehe weather.py.
+
+    `api_url` leer/None bedeutet "oeffentlicher Open-Meteo-Dienst". Ein
+    eigener Wert zeigt auf eine selbst gehostete Instanz; validiert wird nur
+    grob auf http(s), den Rest klaert der erste Abruf.
+    """
+
+    enabled: bool
+    api_url: str | None = None
+
+    @field_validator("api_url")
+    @classmethod
+    def _check_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip().rstrip("/")
+        if not value:
+            return None
+        if not value.startswith(("http://", "https://")):
+            raise ValueError("Adresse muss mit http:// oder https:// beginnen")
+        return value
+
+
+class WeatherSettingsOut(BaseModel):
+    enabled: bool
+    api_url: str | None = None
+    # Der tatsaechlich verwendete Dienst (Vorgabe, wenn api_url leer ist) -
+    # damit in den Einstellungen steht, wohin die Koordinaten wirklich gehen.
+    effective_api_url: str
+    # Nachkommastellen, auf die Koordinaten vor dem Abruf gerundet werden.
+    coordinate_precision: int
+
+
+class BackfillPreviewItem(BaseModel):
+    session_id: str
+    start_time: datetime
+    previous_temp_c: float | None = None
+    temp_c: float
+
+
+class WeatherBackfillResult(BaseModel):
+    """Ergebnis eines Nachtrag-Laufs.
+
+    Dieselbe Struktur fuer Probelauf und Ernstfall - nur `written` bleibt beim
+    Probelauf 0. So zeigt die Vorschau exakt das, was danach passieren wuerde,
+    statt einer Schaetzung.
+    """
+
+    dry_run: bool
+    considered: int
+    already_set: int
+    without_coordinates: int
+    resolved: int
+    unresolved: int
+    written: int
+    preview: list[BackfillPreviewItem] = []

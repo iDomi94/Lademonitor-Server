@@ -153,6 +153,14 @@
           Nominatim-API von OpenStreetMap übermittelt. Ohne Suche keine Übermittlung; die
           automatische Orts-Anzeige an Ladevorgängen läuft dagegen offline, ganz ohne
           Internetzugriff.</li>
+        <li><strong>Wetterdienst (Open-Meteo oder ein von dir eingetragener eigener
+          Dienst)</strong> – nur wenn du in deinen Einstellungen „Außentemperatur
+          automatisch holen“ einschaltest oder den Nachtrag für Bestandsdaten von Hand
+          startest. Übermittelt werden dann die Koordinaten des Ladeorts – auf zwei
+          Nachkommastellen gerundet, also rund 1,1 km genau – und der Tag des
+          Ladebeginns; der Dienst erfährt damit mittelbar die Gegend, in der du lädst.
+          Uhrzeit, Fahrzeug, Kilometerstand und alle übrigen Ladedaten bleiben hier.
+          Ohne diesen Schalter ruft der Server keinen Wetterdienst auf.</li>
         <li><strong>MyŠkoda Public API (Škoda Auto)</strong> – nur wenn du in den
           Einstellungen einen eigenen API-Key hinterlegst, fragt der Server dort
           regelmäßig den Lade-/Akkustatus deines Fahrzeugs ab (VIN, Akkustand, ggf.
@@ -274,6 +282,14 @@
           in the "add location" form is your search text sent to OpenStreetMap's public
           Nominatim API. No search, no transmission; the automatic place name shown on a
           charging session, by contrast, runs fully offline.</li>
+        <li><strong>Weather service (Open-Meteo, or your own instance if you configure
+          one)</strong> – only if you turn on &ldquo;fetch outside temperature
+          automatically&rdquo; in your settings, or start the backfill for existing data
+          yourself. What is sent is the charging location's coordinates – rounded to two
+          decimal places, so accurate to about 1.1 km – and the date of the charging
+          start; the service thus learns indirectly the area in which you charge. Time of
+          day, vehicle, odometer reading and all other charging data stay here. Without
+          that switch the server never calls a weather service.</li>
         <li><strong>MyŠkoda Public API (Škoda Auto)</strong> – only if you add your own API
           key in settings, the server periodically polls your vehicle's charging/battery
           state there (VIN, battery level, possibly vehicle position).</li>

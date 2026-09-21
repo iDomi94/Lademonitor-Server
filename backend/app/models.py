@@ -28,6 +28,23 @@ class ChargingType(str, enum.Enum):
     DC = "DC"
 
 
+class TemperatureSource(str, enum.Enum):
+    """Woher die Aussentemperatur eines Ladevorgangs stammt.
+
+    Nicht nur Buchhaltung: ein Wert vom Wetterdienst (WEATHER) ist nicht
+    dasselbe wie einer vom Fahrzeugsensor (VEHICLE) - der liest je nach
+    Restwaerme, Sonne und Standort gern 1-2 K hoeher. Ohne diese Spalte wuerde
+    ein nachtraeglicher Sammel-Nachtrag (weather.py) beide Arten unbemerkt
+    vermischen, und der Trend in `temperature.py` bekaeme einen systematischen
+    Knick an genau dem Tag, an dem jemand den Knopf gedrueckt hat. Mit ihr
+    laesst sich das spaeter trennen.
+    """
+
+    VEHICLE = "vehicle"
+    MANUAL = "manual"
+    WEATHER = "weather"
+
+
 class SessionSource(str, enum.Enum):
     MANUAL = "manual"
     AUTOMATIC = "automatic"
@@ -123,6 +140,16 @@ class User(Base):
     # in jedem Durchlauf erneut rausgehen.
     last_review_digest_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_monthly_report_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    # Aussentemperatur automatisch beim Wetterdienst nachschlagen (siehe
+    # weather.py). Bewusst pro Nutzer und bewusst mit Standard AUS: dabei
+    # verlaesst eine Koordinate den Server, und zwar moeglicherweise die des
+    # eigenen Zuhauses. Wer das nicht will, muss dafuer nichts tun.
+    weather_autofill_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Leer = oeffentlicher Open-Meteo-Dienst. Wer eine eigene Instanz betreibt
+    # (Open-Meteo ist quelloffen), traegt sie hier ein und der Server ruft
+    # ueberhaupt nichts Fremdes mehr auf.
+    weather_api_url: Mapped[str | None] = mapped_column(String, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
@@ -316,6 +343,13 @@ class ChargingSession(Base):
     # Moment des Einsteckens liegt unmittelbar am Ende dieser Fahrt und ist
     # damit der beste Einzelwert, den man ohne Fahrtaufzeichnung bekommt.
     outside_temp_c: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Herkunft des Werts daneben - siehe TemperatureSource. NULL, solange
+    # keine Temperatur gesetzt ist, und fuer Bestandszeilen aus der Zeit vor
+    # dieser Spalte (die sind alle VEHICLE oder MANUAL, nur eben nicht mehr
+    # unterscheidbar - geraten wird nichts).
+    outside_temp_source: Mapped[TemperatureSource | None] = mapped_column(
+        Enum(TemperatureSource), nullable=True
+    )
 
     price_total: Mapped[float | None] = mapped_column(Float, nullable=True)
     price_per_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)

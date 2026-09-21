@@ -5,6 +5,18 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.24.0",
+        "date": "2026-09-21",
+        "title": "Außentemperatur vom Wetterdienst",
+        "changes": [
+            "Neu in den Einstellungen: „Außentemperatur automatisch holen\". Ist der Schalter an, trägt der Server die Temperatur für neue Ladevorgänge nach, wenn sie nicht ohnehin vom Fahrzeug kam - die Grundlage der Auswertung „Verbrauch nach Außentemperatur\" füllt sich damit auch ohne Home Assistant und ohne Fahrzeugsensor.",
+            "Dazu ein Knopf, der die Temperatur für BESTEHENDE Ladevorgänge nachträgt. Er läuft immer zweistufig: der Probelauf fragt wirklich ab und zeigt, was er eintragen würde, geschrieben wird erst nach dem Bestätigen. Vorhandene Werte - vom Fahrzeug oder von Hand - bleiben dabei unangetastet.",
+            "Der Schalter gehört zu deinem Konto, nicht zum Server, und ist standardmäßig AUS. Dabei verlässt nämlich erstmals eine Koordinate den Server: übermittelt werden der Ladeort - auf zwei Nachkommastellen gerundet, also rund 1,1 km genau, feiner wäre ohnehin sinnlos - und der Tag des Ladebeginns. Uhrzeit, Fahrzeug, Kilometerstand und alles Übrige bleiben hier. Was genau rausgeht, steht direkt über dem Schalter und in der Datenschutzerklärung.",
+            "Standardanbieter ist Open-Meteo (kein Schlüssel nötig). Open-Meteo lässt sich auch selbst betreiben - trägst du in den Einstellungen die eigene Adresse ein, verlässt wieder nichts dein Netz.",
+            "Jeder Ladevorgang merkt sich jetzt die HERKUNFT seiner Temperatur (Fahrzeug, von Hand, Wetterdienst). Ein Wetterdienstwert ist nicht dasselbe wie der Fahrzeugsensor - der liest je nach Restwärme und Sonne gern ein bis zwei Grad höher. Ohne diese Angabe würde ein Nachtrag beide Arten unbemerkt vermischen. Bestandsvorgänge bleiben bewusst ohne Angabe, statt geraten zu werden.",
+        ],
+    },
+    {
         "version": "0.23.0",
         "date": "2026-09-21",
         "title": "Verbrauch nach Außentemperatur",

@@ -6,6 +6,31 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.24.0] — 2026-09-21
+
+### Added
+- **Außentemperatur vom Wetterdienst**: neuer Schalter in den Einstellungen
+  („Außentemperatur automatisch holen"), der die Temperatur für neue
+  Ladevorgänge nachträgt, wenn sie nicht vom Fahrzeug kam – plus ein Knopf,
+  der sie für bestehende Ladevorgänge nachträgt. Der Nachtrag läuft immer
+  zweistufig: Probelauf mit echter Abfrage und Vorschau, geschrieben wird erst
+  nach dem Bestätigen. Neue Endpunkte `GET/PUT /api/weather/settings` und
+  `POST /api/weather/backfill?dry_run=`.
+- **`ChargingSession.outside_temp_source`**: Herkunft der Temperatur
+  (`vehicle` | `manual` | `weather`). Wandert in den Backup-Export; ältere
+  Backup-ZIPs bleiben importierbar.
+
+### Notes
+- Der Schalter hängt am Konto, nicht am Server, und ist **standardmäßig aus**:
+  dabei verlässt erstmals eine Koordinate den Server. Übermittelt werden nur
+  der Ladeort – auf zwei Nachkommastellen gerundet (rund 1,1 km; feiner wäre
+  sinnlos, das Wettermodell rastert in 9–25 km) – und der Tag des Ladebeginns.
+- Standardanbieter ist Open-Meteo (ohne API-Schlüssel). Eine selbst betriebene
+  Instanz lässt sich in den Einstellungen eintragen.
+- Vorhandene Temperaturen werden nie überschrieben; Ladevorgänge ohne
+  Koordinaten (weder eigene noch die ihres Ladeorts) bleiben leer und werden
+  im Probelauf ausgewiesen.
+
 ## [0.23.0] — 2026-09-21
 
 ### Added

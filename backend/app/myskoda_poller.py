@@ -406,6 +406,12 @@ def _create_session(
         soc_end=soc_end,
         odometer_km=odometer_km,
         outside_temp_c=outside_temp_c,
+        # Wert aus der Fahrzeug-API - fuer die Auswertung dieselbe Herkunft wie
+        # ein ueber Home Assistant gemeldeter Sensorwert (siehe
+        # models.TemperatureSource).
+        outside_temp_source=(
+            models.TemperatureSource.VEHICLE if outside_temp_c is not None else None
+        ),
         latitude=latitude,
         longitude=longitude,
         external_session_id=external_id,

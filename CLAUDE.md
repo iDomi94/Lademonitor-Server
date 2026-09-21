@@ -647,6 +647,15 @@ Icon/Tooltip-Logik in der SessionsList-View.
   weg, ebenso wenn der Abruf scheitert (aelterer Server ohne den Endpunkt) -
   das Dashboard ist deshalb nicht fehlgeschlagen. **Weiterhin offen:** dieselbe
   Auswertung im Local-Only-Modus.
+- **Bestandsdaten koennen ihre Temperatur seit 2026-09-21 (v0.24.0) nachtraeglich
+  bekommen** - siehe Abschnitt "Aussentemperatur vom Wetterdienst". Damit ist der
+  Satz weiter oben ("fuer alte Vorgaenge laesst sich der Wert nicht nachtraeglich
+  ermitteln") ueberholt, allerdings nur fuer Vorgaenge MIT Koordinaten: ein
+  Spritmonitor-Import ohne Ladeort bleibt ohne Wert. **Offen dabei:** beide Apps
+  zeigen die Herkunft (`outside_temp_source`) noch nicht an - sie brauchen sie
+  auch nicht, um korrekt zu bleiben (der Server leitet MANUAL nur aus einer
+  echten Wertaenderung ab), aber eine Kennzeichnung "vom Wetterdienst" waere in
+  der Detailansicht ehrlicher.
 - **Xcode-Beta-Umgebung des Nutzers:** macOS 27 Beta + Xcode 27 Beta
   (Erstbeta, Stand Aug 2026). Es gab einen `dyld_shared_cache_extract_dylibs`
   Bug beim Installieren auf echtem Gerät - gelöst durch Löschen von
@@ -1471,6 +1480,124 @@ abzuschneiden wuerde ihn kuenstlich vergroessern. Die Zahlen stehen direkt an
 den Balken. (Die Balken stehen wie alle Diagramme dieser Art mittig in der
 Karte statt sie auszufuellen - das haengt am gemeinsamen `renderBarChart` und
 betrifft auch die Monatsdiagramme; bewusst nicht hier mitgeaendert.)
+
+## Aussentemperatur vom Wetterdienst (`weather.py`, ab 2026-09-21, v0.24.0)
+
+Die Auswertung aus dem vorigen Abschnitt lebt davon, dass ueberhaupt Werte da
+sind. Sie kamen bis dahin nur aus dem Fahrzeug (HA-Push, MyŠkoda-Poller) oder
+von Hand - **Bestandsdaten haben also keine, und wer weder HA noch einen
+Fahrzeugsensor hat, bekommt nie welche**. Dieses Modul schlaegt sie stattdessen
+am Ladeort nach.
+
+**Das ist die DRITTE Ausnahme von der "kein Cloud-Dienst"-Linie - und die
+erste, die der Server von sich aus macht.** Nominatim (`geocode.py`) laeuft nur
+auf Nutzeraktion, die Kartenkacheln holt der Browser. Hier geht eine Koordinate
+an einen fremden Server, moeglicherweise die des eigenen Zuhauses - also genau
+die Sorte Datum, die seit 2026-09-09 verschluesselt in der DB liegt. Vier
+Konsequenzen daraus:
+
+1. **Opt-in pro NUTZER, Standard aus** (`User.weather_autofill_enabled`, nicht
+   global wie SMTP): es sind die Daten des einzelnen Nutzers, also ist es auch
+   seine Entscheidung. Ohne Schalter macht der Server keinen einzigen Abruf -
+   `autofill_new_sessions()` filtert die Nutzer schon in der SQL-Abfrage.
+2. **Koordinaten werden auf `COORD_PRECISION` (2) Nachkommastellen gerundet**,
+   rund 1,1 km. Das kostet nichts: ERA5 rastert in 9-25 km, feinere Angaben
+   landen im selben Gitterpunkt. Uebrig bleibt am fremden Server ein Ortsteil,
+   keine Hausnummer.
+3. **Was rausgeht, steht ueber dem Schalter**, nicht in einer Fussnote - plus
+   ein eigener Punkt in der Datenschutzerklaerung (beide Sprachen).
+4. **`weather_api_url`** kann auf eine selbst gehostete Open-Meteo-Instanz
+   zeigen; dann verlaesst wieder nichts das eigene Netz.
+
+### Zwei Endpunkte, weil keiner allein reicht
+
+`/v1/forecast` liefert die juengste Vergangenheit ohne Verzug (bis 92 Tage
+zurueck), das Archiv `/v1/archive` (ERA5) reicht bis 1940 zurueck, hinkt aber
+rund fuenf Tage hinterher. `ARCHIVE_SWITCH_DAYS` (30) liegt bewusst INNERHALB
+beider Fenster, damit kein Vorgang zwischen die Endpunkte faellt. Beim
+oeffentlichen Dienst liegen sie auf zwei Hosts (`api.`/`archive-api.`), eine
+eigene Instanz beantwortet beide Pfade - das entscheidet `archive_url_for()`.
+
+### Gebuendelt wird nach Ort, nicht je Ladevorgang
+
+Eine Anfrage deckt einen Ort und einen ganzen Datumsbereich ab. `CLUSTER_GAP_DAYS`
+trennt nur echte Ausreisser ab (ein einzelner Vorgang aus einem lange
+zurueckliegenden Urlaub), damit dafuer nicht Jahre an Stundenwerten uebertragen
+werden. **Der Wert stand zuerst auf 7 Tagen und das war falsch herum gedacht:**
+wer alle acht bis zehn Tage zuhause laedt - der Normalfall - bekam damit eine
+Anfrage PRO Ladevorgang, also genau den Anfragensturm, den die Buendelung
+verhindern soll. Im Live-Test gegen den echten Dienst sichtbar geworden (sechs
+Anfragen fuer sechs Vorgaenge am selben Ort), seitdem 60 Tage: teuer ist die
+ANZAHL der Anfragen (Rate-Limit), nicht die Antwortgroesse - ein Jahr
+Stundenwerte sind rund 70 KB. `tests/test_weather.py` haelt genau diesen Fall
+fest.
+
+### Zeitzone
+
+`start_time` liegt naiv als LOKALE Zeit in der DB, die API rechnet in UTC.
+`_to_utc()` macht die Umrechnung genau einmal; die Anfrage laeuft immer mit
+`timezone=UTC`. Ohne das greift man im Tagesgang um ein bis zwei Stunden
+daneben - also um 2-3 K und damit um die Groessenordnung, die die Auswertung
+ueberhaupt messen will. Zwischen den beiden umgebenden Stundenwerten wird
+linear interpoliert.
+
+### Woher die Koordinate kommt
+
+`coordinates_for()`: eigenes GPS des Vorgangs zuerst, sonst die Position des
+zugeordneten Ladeorts, sonst gar nichts. Spritmonitor-Importe haben nie
+eigenes GPS - ueber den Ladeort bekommen sie trotzdem einen Wert. Vorgaenge
+ohne beides werden gezaehlt und im Probelauf ausgewiesen, nicht geraten.
+
+### Herkunft mitschreiben (`ChargingSession.outside_temp_source`)
+
+`vehicle | manual | weather`. Nicht Buchhaltung, sondern notwendig: ein
+Wetterdienstwert ist nicht dasselbe wie der Fahrzeugsensor (Restwaerme, Sonne,
+Standort - gern 1-2 K hoeher). Ohne die Spalte wuerde ein Sammel-Nachtrag beide
+Arten unbemerkt vermischen und der Trend bekaeme einen Knick an genau dem Tag,
+an dem jemand den Knopf gedrueckt hat. **Bestandszeilen bleiben NULL** - sie
+sind alle `vehicle` oder `manual`, nur nicht mehr unterscheidbar, und ein
+geratener Wert waere schlimmer als keiner.
+
+Kein Client muss das Feld kennen: wer eine Temperatur schickt, ohne die
+Herkunft zu nennen, hat sie von Hand eingetragen (`MANUAL`). Dabei gilt
+dieselbe Vorsicht wie beim `energy_is_estimated`-Flag - Web-UI und Apps
+schicken `outside_temp_c` bei JEDEM Speichern mit, deshalb zaehlt nur eine
+tatsaechliche WERTAENDERUNG als Handeintrag. Sonst waere ein geholter Wert nach
+einmal Oeffnen-und-Speichern als "von Hand" etikettiert.
+
+### Nachtrag und Automatik
+
+- **Nachtrag** (`POST /api/weather/backfill?dry_run=`): Vorgabe ist der
+  Probelauf, und der **fragt wirklich ab** und schreibt nur nichts. Eine
+  Vorschau, die bloss zaehlt, wieviele Vorgaenge in Frage kaemen, saehe auch
+  dann gut aus, wenn der Dienst gar keine Werte liefert. Vorhandene Werte
+  bleiben unangetastet (`overwrite=false`). Bewusst unabhaengig vom Schalter:
+  der Aufruf selbst ist die Einwilligung.
+- **Automatik** laeuft im Scheduler (`main.py::_weather_scheduler_loop`, Takt
+  wie WebDAV-Backup) und **nicht im Request-Pfad** von
+  `POST /api/sessions/auto` - sonst haenge die Antwortzeit des HA-Pushes an
+  einem fremden Server und ein langsamer Wetterdienst liesse die Automation des
+  Nutzers ins Timeout laufen. Sie nimmt nur Vorgaenge der letzten
+  `AUTOFILL_MAX_AGE_DAYS` (14): ohne Altersgrenze wuerde fuer einen Vorgang,
+  zu dem es dauerhaft keinen Wert gibt, alle 15 Minuten bis in alle Ewigkeit
+  erneut angefragt.
+
+Fehler (Netz, Rate-Limit, unbekannter Ort) werfen NIE weiter - eine fehlende
+Temperatur ist ein fehlendes Detail, kein Grund, einen Ladevorgang oder einen
+ganzen Nachtrag scheitern zu lassen.
+
+### Getestet ohne Netz, verifiziert mit Netz
+
+`tests/test_weather.py` (24 Faelle) ersetzt den HTTP-Client durch einen
+Transport, der die Anfragen mitschreibt: geprueft wird, was den Server
+verlaesst (gerundete Koordinaten), welche Stunde getroffen wird (inkl.
+umgestellter Prozess-Zeitzone fuer den naiven Fall), dass der Probelauf nichts
+schreibt und dass ohne Opt-in keine einzige Anfrage entsteht. Der echte Dienst
+wurde daneben einmal von Hand gegen eine Test-Datenbank verifiziert (Werte
+kamen ueber den Vorhersage-Endpunkt an, Bedienung im Browser durchgespielt).
+**Bekannte Stolperstelle:** das freie Kontingent gilt pro IP - hinter CGNAT
+oder auf einem geteilten VPS kann das Archiv mit 429 antworten, obwohl mit dem
+eigenen Server alles stimmt.
 
 ## Backup-Export/-Import (`routers/backup.py`)
 
