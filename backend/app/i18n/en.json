@@ -471,6 +471,8 @@
   "settings.weather.backfill_description": "Fetches the temperature for every charging session without one that has coordinates (its own or those of its location). Existing values \u2013 from the vehicle or entered by hand \u2013 are left untouched. The trial run really does query the service, but writes nothing.",
   "settings.weather.backfill_preview": "Trial run",
   "settings.weather.backfill_apply": "Apply",
+  "settings.weather.backfill_refresh": "Re-determine values already fetched from the weather service",
+  "settings.weather.backfill_refresh_hint": "Needed if the backfill already ran before charging sessions without a time of day (Spritmonitor imports, all at 00:00) were recognised \u2013 those now get the daily mean from 6 to 20 hours instead of the midnight value. Values from the vehicle or entered by hand stay untouched here as well.",
   "settings.weather.running": "Running \u2026",
   "settings.weather.preview_summary": "{resolved} of {considered} charging sessions would get a temperature. {already} already have one, {nocoords} have no coordinates, and for {unresolved} the service returned no value.",
   "settings.weather.applied": "{written} charging sessions updated.",
@@ -478,6 +480,7 @@
   "settings.weather.confirm_apply": "{count} charging sessions will now get a temperature from the weather service. Continue?",
   "settings.weather.col_date": "Charging session",
   "settings.weather.col_temp": "Temperature",
+  "settings.weather.col_prev_temp": "Previously",
 
   "settings.notifications.heading": "Notifications",
   "settings.notifications.description": "Sent by email. Requires a stored address and a configured SMTP access.",

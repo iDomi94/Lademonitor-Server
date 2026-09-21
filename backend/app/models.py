@@ -43,6 +43,15 @@ class TemperatureSource(str, enum.Enum):
     VEHICLE = "vehicle"
     MANUAL = "manual"
     WEATHER = "weather"
+    # Wie WEATHER, aber als Mittel ueber die Tagstunden geholt statt zu einem
+    # Zeitpunkt - fuer Zeilen, die gar keine Uhrzeit tragen (Spritmonitor-
+    # Importe stehen alle auf 00:00). Eigener Wert, weil das eine andere
+    # Messgroesse ist: Mitternacht liegt im Jahresmittel mehrere Grad unter dem
+    # Tagesmittel, ein Punktwert waere dort also systematisch zu kalt, und ein
+    # Fenstermittel ist entsprechend unschaerfer als ein echter Zeitpunkt.
+    # Sichtbar in der Detailansicht, filterbar in der Auswertung, mit einem
+    # UPDATE wieder entfernbar.
+    WEATHER_DAILY = "weather_daily"
 
 
 class SessionSource(str, enum.Enum):

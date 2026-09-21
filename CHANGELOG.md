@@ -6,6 +6,29 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.24.1] — 2026-09-21
+
+### Fixed
+- **Temperatur-Nachtrag für Spritmonitor-Importe**: diese Zeilen tragen keine
+  Uhrzeit (der Importer setzt 00:00). Der Nachtrag hat die Mitternacht beim
+  Wort genommen und damit systematisch das Tagesminimum geholt – an echten
+  Stundendaten im Mittel 3,9 K zu kalt, in der Spitze 8,8 K, und zwar
+  einseitig auf genau der Hälfte der Daten. Solche Zeilen bekommen jetzt das
+  Mittel über 6–20 Uhr Lokalzeit (`weather.DAILY_WINDOW_START_HOUR`). Die
+  Erkennung ist eng: nur `source == import` UND exakt 00:00 – ein von Hand
+  gesetzter Zeitpunkt bleibt ein Zeitpunkt.
+
+### Added
+- **`TemperatureSource.weather_daily`**: vierter Wert für genau diese Zeilen.
+  Ein Tagesmittel ist keine Messung zu einem Zeitpunkt; ohne eigene Herkunft
+  würden beide Arten in `temperature.py` unbemerkt vermischt.
+- **`POST /api/weather/backfill?refresh=true`**: Korrekturlauf für alle, die
+  den Nachtrag vor dieser Änderung haben laufen lassen. Holt Werte neu, deren
+  Herkunft `weather`/`weather_daily` ist – `vehicle` und `manual` bleiben
+  unangetastet, anders als bei `overwrite`. In den Einstellungen als
+  Ankreuzfeld beim Nachtrags-Knopf; die Vorschau zeigt dann zusätzlich den
+  bisherigen Wert.
+
 ## [0.24.0] — 2026-09-21
 
 ### Added

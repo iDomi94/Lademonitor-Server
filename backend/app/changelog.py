@@ -5,6 +5,17 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.24.1",
+        "date": "2026-09-21",
+        "title": "Temperatur für importierte Ladevorgänge",
+        "changes": [
+            "Von Spritmonitor importierte Ladevorgänge haben keine Uhrzeit - der Import setzt sie auf 00:00. Der Temperatur-Nachtrag hat diese Mitternacht beim Wort genommen und damit systematisch das Tagesminimum geholt: an echten Stundendaten im Mittel 3,9 °C zu kalt, in der Spitze 8,8 °C. Ein einseitiger Fehler auf genau der Hälfte der Daten - also genau die Sorte, die eine Trendlinie kippt. Für solche Ladevorgänge wird jetzt das Mittel von 6 bis 20 Uhr geholt statt des Werts um Mitternacht; nachts wird kaum gefahren, und der Wert soll die Fahrt beschreiben.",
+            "Diese Vorgänge tragen als Herkunft „Wetterdienst (Tagesmittel)\" statt „Wetterdienst\" - ein Mittelwert ist nicht dasselbe wie eine Messung zu einem Zeitpunkt, und ohne die Unterscheidung würden beide Arten in der Auswertung unbemerkt vermischt.",
+            "Wer den Nachtrag schon hat laufen lassen, findet beim Nachtrags-Knopf eine neue Option: „Bereits vom Wetterdienst geholte Werte neu bestimmen\". Sie holt genau diese Werte erneut - Temperaturen vom Fahrzeug oder von Hand bleiben auch dabei unangetastet. Die Vorschau zeigt dann zusätzlich den bisherigen Wert, damit man vor dem Schreiben sieht, was sich ändert.",
+            "Ladevorgänge mit einer echten Uhrzeit sind davon nicht betroffen: dort wird weiterhin der Wert zum Ladebeginn geholt.",
+        ],
+    },
+    {
         "version": "0.24.0",
         "date": "2026-09-21",
         "title": "Außentemperatur vom Wetterdienst",

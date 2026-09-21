@@ -1569,6 +1569,54 @@ schicken `outside_temp_c` bei JEDEM Speichern mit, deshalb zaehlt nur eine
 tatsaechliche WERTAENDERUNG als Handeintrag. Sonst waere ein geholter Wert nach
 einmal Oeffnen-und-Speichern als "von Hand" etikettiert.
 
+### Zeilen ohne Uhrzeit: Tagesfenster statt Mitternacht (2026-09-21, v0.24.1)
+
+Ein Spritmonitor-Import traegt keine Uhrzeit - `importer.py` setzt 00:00. Der
+erste Wurf des Nachtrags hat das beim Wort genommen und damit systematisch das
+TAGESMINIMUM geholt: an echten Stundendaten (Raum Stuttgart, 60 Tage) im Mittel
+3,9 K unter dem 6-20-Mittel, in der Spitze 8,8 K. Ein einseitiger Fehler auf
+genau der Haelfte der Daten - also genau die Sorte, die eine Trendlinie kippt,
+ohne dass man es der Zahl ansieht.
+
+`weather.is_date_only()` erkennt solche Zeilen **eng**: `source == IMPORT` UND
+exakt 00:00. Ein von Hand um Mitternacht angelegter Vorgang bleibt ein
+Zeitpunkt - dort hat der Nutzer die Uhrzeit ja gesetzt. Fuer erkannte Zeilen
+liefert `_daily_window_utc()` das Fenster 6-20 Uhr **Lokalzeit** und
+`_window_mean()` das Mittel der Stundenwerte darin. Gerechnet wird ueber das
+lokale Kalenderdatum: lokal 00:00 liegt in Mitteleuropa schon im UTC-Vortag,
+ein Umweg ueber die UTC-Datumsangabe haette den falschen Tag erwischt.
+
+Warum 6-20 und nicht 24 h: nachts wird kaum gefahren, und der Wert soll die
+FAHRT beschreiben (siehe Abschnitt "Verbrauch nach Aussentemperatur", Punkt 1).
+Das 24-h-Mittel laege nochmal rund 1,6 K darunter. Eine **`start_time` zu
+erfinden**, die plausibler aussieht, waere der naheliegende, aber falsche Weg -
+das Fehlen der Angabe bliebe dann nicht mehr erkennbar.
+
+Diese Vorgaenge bekommen `TemperatureSource.WEATHER_DAILY` statt `WEATHER`. Ein
+Mittelwert ist keine Messung zu einem Zeitpunkt; ohne eigene Herkunft wuerden
+beide Arten in `temperature.py` unbemerkt vermischt - dieselbe Ueberlegung, die
+`outside_temp_source` ueberhaupt erst noetig gemacht hat. Die Migration in
+`database.py` ergaenzt den Wert per `ALTER TYPE ... ADD VALUE IF NOT EXISTS`
+(idempotent; der neue Wert darf nur nicht in DERSELBEN Transaktion schon benutzt
+werden, hier wird er ausschliesslich angelegt).
+
+**Korrekturlauf `refresh=true`**: wer den Nachtrag vor dieser Aenderung hat
+laufen lassen, hat Mitternachtswerte in der DB. `refresh` holt Werte neu, deren
+Herkunft `weather`/`weather_daily` ist, und laesst `vehicle`/`manual` in Ruhe -
+das ist der Unterschied zu `overwrite`, das alles ersetzt. Die Vorschau zeigt
+dann zusaetzlich `previous_temp_c`, sonst sieht man dem Probelauf nicht an, ob
+sich ueberhaupt etwas aendert.
+
+**Offen und bewusst nicht hier mitgeloest:** ob der gespeicherte Wert generell
+ein Intervallmittel sein sollte. Bei einem Ladeintervall von zwei Wochen mit
+zwanzig Fahrten dazwischen ist der Punktwert beim Einstecken nur eine Tendenz,
+und `temperature.py` mittelt bisher lediglich die beiden Intervallenden. Das ist
+aber eine AUSWERTUNGSfrage: `outside_temp_c` muss eine Messung bleiben, damit
+Fahrzeug-, Hand- und Wetterdienstwerte vergleichbar sind (ein Fahrzeugsensor
+kann nicht mitteln). Ein echtes Intervallmittel gehoerte in eine eigene Spalte,
+und welche Definition tatsaechlich besser ist, sollte man an r2 messen statt
+annehmen.
+
 ### Nachtrag und Automatik
 
 - **Nachtrag** (`POST /api/weather/backfill?dry_run=`): Vorgabe ist der

@@ -34,6 +34,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
+from datetime import time as dt_time
 
 import httpx
 from sqlalchemy.orm import Session
@@ -87,6 +88,24 @@ MAX_REQUESTS_PER_RUN = 50
 # getrennt holen.
 CLUSTER_GAP_DAYS = 60
 
+# Fenster fuer Zeilen, die gar keine Uhrzeit tragen (siehe TempQuery.date_only).
+# 6-20 Uhr LOKALZEIT, als Mittel ueber die Stundenwerte.
+#
+# Warum ueberhaupt ein Fenster: ein Spritmonitor-Import steht auf 00:00, und das
+# ist keine Angabe, sondern das Fehlen einer Angabe. Nimmt man sie beim Wort,
+# trifft man das Tagesminimum - an echten Stundendaten (Raum Stuttgart, 60 Tage)
+# im Mittel 3,9 K unter dem 6-20-Mittel, in der Spitze 8,8 K. Das ist ein
+# EINSEITIGER Fehler auf genau der Haelfte der Daten, also genau die Sorte, die
+# eine Trendlinie kippt.
+#
+# Warum 6-20 und nicht 24 h: nachts wird kaum gefahren, und der Wert soll die
+# FAHRT beschreiben. Das 24-h-Mittel laege nochmal 1,6 K darunter. Die Grenzen
+# sind eine bewusste Vereinfachung - fuer eine Zeile ohne Uhrzeit gibt es keine
+# bessere Information, nur genauere Schaetzungen ueber die Gewohnheiten des
+# Fahrers, die wir nicht haben.
+DAILY_WINDOW_START_HOUR = 6
+DAILY_WINDOW_END_HOUR = 20
+
 # Nur Vorgaenge dieser juengsten Vergangenheit holt die Automatik nach. Aeltere
 # sind Sache des Nachtragens per Knopfdruck. Ohne diese Grenze wuerde der
 # Scheduler fuer einen Vorgang, zu dem es dauerhaft keinen Wert gibt (Ozean,
@@ -106,6 +125,10 @@ class TempQuery:
     when: datetime
     latitude: float
     longitude: float
+    # True, wenn `when` nur ein DATUM traegt und die 00:00 keine Messung sind
+    # (Spritmonitor-Import). Dann wird nicht auf die Stunde interpoliert,
+    # sondern ueber das Tagesfenster gemittelt - siehe DAILY_WINDOW_START_HOUR.
+    date_only: bool = False
 
 
 def round_coord(value: float) -> float:
@@ -174,6 +197,36 @@ def _interpolate(series: dict[datetime, float], when: datetime) -> float | None:
     return low + (high - low) * fraction
 
 
+def _daily_window_utc(when: datetime) -> tuple[datetime, datetime]:
+    """Tagesfenster (lokal 6-20 Uhr) einer Zeile ohne Uhrzeit, in naiver UTC.
+
+    Gerechnet wird ueber die LOKALE Kalenderdatum-Angabe: `when` traegt bei
+    diesen Zeilen 00:00 Lokalzeit, und genau dieser Tag ist gemeint. Erst die
+    beiden Fenstergrenzen werden nach UTC geschoben - in Mitteleuropa liegt
+    lokal 00:00 bereits im UTC-Vortag, ein Umweg ueber die UTC-Datumsangabe
+    haette also den falschen Tag erwischt.
+    """
+    day = when.date()
+    start_local = datetime.combine(day, dt_time(hour=DAILY_WINDOW_START_HOUR))
+    end_local = datetime.combine(day, dt_time(hour=DAILY_WINDOW_END_HOUR))
+    return _to_utc(start_local), _to_utc(end_local)
+
+
+def _window_mean(
+    series: dict[datetime, float], start: datetime, end: datetime
+) -> float | None:
+    """Mittel aller Stundenwerte im Fenster [start, end], Grenzen einschliesslich.
+
+    Fehlen einzelne Stunden, wird ueber die vorhandenen gemittelt - ein
+    unvollstaendiges Fenster ist immer noch naeher dran als der Mitternachtswert,
+    den es ersetzt. Gar keine Stunde im Fenster ergibt None.
+    """
+    values = [value for hour, value in series.items() if start <= hour <= end]
+    if not values:
+        return None
+    return sum(values) / len(values)
+
+
 def _parse_hourly(payload: dict) -> dict[datetime, float]:
     hourly = payload.get("hourly") or {}
     times = hourly.get("time") or []
@@ -216,17 +269,23 @@ def fetch_temperatures(
     today = today or datetime.utcnow().date()
     archive_before = today - timedelta(days=ARCHIVE_SWITCH_DAYS)
 
-    # (Endpunkt, lat, lon) -> {Tag -> [Anfragen]}
-    buckets: dict[tuple[str, float, float], dict[date, list[tuple[TempQuery, datetime]]]] = {}
+    # (Endpunkt, lat, lon) -> {Tag -> [(Anfrage, Beginn, Ende)]}. `Ende` ist
+    # None bei einem Zeitpunkt und gesetzt bei einer Zeile ohne Uhrzeit, fuer
+    # die ueber das Tagesfenster gemittelt wird.
+    Entry = tuple[TempQuery, datetime, "datetime | None"]
+    buckets: dict[tuple[str, float, float], dict[date, list[Entry]]] = {}
     for query in queries:
-        when_utc = _to_utc(query.when)
+        if query.date_only:
+            when_utc, window_end = _daily_window_utc(query.when)
+        else:
+            when_utc, window_end = _to_utc(query.when), None
         day = when_utc.date()
         # Alles juenger als ARCHIVE_SWITCH_DAYS holt der Vorhersage-Endpunkt
         # (kein Verzug), alles aeltere das Archiv. Die Grenze liegt in beiden
         # Fenstern, es faellt also nichts dazwischen.
         endpoint = "archive" if day < archive_before else "forecast"
         key = (endpoint, round_coord(query.latitude), round_coord(query.longitude))
-        buckets.setdefault(key, {}).setdefault(day, []).append((query, when_utc))
+        buckets.setdefault(key, {}).setdefault(day, []).append((query, when_utc, window_end))
 
     owns_client = client is None
     client = client or httpx.Client(timeout=REQUEST_TIMEOUT_SECONDS)
@@ -269,8 +328,11 @@ def fetch_temperatures(
                 for day in sorted(by_day):
                     if not (start <= day <= end):
                         continue
-                    for query, when_utc in by_day[day]:
-                        value = _interpolate(series, when_utc)
+                    for query, when_utc, window_end in by_day[day]:
+                        if window_end is not None:
+                            value = _window_mean(series, when_utc, window_end)
+                        else:
+                            value = _interpolate(series, when_utc)
                         if value is not None:
                             result[query.session_id] = round(value, 1)
     finally:
@@ -282,6 +344,28 @@ def fetch_temperatures(
 # ---------------------------------------------------------------------------
 # Anwendung auf Ladevorgaenge
 # ---------------------------------------------------------------------------
+
+
+def is_date_only(session: models.ChargingSession) -> bool:
+    """Traegt der Vorgang nur ein Datum, aber keine echte Uhrzeit?
+
+    Trifft auf Spritmonitor-Importe zu: die Export-Datei hat keine Uhrzeit,
+    der Importer setzt deshalb 00:00. Das ist das FEHLEN einer Angabe, nicht
+    die Angabe "kurz nach Mitternacht" - wer sie beim Wort nimmt, trifft
+    systematisch das Tagesminimum (siehe DAILY_WINDOW_START_HOUR).
+
+    Die Erkennung ist bewusst eng: NUR importierte Zeilen, und nur die exakte
+    Mitternacht. Ein von Hand um 00:00 angelegter Vorgang bleibt ein
+    Zeitpunkt - dort hat der Nutzer die Uhrzeit ja gesetzt. Dass ein Import
+    zufaellig wirklich um Mitternacht begann, kommt vor; das Fenster ist dann
+    die schlechtere Auskunft, aber eben nur in diesem einen Fall statt in
+    allen anderen.
+    """
+    return (
+        session.source == models.SessionSource.IMPORT
+        and session.start_time is not None
+        and session.start_time.time() == dt_time(0, 0)
+    )
 
 
 def coordinates_for(session: models.ChargingSession) -> tuple[float, float] | None:
@@ -317,12 +401,27 @@ class BackfillReport:
 PREVIEW_LIMIT = 50
 
 
+def _source_for(date_only: bool) -> models.TemperatureSource:
+    return (
+        models.TemperatureSource.WEATHER_DAILY
+        if date_only
+        else models.TemperatureSource.WEATHER
+    )
+
+
+WEATHER_SOURCES = (
+    models.TemperatureSource.WEATHER,
+    models.TemperatureSource.WEATHER_DAILY,
+)
+
+
 def backfill_sessions(
     db: Session,
     user: models.User,
     *,
     dry_run: bool = True,
     overwrite: bool = False,
+    refresh: bool = False,
     base_url: str | None = None,
     client: httpx.Client | None = None,
 ) -> BackfillReport:
@@ -337,6 +436,13 @@ def backfill_sessions(
     `overwrite=False` laesst vorhandene Werte in Ruhe. Ein Wert aus dem
     Fahrzeug oder von Hand ist naeher dran als einer vom Wetterdienst und
     darf nicht stillschweigend ersetzt werden.
+
+    `refresh=True` ist der Mittelweg und der Grund, warum es ihn ueberhaupt
+    gibt: wer den Nachtrag schon einmal hat laufen lassen, bevor die Zeilen
+    ohne Uhrzeit erkannt wurden, hat dort Mitternachtswerte stehen. Dann
+    werden Werte neu geholt, die VOM WETTERDIENST stammen
+    (`weather`/`weather_daily`) - Fahrzeug- und Handeintraege bleiben
+    unangetastet, anders als bei `overwrite`.
     """
     report = BackfillReport()
     sessions = (
@@ -351,8 +457,10 @@ def backfill_sessions(
     for session in sessions:
         report.considered += 1
         if session.outside_temp_c is not None and not overwrite:
-            report.already_set += 1
-            continue
+            refreshable = refresh and session.outside_temp_source in WEATHER_SOURCES
+            if not refreshable:
+                report.already_set += 1
+                continue
         coords = coordinates_for(session)
         if coords is None:
             report.without_coordinates += 1
@@ -363,6 +471,7 @@ def backfill_sessions(
                 when=session.start_time,
                 latitude=coords[0],
                 longitude=coords[1],
+                date_only=is_date_only(session),
             )
         )
         by_id[session.id] = session
@@ -387,7 +496,7 @@ def backfill_sessions(
         if dry_run:
             continue
         session.outside_temp_c = value
-        session.outside_temp_source = models.TemperatureSource.WEATHER
+        session.outside_temp_source = _source_for(is_date_only(session))
         report.written += 1
 
     if not dry_run and report.written:
@@ -434,6 +543,7 @@ def autofill_new_sessions(db: Session) -> int:
                     when=session.start_time,
                     latitude=coords[0],
                     longitude=coords[1],
+                    date_only=is_date_only(session),
                 )
             )
             by_id[session.id] = session
@@ -444,7 +554,7 @@ def autofill_new_sessions(db: Session) -> int:
         ).items():
             session = by_id[session_id]
             session.outside_temp_c = value
-            session.outside_temp_source = models.TemperatureSource.WEATHER
+            session.outside_temp_source = _source_for(is_date_only(session))
             filled += 1
         db.commit()
     return filled

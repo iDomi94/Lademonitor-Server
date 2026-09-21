@@ -531,3 +531,196 @@ def test_backfill_endpoint_defaults_to_a_dry_run(client, db_session, monkeypatch
     assert applied["written"] == 1
     db_session.refresh(row)
     assert row.outside_temp_c == pytest.approx(8.0)
+
+
+# ---------------------------------------------------------------------------
+# Zeilen ohne Uhrzeit (Spritmonitor-Import)
+# ---------------------------------------------------------------------------
+
+
+def test_a_row_without_a_time_gets_the_daytime_mean_not_the_midnight_value(monkeypatch):
+    """Ein Spritmonitor-Import steht auf 00:00 - das ist das FEHLEN einer
+    Angabe, nicht die Angabe "kurz nach Mitternacht". Wer sie beim Wort nimmt,
+    trifft systematisch das Tagesminimum (an echten Stundendaten im Mittel
+    3,9 K unter dem 6-20-Mittel).
+
+    Die Zeitzone wird bewusst umgestellt: das Fenster ist LOKAL gemeint, und
+    lokal 00:00 liegt in Mitteleuropa schon im UTC-Vortag - ein Umweg ueber
+    das UTC-Datum haette also den falschen Tag erwischt.
+    """
+    monkeypatch.setenv("TZ", "Europe/Berlin")
+    time.tzset()
+    try:
+        # Stundenwerte 0..47 ab 15.01. 00:00 UTC. Lokal 6-20 Uhr (UTC+1) ist
+        # UTC 05:00..19:00 einschliesslich, also die Werte 5..19 -> Mittel 12.
+        client, _ = make_client(
+            _series(datetime(2026, 1, 15, 0, 0), [float(i) for i in range(48)])
+        )
+        query = weather.TempQuery(
+            "s1", datetime(2026, 1, 15, 0, 0), 48.80, 9.01, date_only=True
+        )
+
+        result = weather.fetch_temperatures(
+            [query], client=client, today=datetime(2026, 1, 20).date()
+        )
+
+        assert result["s1"] == pytest.approx(12.0)
+    finally:
+        monkeypatch.delenv("TZ", raising=False)
+        time.tzset()
+
+
+def test_a_real_timestamp_at_midnight_stays_a_point_value():
+    """Gegenprobe zum Fenster: wer die Uhrzeit gesetzt hat, bekommt sie auch.
+    Das Fenster ist ein Notbehelf fuer fehlende Information, keine generelle
+    Glaettung."""
+    client, _ = make_client(
+        _series(datetime(2026, 1, 15, 0, 0), [float(i) for i in range(48)])
+    )
+    query = weather.TempQuery("s1", datetime(2026, 1, 15, 0, 0), 48.80, 9.01)
+
+    result = weather.fetch_temperatures(
+        [query], client=client, today=datetime(2026, 1, 20).date()
+    )
+
+    assert result["s1"] == pytest.approx(0.0)
+
+
+def test_imported_midnight_rows_are_marked_as_weather_daily(client, db_session):
+    """Die Herkunft muss die beiden Arten unterscheiden: ein Tagesmittel ist
+    nicht dasselbe wie ein Wert zu einem Zeitpunkt."""
+    register(client)
+    vehicle = create_vehicle(client)
+    user = db_session.query(models.User).first()
+    imported = _session_row(
+        db_session,
+        user.id,
+        vehicle["id"],
+        start_time=datetime(2026, 1, 15, 0, 0),
+        source=models.SessionSource.IMPORT,
+        latitude=48.80,
+        longitude=9.01,
+    )
+    manual = _session_row(
+        db_session,
+        user.id,
+        vehicle["id"],
+        start_time=datetime(2026, 1, 16, 0, 0),
+        source=models.SessionSource.MANUAL,
+        latitude=48.80,
+        longitude=9.01,
+    )
+    http, _ = make_client(_series(datetime(2026, 1, 15, 0, 0), [7.5] * 72))
+
+    weather.backfill_sessions(db_session, user, dry_run=False, client=http)
+
+    db_session.refresh(imported)
+    db_session.refresh(manual)
+    assert imported.outside_temp_source == models.TemperatureSource.WEATHER_DAILY
+    assert manual.outside_temp_source == models.TemperatureSource.WEATHER
+
+
+def test_refresh_replaces_weather_values_but_not_vehicle_or_manual_ones(client, db_session):
+    """Der Korrekturlauf fuer alle, die den Nachtrag schon vor dieser
+    Aenderung haben laufen lassen: dort stehen Mitternachtswerte. Er darf
+    genau die anfassen - nicht die Werte aus dem Fahrzeug oder von Hand."""
+    register(client)
+    vehicle = create_vehicle(client)
+    user = db_session.query(models.User).first()
+    from_weather = _session_row(
+        db_session,
+        user.id,
+        vehicle["id"],
+        start_time=datetime(2026, 1, 15, 0, 0),
+        source=models.SessionSource.IMPORT,
+        latitude=48.80,
+        longitude=9.01,
+        outside_temp_c=-2.0,
+        outside_temp_source=models.TemperatureSource.WEATHER,
+    )
+    from_vehicle = _session_row(
+        db_session,
+        user.id,
+        vehicle["id"],
+        start_time=datetime(2026, 1, 16, 12, 0),
+        latitude=48.80,
+        longitude=9.01,
+        outside_temp_c=3.0,
+        outside_temp_source=models.TemperatureSource.VEHICLE,
+    )
+    by_hand = _session_row(
+        db_session,
+        user.id,
+        vehicle["id"],
+        start_time=datetime(2026, 1, 17, 12, 0),
+        latitude=48.80,
+        longitude=9.01,
+        outside_temp_c=4.0,
+        outside_temp_source=models.TemperatureSource.MANUAL,
+    )
+    http, _ = make_client(_series(datetime(2026, 1, 15, 0, 0), [7.5] * 96))
+
+    report = weather.backfill_sessions(
+        db_session, user, dry_run=False, refresh=True, client=http
+    )
+
+    assert report.written == 1
+    db_session.refresh(from_weather)
+    db_session.refresh(from_vehicle)
+    db_session.refresh(by_hand)
+    assert from_weather.outside_temp_c == pytest.approx(7.5)
+    assert from_weather.outside_temp_source == models.TemperatureSource.WEATHER_DAILY
+    assert from_vehicle.outside_temp_c == pytest.approx(3.0)
+    assert by_hand.outside_temp_c == pytest.approx(4.0)
+
+
+def test_without_refresh_an_existing_weather_value_stays(client, db_session):
+    register(client)
+    vehicle = create_vehicle(client)
+    user = db_session.query(models.User).first()
+    row = _session_row(
+        db_session,
+        user.id,
+        vehicle["id"],
+        start_time=datetime(2026, 1, 15, 0, 0),
+        source=models.SessionSource.IMPORT,
+        latitude=48.80,
+        longitude=9.01,
+        outside_temp_c=-2.0,
+        outside_temp_source=models.TemperatureSource.WEATHER,
+    )
+    http, _ = make_client(_series(datetime(2026, 1, 15, 0, 0), [7.5] * 48))
+
+    report = weather.backfill_sessions(db_session, user, dry_run=False, client=http)
+
+    assert report.written == 0
+    assert report.already_set == 1
+    db_session.refresh(row)
+    assert row.outside_temp_c == pytest.approx(-2.0)
+
+
+def test_the_refresh_preview_shows_the_previous_value(client, db_session):
+    """Sonst sieht man dem Probelauf nicht an, ob sich ueberhaupt etwas
+    aendert - und genau das ist die Frage vor einem Korrekturlauf."""
+    register(client)
+    vehicle = create_vehicle(client)
+    user = db_session.query(models.User).first()
+    _session_row(
+        db_session,
+        user.id,
+        vehicle["id"],
+        start_time=datetime(2026, 1, 15, 0, 0),
+        source=models.SessionSource.IMPORT,
+        latitude=48.80,
+        longitude=9.01,
+        outside_temp_c=-2.0,
+        outside_temp_source=models.TemperatureSource.WEATHER,
+    )
+    http, _ = make_client(_series(datetime(2026, 1, 15, 0, 0), [7.5] * 48))
+
+    report = weather.backfill_sessions(
+        db_session, user, dry_run=True, refresh=True, client=http
+    )
+
+    assert report.preview[0]["previous_temp_c"] == pytest.approx(-2.0)
+    assert report.preview[0]["temp_c"] == pytest.approx(7.5)
