@@ -32,8 +32,10 @@ unangetastet waere.
 from __future__ import annotations
 
 import logging
+from bisect import bisect_left
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
+from datetime import time as dt_time
 
 import httpx
 from sqlalchemy.orm import Session
@@ -87,6 +89,40 @@ MAX_REQUESTS_PER_RUN = 50
 # getrennt holen.
 CLUSTER_GAP_DAYS = 60
 
+# Tagstunden, aus denen sich ein Wetterdienstwert zusammensetzt: 6-20 Uhr
+# LOKALZEIT. Gemittelt wird NICHT ueber einen Tag, sondern ueber das ganze
+# Intervall seit dem vorherigen Ladevorgang - also ueber die Tagstunden jedes
+# Tages dazwischen (siehe `_interval_windows()`).
+#
+# Warum ueberhaupt gemittelt wird: der Verbrauch eines Vorgangs N stammt aus
+# der Strecke zwischen N-1 und N, beschreibt also eine FAHRT bzw. alle Fahrten
+# dieses Zeitraums (siehe Abschnitt "Verbrauch nach Aussentemperatur" in
+# CLAUDE.md, Punkt 1). Hier liegen zwischen zwei Ladevorgaengen leicht zwei
+# Wochen und zwanzig Fahrten - ein Messpunkt beim Einstecken ist dafuer nur
+# eine Tendenz. Der Wetterdienst KANN ueber den Zeitraum mitteln; ein
+# Fahrzeugsensor kann es nicht, deshalb bleiben dessen Werte (HA-Push,
+# MyŠkoda-Poller) unberuehrt.
+#
+# Warum 6-20 und nicht 24 h: nachts wird kaum gefahren, gemessen werden soll
+# aber die Fahrt. Das 24-h-Mittel laege rund 1,6 K darunter. Die Grenzen sind
+# eine bewusste Vereinfachung - genauere Angaben ueber die Gewohnheiten des
+# Fahrers haben wir nicht.
+#
+# Der alte Punktwert lag am weitesten daneben, wo gar keine Uhrzeit vorliegt:
+# Spritmonitor-Importe stehen alle auf 00:00 (das ist das Fehlen einer Angabe,
+# nicht die Angabe "kurz nach Mitternacht"), und beim Wort genommen traf man
+# damit das TAGESMINIMUM - an echten Stundendaten (Raum Stuttgart, 60 Tage) im
+# Mittel 3,9 K unter dem 6-20-Mittel, in der Spitze 8,8 K.
+DAILY_WINDOW_START_HOUR = 6
+DAILY_WINDOW_END_HOUR = 20
+
+# Obergrenze fuer das gemittelte Intervall. Liegt der vorherige Ladevorgang
+# laenger zurueck, zaehlen nur die letzten so vielen Tage davor. Ein groesserer
+# Abstand ist in der Praxis keine Fahrt, sondern eine Luecke (Urlaub ohne Auto,
+# unvollstaendiger Import) - und ueber Jahre zu mitteln ergaebe einen
+# Jahresdurchschnitt, der ueber nichts mehr etwas aussagt.
+MAX_INTERVAL_DAYS = 60
+
 # Nur Vorgaenge dieser juengsten Vergangenheit holt die Automatik nach. Aeltere
 # sind Sache des Nachtragens per Knopfdruck. Ohne diese Grenze wuerde der
 # Scheduler fuer einen Vorgang, zu dem es dauerhaft keinen Wert gibt (Ozean,
@@ -106,6 +142,11 @@ class TempQuery:
     when: datetime
     latitude: float
     longitude: float
+    # Beginn des VORHERIGEN Ladevorgangs desselben Fahrzeugs, naiv/lokal wie
+    # `when`. Er spannt zusammen mit `when` den Zeitraum auf, ueber den
+    # gemittelt wird. None (kein Vorgaenger bekannt) faellt auf die Tagstunden
+    # des Ladetages selbst zurueck.
+    previous: datetime | None = None
 
 
 def round_coord(value: float) -> float:
@@ -155,23 +196,94 @@ def _cluster_dates(dates: list[date]) -> list[tuple[date, date]]:
     return ranges
 
 
-def _interpolate(series: dict[datetime, float], when: datetime) -> float | None:
-    """Wert zu einem Zeitpunkt aus Stundenwerten.
+def _to_local_naive(when: datetime) -> datetime:
+    """Zonenbehaftete Angabe (aus einem API-Payload) in lokale Wandzeit holen.
 
-    Zwischen den beiden umgebenden Stunden wird linear interpoliert - auf die
-    volle Stunde zu runden traegt sonst eine Treppe in die Streuung, die gar
-    nicht im Wetter steckt.
+    Aus der Datenbank kommt `start_time` ohnehin naiv und ist als lokale Zeit
+    gemeint; ohne diese Umrechnung waere der Ladetag einer zonenbehafteten
+    Angabe der ihres Offsets, nicht der, an dem hier geladen wurde.
     """
-    floor = when.replace(minute=0, second=0, microsecond=0)
-    ceil = floor + timedelta(hours=1)
-    low = series.get(floor)
-    high = series.get(ceil)
-    if low is None:
-        return high
-    if high is None:
-        return low
-    fraction = (when - floor).total_seconds() / 3600
-    return low + (high - low) * fraction
+    if when.tzinfo is not None:
+        return when.astimezone().replace(tzinfo=None)
+    return when
+
+
+def _interval_windows(
+    when: datetime, previous: datetime | None
+) -> list[tuple[datetime, datetime]]:
+    """Die Zeitfenster, ueber die ein Wert gemittelt wird - in naiver UTC.
+
+    Fuer jeden Tag zwischen dem vorherigen Ladevorgang und diesem die
+    Tagstunden (`DAILY_WINDOW_START_HOUR`..`DAILY_WINDOW_END_HOUR`), an den
+    Raendern beschnitten auf den tatsaechlichen Zeitraum:
+
+    * 10.07. 18:00 -> 20.07. 09:00 ergibt den Rest des 10., die vollen
+      Tagstunden vom 11. bis 19. und den Anfang des 20.
+    * Zwei Ladungen am selben Tag (08:00 und 12:00) ergeben genau ein Fenster
+      von 08:00 bis 12:00 - nicht den ganzen Tag, denn dazwischen liegt auch
+      nur diese eine Fahrt.
+    * Ohne Vorgaenger (erster Vorgang eines Fahrzeugs) bleiben die Tagstunden
+      des Ladetages selbst.
+
+    Gerechnet wird durchweg in LOKALER Zeit und erst zum Schluss nach UTC
+    geschoben: lokal 00:00 liegt in Mitteleuropa schon im UTC-Vortag, ein
+    Umweg ueber die UTC-Datumsangabe haette also den falschen Tag erwischt.
+    Liegt gar keine Tagstunde im Zeitraum (beide Ladungen nachts, am selben
+    Tag), faellt das Ergebnis auf die Tagstunden des Ladetages zurueck - ein
+    grober Wert ist hier besser als gar keiner.
+    """
+    when = _to_local_naive(when)
+    day_window = [
+        (
+            datetime.combine(when.date(), dt_time(hour=DAILY_WINDOW_START_HOUR)),
+            datetime.combine(when.date(), dt_time(hour=DAILY_WINDOW_END_HOUR)),
+        )
+    ]
+
+    windows = day_window
+    if previous is not None:
+        previous = _to_local_naive(previous)
+        earliest = when - timedelta(days=MAX_INTERVAL_DAYS)
+        if previous < earliest:
+            previous = earliest
+        if previous < when:
+            windows = []
+            day = previous.date()
+            while day <= when.date():
+                start = max(
+                    datetime.combine(day, dt_time(hour=DAILY_WINDOW_START_HOUR)),
+                    previous,
+                )
+                end = min(
+                    datetime.combine(day, dt_time(hour=DAILY_WINDOW_END_HOUR)), when
+                )
+                if start <= end:
+                    windows.append((start, end))
+                day += timedelta(days=1)
+            if not windows:
+                windows = day_window
+
+    return [(_to_utc(start), _to_utc(end)) for start, end in windows]
+
+
+def _windows_mean(
+    series: dict[datetime, float], windows: list[tuple[datetime, datetime]]
+) -> float | None:
+    """Mittel aller Stundenwerte in den Fenstern, Grenzen einschliesslich.
+
+    Die Fenster sind nach Konstruktion ueberschneidungsfrei (je Tag hoechstens
+    eines), es wird also nichts doppelt gezaehlt. Fehlen einzelne Stunden, wird
+    ueber die vorhandenen gemittelt - ein unvollstaendiges Fenster ist immer
+    noch naeher dran als ein einzelner Punktwert. Gar keine Stunde ergibt None.
+    """
+    values = [
+        value
+        for hour, value in series.items()
+        if any(start <= hour <= end for start, end in windows)
+    ]
+    if not values:
+        return None
+    return sum(values) / len(values)
 
 
 def _parse_hourly(payload: dict) -> dict[datetime, float]:
@@ -204,9 +316,18 @@ def fetch_temperatures(
     Detail, kein Grund, einen Ladevorgang oder einen ganzen Nachtrag scheitern
     zu lassen.
 
-    Gebuendelt wird nach gerundeter Koordinate und zusammenhaengendem
-    Zeitraum - typischerweise bleibt damit eine Anfrage je Ladeort uebrig,
-    nicht eine je Ladevorgang.
+    Jeder Wert ist das Mittel der Tagstunden ueber den Zeitraum seit dem
+    vorherigen Ladevorgang (`_interval_windows()`). Gebuendelt wird nach
+    gerundeter Koordinate und zusammenhaengendem Zeitraum - typischerweise
+    bleibt damit eine Anfrage je Ladeort uebrig, nicht eine je Ladevorgang.
+    Die Stundenwerte einer Koordinate werden dabei ueber alle Anfragen hinweg
+    zu EINER Reihe zusammengelegt und erst danach ausgewertet: ein Intervall
+    kann laenger sein als ein Abfragebereich und sogar die Grenze zwischen
+    Vorhersage- und Archiv-Endpunkt ueberschreiten.
+
+    `latitude`/`longitude` sind die des Vorgangs N, auch fuer die Tage davor -
+    wo das Fahrzeug zwischendurch unterwegs war, weiss niemand. Bei einem
+    Ladeintervall im Alltag ist das die Gegend, in der auch gefahren wurde.
     """
     if not queries:
         return {}
@@ -216,72 +337,127 @@ def fetch_temperatures(
     today = today or datetime.utcnow().date()
     archive_before = today - timedelta(days=ARCHIVE_SWITCH_DAYS)
 
-    # (Endpunkt, lat, lon) -> {Tag -> [Anfragen]}
-    buckets: dict[tuple[str, float, float], dict[date, list[tuple[TempQuery, datetime]]]] = {}
+    Plan = tuple[TempQuery, tuple[float, float], list[tuple[datetime, datetime]]]
+    plans: list[Plan] = []
+    days_by_coord: dict[tuple[float, float], set[date]] = {}
     for query in queries:
-        when_utc = _to_utc(query.when)
-        day = when_utc.date()
-        # Alles juenger als ARCHIVE_SWITCH_DAYS holt der Vorhersage-Endpunkt
-        # (kein Verzug), alles aeltere das Archiv. Die Grenze liegt in beiden
-        # Fenstern, es faellt also nichts dazwischen.
-        endpoint = "archive" if day < archive_before else "forecast"
-        key = (endpoint, round_coord(query.latitude), round_coord(query.longitude))
-        buckets.setdefault(key, {}).setdefault(day, []).append((query, when_utc))
+        windows = _interval_windows(query.when, query.previous)
+        coord = (round_coord(query.latitude), round_coord(query.longitude))
+        days = days_by_coord.setdefault(coord, set())
+        for window_start, window_end in windows:
+            day = window_start.date()
+            while day <= window_end.date():
+                days.add(day)
+                day += timedelta(days=1)
+        plans.append((query, coord, windows))
 
     owns_client = client is None
     client = client or httpx.Client(timeout=REQUEST_TIMEOUT_SECONDS)
-    result: dict[str, float] = {}
+    series_by_coord: dict[tuple[float, float], dict[datetime, float]] = {}
     requests_made = 0
     try:
-        for (endpoint, latitude, longitude), by_day in buckets.items():
-            url = (base if endpoint == "forecast" else archive_base) + (
-                FORECAST_PATH if endpoint == "forecast" else ARCHIVE_PATH
-            )
-            for start, end in _cluster_dates(sorted(by_day)):
-                if requests_made >= MAX_REQUESTS_PER_RUN:
-                    logger.warning(
-                        "Wetter-Abruf: Obergrenze von %s Anfragen je Lauf erreicht, "
-                        "der Rest bleibt offen",
-                        MAX_REQUESTS_PER_RUN,
-                    )
-                    return result
-                requests_made += 1
-                params = {
-                    "latitude": latitude,
-                    "longitude": longitude,
-                    "hourly": "temperature_2m",
-                    "timezone": "UTC",
-                    "start_date": start.isoformat(),
-                    # Einen Tag Puffer: eine Stunde kurz vor Mitternacht UTC
-                    # braucht zum Interpolieren noch den ersten Wert des
-                    # Folgetags.
-                    "end_date": (end + timedelta(days=1)).isoformat(),
-                }
-                try:
-                    response = client.get(url, params=params)
-                    response.raise_for_status()
-                    series = _parse_hourly(response.json())
-                except Exception as exc:  # noqa: BLE001 - siehe Docstring
-                    logger.warning("Wetter-Abruf fehlgeschlagen (%s): %s", url, exc)
+        for coord, days in days_by_coord.items():
+            merged: dict[datetime, float] = {}
+            series_by_coord[coord] = merged
+            # Alles juenger als ARCHIVE_SWITCH_DAYS holt der Vorhersage-
+            # Endpunkt (kein Verzug), alles aeltere das Archiv. Die Grenze
+            # liegt in beiden Fenstern, es faellt also nichts dazwischen.
+            by_endpoint: dict[str, list[date]] = {"archive": [], "forecast": []}
+            for day in sorted(days):
+                by_endpoint["archive" if day < archive_before else "forecast"].append(day)
+            for endpoint, endpoint_days in by_endpoint.items():
+                if not endpoint_days:
                     continue
-                if not series:
-                    continue
-                for day in sorted(by_day):
-                    if not (start <= day <= end):
+                url = (base if endpoint == "forecast" else archive_base) + (
+                    FORECAST_PATH if endpoint == "forecast" else ARCHIVE_PATH
+                )
+                for start, end in _cluster_dates(endpoint_days):
+                    if requests_made >= MAX_REQUESTS_PER_RUN:
+                        logger.warning(
+                            "Wetter-Abruf: Obergrenze von %s Anfragen je Lauf "
+                            "erreicht, der Rest bleibt offen",
+                            MAX_REQUESTS_PER_RUN,
+                        )
+                        return _evaluate(plans, series_by_coord)
+                    requests_made += 1
+                    params = {
+                        "latitude": coord[0],
+                        "longitude": coord[1],
+                        "hourly": "temperature_2m",
+                        "timezone": "UTC",
+                        "start_date": start.isoformat(),
+                        # Einen Tag Puffer: das lokale Fenster eines Tages
+                        # reicht je nach Zeitzone in den UTC-Folgetag hinein.
+                        "end_date": (end + timedelta(days=1)).isoformat(),
+                    }
+                    try:
+                        response = client.get(url, params=params)
+                        response.raise_for_status()
+                        merged.update(_parse_hourly(response.json()))
+                    except Exception as exc:  # noqa: BLE001 - siehe Docstring
+                        logger.warning(
+                            "Wetter-Abruf fehlgeschlagen (%s): %s", url, exc
+                        )
                         continue
-                    for query, when_utc in by_day[day]:
-                        value = _interpolate(series, when_utc)
-                        if value is not None:
-                            result[query.session_id] = round(value, 1)
     finally:
         if owns_client:
             client.close()
+    return _evaluate(plans, series_by_coord)
+
+
+def _evaluate(plans, series_by_coord) -> dict[str, float]:
+    """Aus den geholten Stundenreihen je Anfrage einen Wert bilden."""
+    result: dict[str, float] = {}
+    for query, coord, windows in plans:
+        series = series_by_coord.get(coord)
+        if not series:
+            continue
+        value = _windows_mean(series, windows)
+        if value is not None:
+            result[query.session_id] = round(value, 1)
     return result
 
 
 # ---------------------------------------------------------------------------
 # Anwendung auf Ladevorgaenge
 # ---------------------------------------------------------------------------
+
+
+def previous_start_times(
+    db: Session, sessions: list[models.ChargingSession]
+) -> dict[str, datetime | None]:
+    """Zu jedem Vorgang den Beginn des vorherigen desselben FAHRZEUGS.
+
+    Er spannt den Zeitraum auf, ueber den gemittelt wird - dieselbe Kette, aus
+    der `consumption.py` den Verbrauch rechnet, damit Temperatur und Verbrauch
+    denselben Abschnitt beschreiben. Geladen wird pro Fahrzeug einmal, nicht
+    pro Vorgang: bei der Automatik liegt der Vorgaenger sonst regelmaessig
+    ausserhalb der betrachteten Menge.
+    """
+    vehicle_ids = {s.vehicle_id for s in sessions if s.vehicle_id}
+    starts: dict[str, list[datetime]] = {}
+    if vehicle_ids:
+        rows = (
+            db.query(
+                models.ChargingSession.vehicle_id,
+                models.ChargingSession.start_time,
+            )
+            .filter(models.ChargingSession.vehicle_id.in_(vehicle_ids))
+            .all()
+        )
+        for vehicle_id, start_time in rows:
+            starts.setdefault(vehicle_id, []).append(start_time)
+        for values in starts.values():
+            values.sort()
+
+    previous: dict[str, datetime | None] = {}
+    for session in sessions:
+        known = starts.get(session.vehicle_id) or []
+        # bisect_left liefert den ersten Eintrag >= start_time - der davor ist
+        # damit echt frueher, auch wenn zwei Vorgaenge dieselbe Zeit tragen.
+        index = bisect_left(known, session.start_time)
+        previous[session.id] = known[index - 1] if index > 0 else None
+    return previous
 
 
 def coordinates_for(session: models.ChargingSession) -> tuple[float, float] | None:
@@ -317,12 +493,26 @@ class BackfillReport:
 PREVIEW_LIMIT = 50
 
 
+# Jeder hier geholte Wert ist ein Tagesmittel (siehe DAILY_WINDOW_START_HOUR),
+# nie eine Messung zu einem Zeitpunkt.
+WRITTEN_SOURCE = models.TemperatureSource.WEATHER_DAILY
+
+# Beide gelten als "vom Wetterdienst geholt" und sind damit durch einen
+# Korrekturlauf ersetzbar. WEATHER steht nur noch fuer Bestandszeilen aus der
+# Zeit vor v0.24.1, als der Wert zum Ladebeginn geholt wurde.
+WEATHER_SOURCES = (
+    models.TemperatureSource.WEATHER,
+    models.TemperatureSource.WEATHER_DAILY,
+)
+
+
 def backfill_sessions(
     db: Session,
     user: models.User,
     *,
     dry_run: bool = True,
     overwrite: bool = False,
+    refresh: bool = False,
     base_url: str | None = None,
     client: httpx.Client | None = None,
 ) -> BackfillReport:
@@ -337,6 +527,13 @@ def backfill_sessions(
     `overwrite=False` laesst vorhandene Werte in Ruhe. Ein Wert aus dem
     Fahrzeug oder von Hand ist naeher dran als einer vom Wetterdienst und
     darf nicht stillschweigend ersetzt werden.
+
+    `refresh=True` ist der Mittelweg und der Grund, warum es ihn ueberhaupt
+    gibt: wer den Nachtrag schon einmal hat laufen lassen, bevor die Zeilen
+    ohne Uhrzeit erkannt wurden, hat dort Mitternachtswerte stehen. Dann
+    werden Werte neu geholt, die VOM WETTERDIENST stammen
+    (`weather`/`weather_daily`) - Fahrzeug- und Handeintraege bleiben
+    unangetastet, anders als bei `overwrite`.
     """
     report = BackfillReport()
     sessions = (
@@ -346,13 +543,16 @@ def backfill_sessions(
         .all()
     )
 
+    previous = previous_start_times(db, sessions)
     queries: list[TempQuery] = []
     by_id: dict[str, models.ChargingSession] = {}
     for session in sessions:
         report.considered += 1
         if session.outside_temp_c is not None and not overwrite:
-            report.already_set += 1
-            continue
+            refreshable = refresh and session.outside_temp_source in WEATHER_SOURCES
+            if not refreshable:
+                report.already_set += 1
+                continue
         coords = coordinates_for(session)
         if coords is None:
             report.without_coordinates += 1
@@ -363,6 +563,7 @@ def backfill_sessions(
                 when=session.start_time,
                 latitude=coords[0],
                 longitude=coords[1],
+                previous=previous.get(session.id),
             )
         )
         by_id[session.id] = session
@@ -387,7 +588,7 @@ def backfill_sessions(
         if dry_run:
             continue
         session.outside_temp_c = value
-        session.outside_temp_source = models.TemperatureSource.WEATHER
+        session.outside_temp_source = WRITTEN_SOURCE
         report.written += 1
 
     if not dry_run and report.written:
@@ -422,6 +623,7 @@ def autofill_new_sessions(db: Session) -> int:
             .limit(AUTOFILL_MAX_SESSIONS_PER_RUN)
             .all()
         )
+        previous = previous_start_times(db, sessions)
         queries: list[TempQuery] = []
         by_id: dict[str, models.ChargingSession] = {}
         for session in sessions:
@@ -434,6 +636,7 @@ def autofill_new_sessions(db: Session) -> int:
                     when=session.start_time,
                     latitude=coords[0],
                     longitude=coords[1],
+                    previous=previous.get(session.id),
                 )
             )
             by_id[session.id] = session
@@ -444,7 +647,7 @@ def autofill_new_sessions(db: Session) -> int:
         ).items():
             session = by_id[session_id]
             session.outside_temp_c = value
-            session.outside_temp_source = models.TemperatureSource.WEATHER
+            session.outside_temp_source = WRITTEN_SOURCE
             filled += 1
         db.commit()
     return filled

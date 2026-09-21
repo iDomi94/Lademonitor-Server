@@ -6,6 +6,44 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.24.1] — 2026-09-21
+
+### Changed
+- **Der Wetterdienst mittelt jetzt über das ganze Fahrt-Intervall** statt über
+  einen Zeitpunkt: für jeden Tag zwischen dem vorherigen Ladevorgang und
+  diesem die Tagstunden 6–20 Uhr Lokalzeit, an den Rändern auf den
+  tatsächlichen Zeitraum beschnitten (`weather._interval_windows()`). Zwei
+  Ladungen am selben Tag mitteln nur die Stunden dazwischen; ein Abstand über
+  `MAX_INTERVAL_DAYS` (60) wird gekappt. Der Verbrauch eines Vorgangs stammt
+  aus der Strecke seit dem vorherigen — die Temperatur beschreibt damit
+  denselben Abschnitt.
+- **`temperature.py` nimmt solche Werte unverändert**, statt sie wie bisher
+  mit `temp(N-1)` zu mitteln: sie decken die Fahrt bereits ab, eine zweite
+  Mittelung würde die Nachbarfahrt hineinmischen. Für Fahrzeugwerte bleibt es
+  bei der Paarung beider Intervallenden.
+- Werte aus dem Fahrzeug (HA-Push, MyŠkoda-Poller) sind unberührt — ein Sensor
+  misst zwangsläufig punktuell. **`TemperatureSource.weather_daily`** ist
+  deshalb der Normalfall für alles, was der Wetterdienst schreibt; `weather`
+  steht nur noch für Bestandszeilen aus der Zeit davor.
+- Die Stundenwerte einer Koordinate werden über alle Anfragen hinweg zu EINER
+  Reihe zusammengelegt und erst danach ausgewertet: ein Intervall kann länger
+  sein als ein Abfragebereich und die Grenze zwischen Vorhersage- und
+  Archiv-Endpunkt überschreiten.
+
+### Fixed
+- **Spritmonitor-Importe** tragen keine Uhrzeit (der Importer setzt 00:00).
+  Beim Wort genommen traf der alte Punktwert dort systematisch das
+  Tagesminimum – an echten Stundendaten im Mittel 3,9 K zu kalt, in der
+  Spitze 8,8 K, einseitig auf genau der Hälfte der Daten.
+
+### Added
+- **`POST /api/weather/backfill?refresh=true`**: Korrekturlauf für alle, die
+  den Nachtrag vor dieser Änderung haben laufen lassen. Holt Werte neu, deren
+  Herkunft `weather`/`weather_daily` ist – `vehicle` und `manual` bleiben
+  unangetastet, anders als bei `overwrite`. In den Einstellungen als
+  Ankreuzfeld beim Nachtrags-Knopf; die Vorschau zeigt dann zusätzlich den
+  bisherigen Wert.
+
 ## [0.24.0] — 2026-09-21
 
 ### Added

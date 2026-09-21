@@ -42,7 +42,16 @@ class TemperatureSource(str, enum.Enum):
 
     VEHICLE = "vehicle"
     MANUAL = "manual"
+    # Nur noch Bestandszeilen: bis v0.24.1 holte der Wetterdienst den Wert zum
+    # Ladebeginn. Neue Abrufe schreiben ausschliesslich WEATHER_DAILY.
     WEATHER = "weather"
+    # Vom Wetterdienst, aber als Mittel der Tagstunden (6-20 Uhr) ueber den
+    # Zeitraum seit dem vorherigen Ladevorgang statt zu einem Zeitpunkt - seit
+    # v0.24.1 der Normalfall fuer JEDEN geholten Wert. Eigener Wert, weil das eine andere Messgroesse ist als ein
+    # Fahrzeugsensor: der misst zwangslaeufig punktuell und kann nicht mitteln,
+    # ein Tagesmittel ist dafuer unschaerfer als ein echter Zeitpunkt. Ohne die
+    # Unterscheidung wuerden beide Arten in temperature.py unbemerkt vermischt.
+    WEATHER_DAILY = "weather_daily"
 
 
 class SessionSource(str, enum.Enum):

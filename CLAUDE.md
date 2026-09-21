@@ -651,11 +651,15 @@ Icon/Tooltip-Logik in der SessionsList-View.
   bekommen** - siehe Abschnitt "Aussentemperatur vom Wetterdienst". Damit ist der
   Satz weiter oben ("fuer alte Vorgaenge laesst sich der Wert nicht nachtraeglich
   ermitteln") ueberholt, allerdings nur fuer Vorgaenge MIT Koordinaten: ein
-  Spritmonitor-Import ohne Ladeort bleibt ohne Wert. **Offen dabei:** beide Apps
-  zeigen die Herkunft (`outside_temp_source`) noch nicht an - sie brauchen sie
-  auch nicht, um korrekt zu bleiben (der Server leitet MANUAL nur aus einer
-  echten Wertaenderung ab), aber eine Kennzeichnung "vom Wetterdienst" waere in
-  der Detailansicht ehrlicher.
+  Spritmonitor-Import ohne Ladeort bleibt ohne Wert. **Erledigt am selben Tag:** beide Apps
+  zeigen die Herkunft (`outside_temp_source`) inzwischen in der Detailansicht an
+  (iOS als zweite Zeile unter dem Wert, Android als Zusatz dahinter wie das
+  "(geschaetzt)" bei den kWh). Das Feld ist in beiden Apps **nur lesend** - es
+  fehlt bewusst im Payload, weil der Server MANUAL aus einer echten
+  Wertaenderung ableitet: schickte eine App den alten Wert einfach zurueck,
+  bliebe eine von Hand korrigierte Temperatur faelschlich als "vom
+  Wetterdienst" stehen. Im Local-Only-Modus setzen die Apps die Quelle selbst,
+  nach derselben Regel. Android brauchte dafuer die Room-Migration 2->3.
 - **Xcode-Beta-Umgebung des Nutzers:** macOS 27 Beta + Xcode 27 Beta
   (Erstbeta, Stand Aug 2026). Es gab einen `dyld_shared_cache_extract_dylibs`
   Bug beim Installieren auf echtem Gerät - gelöst durch Löschen von
@@ -1415,7 +1419,11 @@ und der MyŠkoda-Poller in `MySkodaConfig.open_outside_temp_c`.
 `temp(N-1)` liegt ungefaehr am Anfang der Fahrt, `temp(N)` an ihrem Ende - also
 das Mittel, wenn beide bekannt sind, sonst `temp(N)` allein. Fehlt `temp(N)`,
 wird der Punkt verworfen statt auf `temp(N-1)` auszuweichen: zwischen dem
-Einstecken davor und dieser Fahrt koennen Tage liegen.
+Einstecken davor und dieser Fahrt koennen Tage liegen. **Ausnahme seit
+v0.24.1:** ein Wert vom Wetterdienst (`weather_daily`) ist bereits das Mittel
+ueber genau diesen Zeitraum und wird unveraendert genommen - siehe
+`temperature.py::_covers_the_whole_drive()` und den Abschnitt "Zeitraummittel
+statt Punktwert".
 
 **3. Gewichtet wird mit Kilometern**, wie beim Monatsdurchschnitt in
 `routers/stats.py` - sonst zieht eine 5-km-Kurzstrecke mit unplausiblem Wert
@@ -1536,10 +1544,10 @@ fest.
 
 `start_time` liegt naiv als LOKALE Zeit in der DB, die API rechnet in UTC.
 `_to_utc()` macht die Umrechnung genau einmal; die Anfrage laeuft immer mit
-`timezone=UTC`. Ohne das greift man im Tagesgang um ein bis zwei Stunden
-daneben - also um 2-3 K und damit um die Groessenordnung, die die Auswertung
-ueberhaupt messen will. Zwischen den beiden umgebenden Stundenwerten wird
-linear interpoliert.
+`timezone=UTC`. Ohne das liegen die Fenster (siehe Abschnitt "Zeitraummittel
+statt Punktwert") um ein bis zwei Stunden verschoben - fuer den frueheren
+Punktwert waren das direkt 2-3 K, also die Groessenordnung, die die Auswertung
+ueberhaupt messen will.
 
 ### Woher die Koordinate kommt
 
@@ -1550,7 +1558,7 @@ ohne beides werden gezaehlt und im Probelauf ausgewiesen, nicht geraten.
 
 ### Herkunft mitschreiben (`ChargingSession.outside_temp_source`)
 
-`vehicle | manual | weather`. Nicht Buchhaltung, sondern notwendig: ein
+`vehicle | manual | weather | weather_daily` (siehe Abschnitt darunter). Nicht Buchhaltung, sondern notwendig: ein
 Wetterdienstwert ist nicht dasselbe wie der Fahrzeugsensor (Restwaerme, Sonne,
 Standort - gern 1-2 K hoeher). Ohne die Spalte wuerde ein Sammel-Nachtrag beide
 Arten unbemerkt vermischen und der Trend bekaeme einen Knick an genau dem Tag,
@@ -1564,6 +1572,86 @@ dieselbe Vorsicht wie beim `energy_is_estimated`-Flag - Web-UI und Apps
 schicken `outside_temp_c` bei JEDEM Speichern mit, deshalb zaehlt nur eine
 tatsaechliche WERTAENDERUNG als Handeintrag. Sonst waere ein geholter Wert nach
 einmal Oeffnen-und-Speichern als "von Hand" etikettiert.
+
+### Zeitraummittel statt Punktwert (2026-09-21, v0.24.1)
+
+**Jeder vom Wetterdienst geholte Wert ist seitdem das Mittel der Tagstunden
+(6-20 Uhr LOKALZEIT) ueber den gesamten Zeitraum seit dem vorherigen
+Ladevorgang** - `_interval_windows()` baut dafuer je Tag zwischen N-1 und N ein
+Fenster, an den Raendern auf den tatsaechlichen Zeitraum beschnitten. Der
+Punktwert zum Ladebeginn und die Interpolation auf die Stunde
+(`_interpolate()`) sind ersatzlos entfallen.
+
+Begruendung: der Verbrauch eines Vorgangs N stammt aus der Strecke zwischen
+N-1 und N, beschreibt also ALLE Fahrten dieses Zeitraums (siehe Abschnitt
+"Verbrauch nach Aussentemperatur", Punkt 1). Hier liegen zwischen zwei
+Ladevorgaengen leicht zwei Wochen und zwanzig Fahrten - ein Messpunkt beim
+Einstecken ist dafuer nur eine Tendenz. Der Wetterdienst KANN ueber den
+Zeitraum mitteln, also tut er es.
+
+Drei Sonderfaelle:
+
+* **Zwei Ladungen am selben Tag** ergeben genau ein Fenster zwischen den beiden
+  Uhrzeiten - dazwischen liegt ja auch nur diese eine Fahrt. Den ganzen Tag zu
+  mitteln waere hier schlechter, nicht besser.
+* **Kein Vorgaenger** (erster Vorgang eines Fahrzeugs) oder **gar keine
+  Tagstunde im Zeitraum** (beide Ladungen nachts am selben Tag): zurueck auf
+  die Tagstunden des Ladetages. Ein grober Wert ist besser als keiner.
+* **Abstand groesser als `MAX_INTERVAL_DAYS` (60)**: gekappt. Ein groesserer
+  Abstand ist keine Fahrt mehr, sondern eine Luecke (Urlaub ohne Auto,
+  unvollstaendiger Import) - ueber Jahre zu mitteln ergaebe einen
+  Jahresdurchschnitt, der ueber nichts mehr etwas aussagt.
+
+**Werte aus dem Fahrzeug bleiben unberuehrt** (HA-Push, MyŠkoda-Poller): ein
+Sensor misst zwangslaeufig punktuell. Genau deshalb schreibt der Wetterdienst
+seitdem `TemperatureSource.WEATHER_DAILY` (`weather.WRITTEN_SOURCE`) statt
+`WEATHER` - sonst laegen zwei verschiedene Messgroessen in derselben Spalte.
+`WEATHER` steht seitdem nur noch fuer Bestandszeilen.
+
+**`temperature.py` nutzt den Unterschied** (`_covers_the_whole_drive()`): ein
+`weather_daily`-Wert wird unveraendert genommen statt wie bisher mit
+`temp(N-1)` gemittelt - er deckt die Fahrt bereits ab, eine zweite Mittelung
+wuerde die NACHBARfahrt hineinmischen und die bessere Angabe verwaessern. Fuer
+Fahrzeug- und Handwerte bleibt es bei der Paarung beider Intervallenden.
+
+**Der schaerfste Fall waren die Spritmonitor-Importe:** die tragen keine
+Uhrzeit, `importer.py` setzt 00:00. Beim Wort genommen traf der alte Punktwert
+dort das TAGESMINIMUM - an echten Stundendaten (Raum Stuttgart, 60 Tage) im
+Mittel 3,9 K unter dem 6-20-Mittel, in der Spitze 8,8 K. Ein einseitiger Fehler
+auf genau der Haelfte der Daten, also genau die Sorte, die eine Trendlinie
+kippt, ohne dass man es der Zahl ansieht. Eine **`start_time` zu erfinden**,
+die plausibler aussieht, waere der naheliegende, aber falsche Weg gewesen - das
+Fehlen der Angabe bliebe dann nicht mehr erkennbar.
+
+Warum 6-20 und nicht 24 h: nachts wird kaum gefahren. Das 24-h-Mittel laege
+nochmal rund 1,6 K darunter. Gerechnet wird durchweg in LOKALER Zeit und erst
+zum Schluss nach UTC geschoben (`_to_local_naive()`, `_to_utc()`); lokal 00:00
+liegt in Mitteleuropa schon im UTC-Vortag, ein Umweg ueber die UTC-Datumsangabe
+haette den falschen Tag erwischt.
+
+**Die Koordinate ist die von Vorgang N, auch fuer die Tage davor** - wo das
+Fahrzeug zwischendurch war, weiss niemand. Im Alltag ist das die Gegend, in der
+auch gefahren wurde.
+
+**Gebuendelt wird jetzt anders:** `fetch_temperatures()` sammelt erst alle
+benoetigten Tage je Koordinate, holt sie (Vorhersage- und Archiv-Endpunkt
+getrennt, `_cluster_dates()` wie bisher) und legt die Stundenwerte einer
+Koordinate zu EINER Reihe zusammen; ausgewertet wird erst danach
+(`_evaluate()`). Vorher entschied sich der Endpunkt je Vorgang - ein Intervall
+kann aber laenger sein als ein Abfragebereich und sogar die Grenze zwischen
+beiden Endpunkten ueberschreiten.
+
+Die Migration in `database.py` ergaenzt den Enum-Wert per
+`ALTER TYPE ... ADD VALUE IF NOT EXISTS` (idempotent; der neue Wert darf nur
+nicht in DERSELBEN Transaktion schon benutzt werden, hier wird er
+ausschliesslich angelegt).
+
+**Korrekturlauf `refresh=true`**: wer den Nachtrag vor dieser Aenderung hat
+laufen lassen, hat Punktwerte in der DB. `refresh` holt Werte neu, deren
+Herkunft `weather`/`weather_daily` ist (`weather.WEATHER_SOURCES`), und laesst
+`vehicle`/`manual` in Ruhe - das ist der Unterschied zu `overwrite`, das alles
+ersetzt. Die Vorschau zeigt dann zusaetzlich `previous_temp_c`, sonst sieht man
+dem Probelauf nicht an, ob sich ueberhaupt etwas aendert.
 
 ### Nachtrag und Automatik
 
@@ -1588,11 +1676,15 @@ ganzen Nachtrag scheitern zu lassen.
 
 ### Getestet ohne Netz, verifiziert mit Netz
 
-`tests/test_weather.py` (24 Faelle) ersetzt den HTTP-Client durch einen
+`tests/test_weather.py` (35 Faelle) ersetzt den HTTP-Client durch einen
 Transport, der die Anfragen mitschreibt: geprueft wird, was den Server
-verlaesst (gerundete Koordinaten), welche Stunde getroffen wird (inkl.
-umgestellter Prozess-Zeitzone fuer den naiven Fall), dass der Probelauf nichts
-schreibt und dass ohne Opt-in keine einzige Anfrage entsteht. Der echte Dienst
+verlaesst (gerundete Koordinaten), welche Stunden in den Mittelwert eingehen
+(Intervall ueber mehrere Tage, zwei Ladungen am selben Tag, Kappung, inkl.
+umgestellter Prozess-Zeitzone fuer den naiven Fall), dass ein Fahrzeugwert
+niemals durch einen Wetterdienstwert ersetzt wird, dass der Probelauf nichts
+schreibt und dass ohne Opt-in keine einzige Anfrage entsteht. Die dafuer
+gebauten Stundenreihen geben jedem Tag seine eigene Temperatur - am Ergebnis
+laesst sich damit ablesen, WELCHE Tage eingegangen sind. Der echte Dienst
 wurde daneben einmal von Hand gegen eine Test-Datenbank verifiziert (Werte
 kamen ueber den Vorhersage-Endpunkt an, Bedienung im Browser durchgespielt).
 **Bekannte Stolperstelle:** das freie Kontingent gilt pro IP - hinter CGNAT

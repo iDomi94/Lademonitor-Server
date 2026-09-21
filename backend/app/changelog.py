@@ -5,6 +5,18 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.24.1",
+        "date": "2026-09-21",
+        "title": "Wetterdienst mittelt über den ganzen Zeitraum",
+        "changes": [
+            "Temperaturen vom Wetterdienst sind jetzt das Mittel der Tagstunden (6-20 Uhr) über den GESAMTEN Zeitraum seit dem vorherigen Ladevorgang - also jeden Tag dazwischen. Vorher war es der Wert zum Ladebeginn. Grund: der Verbrauch eines Ladevorgangs stammt von den Fahrten seit dem letzten - und dazwischen liegen schnell zwei Wochen und zwanzig Fahrten. Ein einzelner Messpunkt ist dafür nur eine Tendenz.",
+            "Zwei Ladevorgänge am selben Tag mitteln nur die Stunden dazwischen - dazwischen liegt ja auch nur diese eine Fahrt. Liegt der vorherige Ladevorgang länger als 60 Tage zurück, zählen nur die letzten 60 Tage: ein größerer Abstand ist keine Fahrt mehr, sondern eine Lücke.",
+            "Temperaturen vom Fahrzeug (Home Assistant, MyŠkoda) bleiben unverändert der Wert beim Einstecken - ein Fahrzeugsensor kann nicht mitteln. Deshalb heißt die Herkunft solcher Werte jetzt „vom Wetterdienst (Zeitraummittel)\" und ist von einem Fahrzeugwert unterscheidbar. Die Auswertung nutzt den Unterschied: ein Zeitraummittel beschreibt die Fahrt bereits vollständig und wird nicht mehr zusätzlich mit dem Wert davor gemittelt.",
+            "Am weitesten daneben lag der alte Punktwert bei von Spritmonitor importierten Ladevorgängen: die stehen alle auf 00:00, weil der Export keine Uhrzeit hat. Beim Wort genommen traf man damit das Tagesminimum - an echten Stundendaten im Mittel 3,9 °C zu kalt, in der Spitze 8,8 °C, und zwar einseitig auf genau der Hälfte der Daten.",
+            "Wer den Nachtrag schon hat laufen lassen, findet beim Nachtrags-Knopf eine neue Option: „Bereits vom Wetterdienst geholte Werte neu bestimmen\". Sie holt genau diese Werte erneut - Temperaturen vom Fahrzeug oder von Hand bleiben auch dabei unangetastet. Die Vorschau zeigt dann zusätzlich den bisherigen Wert, damit man vor dem Schreiben sieht, was sich ändert.",
+        ],
+    },
+    {
         "version": "0.24.0",
         "date": "2026-09-21",
         "title": "Außentemperatur vom Wetterdienst",

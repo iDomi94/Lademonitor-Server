@@ -363,3 +363,37 @@ def test_explicit_null_does_clear_it(client):
     patched = client.patch(f"/api/sessions/{created['id']}", json={"outside_temp_c": None})
 
     assert patched.json()["outside_temp_c"] is None
+
+
+def test_a_weather_value_is_not_averaged_with_its_predecessor():
+    """Ein Wetterdienstwert deckt den ganzen Fahrt-Zeitraum schon ab (er ist
+    das Mittel der Tagstunden seit dem vorherigen Ladevorgang, siehe
+    weather.py). Ihn nochmal mit dem Wert davor zu mitteln wuerde die
+    Nachbarfahrt hineinmischen und die bessere Angabe verwaessern."""
+    sessions = [
+        session(0, temp=-10.0, odo=1000, kwh=30),
+        session(1, temp=5.0, odo=1200, kwh=40),
+    ]
+    for row in sessions:
+        row.outside_temp_source = models.TemperatureSource.WEATHER_DAILY
+
+    points, _ = points_for(sessions)
+
+    assert len(points) == 1
+    # 5.0, nicht das Mittel -2.5 aus 5.0 und -10.0.
+    assert points[0].temp_c == pytest.approx(5.0)
+
+
+def test_a_vehicle_value_is_still_paired_with_its_predecessor():
+    """Gegenprobe: ein Fahrzeugsensor misst punktuell beim Einstecken, also am
+    ENDE der Fahrt - dort bleibt es bei der Paarung."""
+    sessions = [
+        session(0, temp=0.0, odo=1000, kwh=30),
+        session(1, temp=10.0, odo=1200, kwh=40),
+    ]
+    for row in sessions:
+        row.outside_temp_source = models.TemperatureSource.VEHICLE
+
+    points, _ = points_for(sessions)
+
+    assert points[0].temp_c == pytest.approx(5.0)

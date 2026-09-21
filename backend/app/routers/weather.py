@@ -53,6 +53,14 @@ def backfill(
         default=False,
         description="Auch bereits gesetzte Temperaturen ersetzen (Vorgabe: nein).",
     ),
+    refresh: bool = Query(
+        default=False,
+        description=(
+            "Bereits vom Wetterdienst geholte Werte neu bestimmen. Werte aus "
+            "dem Fahrzeug oder von Hand bleiben unangetastet - anders als bei "
+            "overwrite."
+        ),
+    ),
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
@@ -64,7 +72,7 @@ def backfill(
     Dauer-Automatik einschalten. Der Aufruf selbst IST die Einwilligung.
     """
     report = weather.backfill_sessions(
-        db, user, dry_run=dry_run, overwrite=overwrite
+        db, user, dry_run=dry_run, overwrite=overwrite, refresh=refresh
     )
     return schemas.WeatherBackfillResult(
         dry_run=dry_run,

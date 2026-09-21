@@ -204,6 +204,8 @@
       <summary>{{ t('settings.weather.backfill_heading') }}</summary>
       <div class="inner">
         <p style="color:var(--muted); font-size:0.9em">{{ t('settings.weather.backfill_description') }}</p>
+        <label style="display:block; margin-bottom:8px"><input type="checkbox" id="w-refresh" style="width:auto; display:inline-block; margin-right:6px">{{ t('settings.weather.backfill_refresh') }}</label>
+        <p style="color:var(--muted); font-size:0.85em; margin-top:0">{{ t('settings.weather.backfill_refresh_hint') }}</p>
         <div class="form-actions">
           <button type="button" id="w-preview">{{ t('settings.weather.backfill_preview') }}</button>
           <button type="button" id="w-apply" hidden>{{ t('settings.weather.backfill_apply') }}</button>
@@ -357,6 +359,7 @@ const T = {
   weatherConfirmApply: {{ t('settings.weather.confirm_apply')|tojson }},
   weatherColDate: {{ t('settings.weather.col_date')|tojson }},
   weatherColTemp: {{ t('settings.weather.col_temp')|tojson }},
+  weatherColPrevTemp: {{ t('settings.weather.col_prev_temp')|tojson }},
 
   usersRoleAdmin: {{ t('settings.users.role_admin')|tojson }},
   usersRoleUser: {{ t('settings.users.role_user')|tojson }},
@@ -853,13 +856,24 @@ function renderBackfill(result) {
     table.innerHTML = '';
     return;
   }
-  const head = `<tr><th>${T.weatherColDate}</th><th>${T.weatherColTemp}</th></tr>`;
+  // Die Spalte "bisher" erscheint nur, wenn ueberhaupt ein Vorgang der
+  // Vorschau schon einen Wert hat (Korrekturlauf) - sonst waere sie eine
+  // Spalte voller Striche.
+  const hasPrevious = result.preview.some((item) => item.previous_temp_c !== null
+    && item.previous_temp_c !== undefined);
+  const head = `<tr><th>${T.weatherColDate}</th>`
+    + (hasPrevious ? `<th>${T.weatherColPrevTemp}</th>` : '')
+    + `<th>${T.weatherColTemp}</th></tr>`;
   const rows = result.preview.map((item) => {
     // Gleiches Format wie in der Ladevorgangs-Liste (sessions.html), damit
     // man die Zeile dort wiederfindet - insbesondere ohne Sekunden.
     const when = new Date(item.start_time).toLocaleString(window.LADEMONITOR_LANG,
       { dateStyle: 'medium', timeStyle: 'short' });
-    return `<tr><td>${when}</td><td>${item.temp_c.toFixed(1)} °C</td></tr>`;
+    const previous = (item.previous_temp_c === null || item.previous_temp_c === undefined)
+      ? '–' : item.previous_temp_c.toFixed(1) + ' °C';
+    return `<tr><td>${when}</td>`
+      + (hasPrevious ? `<td>${previous}</td>` : '')
+      + `<td>${item.temp_c.toFixed(1)} °C</td></tr>`;
   }).join('');
   table.innerHTML = head + rows;
 }
@@ -878,7 +892,9 @@ async function runBackfill(dryRun) {
   const apply = document.getElementById('w-apply');
   status.textContent = T.weatherRunning;
   status.style.color = 'var(--muted)';
-  const res = await fetch('api/weather/backfill?dry_run=' + (dryRun ? 'true' : 'false'), {
+  const refresh = document.getElementById('w-refresh').checked;
+  const res = await fetch('api/weather/backfill?dry_run=' + (dryRun ? 'true' : 'false')
+    + '&refresh=' + (refresh ? 'true' : 'false'), {
     method: 'POST',
   });
   if (!res.ok) {
@@ -920,6 +936,14 @@ document.getElementById('weather-form').addEventListener('submit', async (e) => 
   document.getElementById('w-effective-url').textContent = cfg.effective_api_url;
   status.textContent = T.weatherSaved;
   status.style.color = 'var(--accent)';
+});
+
+document.getElementById('w-refresh').addEventListener('change', () => {
+  // Eine Vorschau, die ohne diese Option entstanden ist, beschreibt einen
+  // anderen Lauf - also verwerfen, statt sie mit dem neuen Haken zu uebernehmen.
+  document.getElementById('w-apply').hidden = true;
+  document.getElementById('weather-backfill-status').textContent = '';
+  document.getElementById('weather-backfill-table').innerHTML = '';
 });
 
 document.getElementById('w-preview').addEventListener('click', () => runBackfill(true));

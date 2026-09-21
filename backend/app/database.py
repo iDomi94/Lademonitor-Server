@@ -248,6 +248,14 @@ def run_light_migrations() -> None:
                 "ADD COLUMN IF NOT EXISTS outside_temp_source temperaturesource"
             )
         )
+        # Nachtrag v0.24.1: vierter Wert fuer Zeilen ohne Uhrzeit (siehe
+        # models.TemperatureSource.WEATHER_DAILY). ADD VALUE IF NOT EXISTS ist
+        # idempotent; der neue Wert darf nur nicht in DERSELBEN Transaktion
+        # schon benutzt werden - hier wird er nur angelegt, benutzt ihn also
+        # fruehestens der naechste Request.
+        conn.execute(
+            text("ALTER TYPE temperaturesource ADD VALUE IF NOT EXISTS 'WEATHER_DAILY'")
+        )
 
         # Multi-User-Umstellung: user_id auf allen vier Kern-Tabellen ergaenzen.
         # Bestehende Zeilen (aus der Zeit vor Multi-User) werden dem ERSTEN
