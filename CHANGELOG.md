@@ -31,6 +31,11 @@ folgen [Semantic Versioning](https://semver.org/).
   Archiv-Endpunkt überschreiten.
 
 ### Fixed
+- **Zeitraum ohne vollen Stundenwert**: zwei Ladevorgänge wenige Minuten
+  auseinander (07:36 → 07:41) ergeben ein Fenster, in dem kein Stundenwert
+  liegt. `_evaluate()` greift dort auf die Tagstunden des Ladetages zurück,
+  statt gar keinen Wert zu liefern und die Zeile still auf ihrem alten stehen
+  zu lassen.
 - **Spritmonitor-Importe** tragen keine Uhrzeit (der Importer setzt 00:00).
   Beim Wort genommen traf der alte Punktwert dort systematisch das
   Tagesminimum – an echten Stundendaten im Mittel 3,9 K zu kalt, in der

@@ -413,6 +413,15 @@ def _evaluate(plans, series_by_coord) -> dict[str, float]:
         if not series:
             continue
         value = _windows_mean(series, windows)
+        if value is None:
+            # Ein Zeitraum kann Tagstunden enthalten und trotzdem keine volle
+            # STUNDE treffen: zwei Ladevorgaenge wenige Minuten auseinander
+            # (07:36 -> 07:41, echter Fall aus den Daten) ergeben ein Fenster,
+            # in dem kein Stundenwert liegt. Dann die Tagstunden des Ladetages
+            # nehmen - dieselbe Ruecknahme wie ohne Vorgaenger. Die noetigen
+            # Stunden sind in jedem Fall geholt: der Ladetag steckt immer im
+            # angefragten Bereich.
+            value = _windows_mean(series, _interval_windows(query.when, None))
         if value is not None:
             result[query.session_id] = round(value, 1)
     return result

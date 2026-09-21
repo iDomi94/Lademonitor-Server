@@ -660,6 +660,22 @@ Icon/Tooltip-Logik in der SessionsList-View.
   bliebe eine von Hand korrigierte Temperatur faelschlich als "vom
   Wetterdienst" stehen. Im Local-Only-Modus setzen die Apps die Quelle selbst,
   nach derselben Regel. Android brauchte dafuer die Room-Migration 2->3.
+- **Reifen (Sommer/Winter) als eigene Dimension - noch nicht umgesetzt.** Idee:
+  Wechseldaten pflegen (normalerweise zweimal im Jahr, aber ausdruecklich MEHR
+  als zwei Eintraege moeglich - z.B. neue Sommerreifen mitten in der Saison,
+  also eher eine Liste von "ab Datum gilt Reifensatz X" als ein simples
+  Sommer/Winter-Flag). Daraus dann: Verbrauch je Reifensatz vergleichen, und
+  zwar **temperaturbereinigt** - sonst misst man nur, dass Winterreifen im
+  Winter gefahren werden. Die Trennung ist genau der Punkt: der Temperatureffekt
+  (siehe `temperature.py`) und der Reifeneffekt fallen zeitlich fast vollstaendig
+  zusammen, ein naiver Vergleich der beiden Saison-Durchschnitte schreibt den
+  gesamten Winter-Mehrverbrauch den Reifen zu. Brauchbar waere die Differenz
+  gegenueber der fuer die jeweilige Temperatur ERWARTETEN Kurve (Residuum der
+  Ausgleichsgeraden), also "dieser Satz liegt bei gleicher Temperatur um X %
+  darueber/darunter" - und das ehrlicherweise erst, wenn beide Saetze ueber
+  einen ueberlappenden Temperaturbereich gefahren wurden. Die Uebergangsmonate
+  (Wechsel meist Maerz/Oktober bei 5-15 Grad) liefern diese Ueberlappung; ohne
+  sie waere jede Aussage nur die Jahreszeit unter anderem Namen.
 - **Xcode-Beta-Umgebung des Nutzers:** macOS 27 Beta + Xcode 27 Beta
   (Erstbeta, Stand Aug 2026). Es gab einen `dyld_shared_cache_extract_dylibs`
   Bug beim Installieren auf echtem Gerät - gelöst durch Löschen von
@@ -1597,6 +1613,11 @@ Drei Sonderfaelle:
 * **Kein Vorgaenger** (erster Vorgang eines Fahrzeugs) oder **gar keine
   Tagstunde im Zeitraum** (beide Ladungen nachts am selben Tag): zurueck auf
   die Tagstunden des Ladetages. Ein grober Wert ist besser als keiner.
+  Dieselbe Ruecknahme greift in `_evaluate()`, wenn der Zeitraum zwar
+  Tagstunden enthaelt, aber keine volle STUNDE trifft - zwei Ladevorgaenge
+  wenige Minuten auseinander (07:36 -> 07:41, echter Fall aus den Daten des
+  Nutzers) haetten sonst gar keinen Wert bekommen und waeren still auf ihrem
+  alten stehengeblieben.
 * **Abstand groesser als `MAX_INTERVAL_DAYS` (60)**: gekappt. Ein groesserer
   Abstand ist keine Fahrt mehr, sondern eine Luecke (Urlaub ohne Auto,
   unvollstaendiger Import) - ueber Jahre zu mitteln ergaebe einen
