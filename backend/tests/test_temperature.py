@@ -315,3 +315,51 @@ def test_implausible_temperature_is_rejected(client):
     )
 
     assert response.status_code == 422
+
+
+# ---------- Vertrag mit den Apps ----------
+#
+# iOS und Android kennen outside_temp_c (noch) nicht und schicken beim
+# Speichern eines Ladevorgangs alle ihnen bekannten Felder. Dass der Wert
+# dabei stehen bleibt, haengt allein an `exclude_unset` in
+# routers/sessions.py::update_session - diese beiden Tests halten das fest.
+
+import pytest
+from conftest import create_vehicle, register
+
+
+def test_patch_without_the_field_keeps_the_temperature(client):
+    register(client)
+    vehicle = create_vehicle(client)
+    created = client.post("/api/sessions", json={
+        "vehicle_id": vehicle["id"], "start_time": "2026-02-01T08:00:00",
+        "outside_temp_c": -3.5, "energy_kwh": 20.0, "odometer_km": 10000,
+    }).json()
+    assert created["outside_temp_c"] == pytest.approx(-3.5)
+
+    # Exakt der Payload, den die Apps heute schicken (siehe AddEditSession):
+    # alle bekannten Felder, outside_temp_c ist nicht dabei.
+    patched = client.patch(f"/api/sessions/{created['id']}", json={
+        "provider_id": None, "location_id": None,
+        "start_time": "2026-02-01T09:00:00",
+        "charging_type": "AC", "soc_start": 30, "soc_end": 80,
+        "energy_kwh": 21.0, "odometer_km": 10100,
+        "price_total": 6.0, "price_per_kwh": 0.28,
+        "latitude": None, "longitude": None, "notes": "von der App",
+    })
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["outside_temp_c"] == pytest.approx(-3.5), "App-Speichern hat den Wert geloescht!"
+
+
+def test_explicit_null_does_clear_it(client):
+    """Gegenprobe: wer das Feld AUSDRUECKLICH auf null setzt, loescht es auch -
+    sonst waere der Wert von Hand nicht mehr zu entfernen."""
+    register(client)
+    vehicle = create_vehicle(client)
+    created = client.post("/api/sessions", json={
+        "vehicle_id": vehicle["id"], "start_time": "2026-02-01T08:00:00", "outside_temp_c": 5.0,
+    }).json()
+
+    patched = client.patch(f"/api/sessions/{created['id']}", json={"outside_temp_c": None})
+
+    assert patched.json()["outside_temp_c"] is None

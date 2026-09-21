@@ -632,10 +632,15 @@ Icon/Tooltip-Logik in der SessionsList-View.
   keiner. **Offen ausserdem:** ob die MyŠkoda Public API die Temperatur
   ueberhaupt liefert, ist an einer echten Antwort nicht nachgewiesen (die
   Auswertung klopft mehrere plausible Stellen ab) - beim naechsten Poll ins
-  Debug-Protokoll sehen. Und die beiden Apps kennen das Feld noch nicht: im
-  Server-Modus bleibt es unberuehrt (`SessionUpdate` arbeitet mit
-  `exclude_unset`, ein App-Speichern loescht den Wert also nicht), im
-  Local-Only-Modus gibt es ihn schlicht nicht.
+  Debug-Protokoll sehen. **Erledigt seit 2026-09-21:** beide Apps kennen das
+  Feld inzwischen (erfassen, anzeigen, synchronisieren - auch im
+  Local-Only-Modus; Android brauchte dafuer die Room-Migration 1->2). Dass ein
+  App-Speichern OHNE das Feld den Wert nicht loescht, haengt allein an
+  `exclude_unset` in `update_session()` und ist in
+  `tests/test_temperature.py` festgehalten. **Weiterhin offen:** die
+  Auswertung selbst (Streudiagramm, Trend) gibt es nur im Web-Dashboard - sie
+  in den Apps anzubieten hiesse, `temperature.py` ein drittes Mal nachzubauen,
+  wie schon bei `LocalConsumptionCalculator`.
 - **Xcode-Beta-Umgebung des Nutzers:** macOS 27 Beta + Xcode 27 Beta
   (Erstbeta, Stand Aug 2026). Es gab einen `dyld_shared_cache_extract_dylibs`
   Bug beim Installieren auf echtem Gerät - gelöst durch Löschen von
