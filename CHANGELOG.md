@@ -9,17 +9,26 @@ folgen [Semantic Versioning](https://semver.org/).
 ## [0.24.1] — 2026-09-21
 
 ### Changed
-- **Der Wetterdienst liefert jetzt das Tagesmittel** (6–20 Uhr Lokalzeit,
-  `weather.DAILY_WINDOW_START_HOUR`) statt des Werts zum Ladebeginn – für
-  JEDEN geholten Wert, nicht nur für Sonderfälle. Der Verbrauch eines
-  Ladevorgangs stammt von der Fahrt davor, und zwischen zwei Ladevorgängen
-  liegen leicht zwei Wochen und zwanzig Fahrten; ein Punktwert ist dafür nur
-  eine Tendenz. Werte aus dem Fahrzeug (HA-Push, MyŠkoda-Poller) bleiben
-  unberührt – ein Fahrzeugsensor kann nicht mitteln.
-- **`TemperatureSource.weather_daily`** ist damit der Normalfall für alles,
-  was der Wetterdienst schreibt; `weather` steht nur noch für Bestandszeilen
-  aus der Zeit davor. Ohne die Unterscheidung lägen zwei verschiedene
-  Messgrößen unbemerkt in derselben Spalte.
+- **Der Wetterdienst mittelt jetzt über das ganze Fahrt-Intervall** statt über
+  einen Zeitpunkt: für jeden Tag zwischen dem vorherigen Ladevorgang und
+  diesem die Tagstunden 6–20 Uhr Lokalzeit, an den Rändern auf den
+  tatsächlichen Zeitraum beschnitten (`weather._interval_windows()`). Zwei
+  Ladungen am selben Tag mitteln nur die Stunden dazwischen; ein Abstand über
+  `MAX_INTERVAL_DAYS` (60) wird gekappt. Der Verbrauch eines Vorgangs stammt
+  aus der Strecke seit dem vorherigen — die Temperatur beschreibt damit
+  denselben Abschnitt.
+- **`temperature.py` nimmt solche Werte unverändert**, statt sie wie bisher
+  mit `temp(N-1)` zu mitteln: sie decken die Fahrt bereits ab, eine zweite
+  Mittelung würde die Nachbarfahrt hineinmischen. Für Fahrzeugwerte bleibt es
+  bei der Paarung beider Intervallenden.
+- Werte aus dem Fahrzeug (HA-Push, MyŠkoda-Poller) sind unberührt — ein Sensor
+  misst zwangsläufig punktuell. **`TemperatureSource.weather_daily`** ist
+  deshalb der Normalfall für alles, was der Wetterdienst schreibt; `weather`
+  steht nur noch für Bestandszeilen aus der Zeit davor.
+- Die Stundenwerte einer Koordinate werden über alle Anfragen hinweg zu EINER
+  Reihe zusammengelegt und erst danach ausgewertet: ein Intervall kann länger
+  sein als ein Abfragebereich und die Grenze zwischen Vorhersage- und
+  Archiv-Endpunkt überschreiten.
 
 ### Fixed
 - **Spritmonitor-Importe** tragen keine Uhrzeit (der Importer setzt 00:00).

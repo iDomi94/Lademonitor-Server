@@ -9,7 +9,7 @@ schreibt.
 """
 
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import httpx
 import pytest
@@ -771,3 +771,179 @@ def test_autofill_never_touches_a_vehicle_value(client, db_session, monkeypatch)
     db_session.refresh(row)
     assert row.outside_temp_c == pytest.approx(3.0)
     assert row.outside_temp_source == models.TemperatureSource.VEHICLE
+
+
+# ---------------------------------------------------------------------------
+# Gemittelt wird ueber das ganze Intervall seit dem vorherigen Ladevorgang
+# ---------------------------------------------------------------------------
+
+
+def _daily_constants(start: datetime, days: int) -> dict:
+    """Stundenreihe, in der jeder Tag seine eigene konstante Temperatur hat.
+
+    Tag 0 ist 0 Grad, Tag 1 ist 1 Grad und so weiter - damit laesst sich am
+    Ergebnis ablesen, WELCHE Tage in den Mittelwert eingegangen sind.
+    """
+    return _series(start, [float(i // 24) for i in range(days * 24)])
+
+
+def test_the_mean_covers_every_day_since_the_previous_session(monkeypatch):
+    """10.07. 18:00 -> 20.07. 09:00: der Rest des 10., die vollen Tagstunden
+    vom 11. bis 19. und der Anfang des 20. - nicht nur der Ladetag."""
+    monkeypatch.setenv("TZ", "UTC")
+    time.tzset()
+    try:
+        client, _ = make_client(_daily_constants(datetime(2026, 7, 10, 0, 0), 12))
+        query = weather.TempQuery(
+            "s1",
+            datetime(2026, 7, 20, 9, 0),
+            48.80,
+            9.01,
+            previous=datetime(2026, 7, 10, 18, 0),
+        )
+
+        result = weather.fetch_temperatures(
+            [query], client=client, today=datetime(2026, 7, 25).date()
+        )
+
+        # Tag 10.07. (=0 Grad) liefert 18-20 Uhr -> 3 Stunden, die Tage 11.-19.
+        # (=1..9 Grad) je 15 Stunden, der 20.07. (=10 Grad) 6-9 Uhr -> 4.
+        expected = (3 * 0 + 15 * sum(range(1, 10)) + 4 * 10) / (3 + 15 * 9 + 4)
+        assert result["s1"] == pytest.approx(round(expected, 1))
+        # Gegenprobe: nur der Ladetag waere 10.0 gewesen.
+        assert result["s1"] != pytest.approx(10.0)
+    finally:
+        monkeypatch.delenv("TZ", raising=False)
+        time.tzset()
+
+
+def test_two_sessions_on_the_same_day_only_average_the_hours_between_them(monkeypatch):
+    """Zwischen 08:00 und 12:00 liegt auch nur diese eine Fahrt - den ganzen
+    Tag zu mitteln waere hier schlechter, nicht besser."""
+    monkeypatch.setenv("TZ", "UTC")
+    time.tzset()
+    try:
+        # Temperatur = Stunde des Tages, damit der Ausschnitt ablesbar ist.
+        client, _ = make_client(
+            _series(datetime(2026, 1, 15, 0, 0), [float(i % 24) for i in range(48)])
+        )
+        query = weather.TempQuery(
+            "s1",
+            datetime(2026, 1, 15, 12, 0),
+            48.80,
+            9.01,
+            previous=datetime(2026, 1, 15, 8, 0),
+        )
+
+        result = weather.fetch_temperatures(
+            [query], client=client, today=datetime(2026, 1, 20).date()
+        )
+
+        # Stunden 8..12 -> Mittel 10.0; die vollen Tagstunden waeren 13.0.
+        assert result["s1"] == pytest.approx(10.0)
+    finally:
+        monkeypatch.delenv("TZ", raising=False)
+        time.tzset()
+
+
+def test_a_very_long_gap_is_capped(monkeypatch):
+    """Ein Abstand von Monaten ist keine Fahrt mehr, sondern eine Luecke -
+    daraus einen Jahresdurchschnitt zu bilden sagt ueber nichts mehr etwas."""
+    monkeypatch.setenv("TZ", "UTC")
+    time.tzset()
+    try:
+        client, transport = make_client(
+            _daily_constants(datetime(2025, 1, 1, 0, 0), 400)
+        )
+        when = datetime(2026, 1, 15, 12, 0)
+        query = weather.TempQuery(
+            "s1", when, 48.80, 9.01, previous=datetime(2025, 3, 1, 12, 0)
+        )
+
+        weather.fetch_temperatures(
+            [query], client=client, today=datetime(2026, 1, 20).date()
+        )
+
+        requested_start = date.fromisoformat(
+            transport.requests[0].url.params["start_date"]
+        )
+        earliest = (when - timedelta(days=weather.MAX_INTERVAL_DAYS)).date()
+        assert requested_start >= earliest
+    finally:
+        monkeypatch.delenv("TZ", raising=False)
+        time.tzset()
+
+
+def test_an_interval_spanning_both_endpoints_still_yields_one_value(monkeypatch):
+    """Ein Intervall kann die Grenze zwischen Vorhersage und Archiv
+    ueberschreiten. Die Stundenwerte beider Anfragen gehoeren dann in
+    denselben Mittelwert - deshalb werden sie je Koordinate zusammengelegt und
+    erst danach ausgewertet."""
+    monkeypatch.setenv("TZ", "UTC")
+    time.tzset()
+    try:
+        today = date(2026, 5, 20)
+        client, transport = make_client(
+            _daily_constants(datetime(2026, 4, 1, 0, 0), 60)
+        )
+        query = weather.TempQuery(
+            "s1",
+            datetime(2026, 4, 25, 12, 0),
+            48.80,
+            9.01,
+            previous=datetime(2026, 4, 10, 12, 0),
+        )
+
+        result = weather.fetch_temperatures([query], client=client, today=today)
+
+        assert len(transport.requests) == 2, "je Endpunkt eine Anfrage"
+        paths = {r.url.path for r in transport.requests}
+        assert paths == {weather.FORECAST_PATH, weather.ARCHIVE_PATH}
+        assert "s1" in result
+    finally:
+        monkeypatch.delenv("TZ", raising=False)
+        time.tzset()
+
+
+def test_the_backfill_uses_the_previous_session_of_the_same_vehicle(
+    client, db_session, monkeypatch
+):
+    """End-to-End: der Vorgaenger kommt aus der Datenbank, nicht aus dem
+    Aufrufer - und es ist der desselben Fahrzeugs."""
+    monkeypatch.setenv("TZ", "UTC")
+    time.tzset()
+    try:
+        register(client)
+        vehicle = create_vehicle(client)
+        user = db_session.query(models.User).first()
+        first = _session_row(
+            db_session,
+            user.id,
+            vehicle["id"],
+            start_time=datetime(2026, 7, 10, 12, 0),
+            latitude=48.80,
+            longitude=9.01,
+        )
+        second = _session_row(
+            db_session,
+            user.id,
+            vehicle["id"],
+            start_time=datetime(2026, 7, 13, 12, 0),
+            latitude=48.80,
+            longitude=9.01,
+        )
+        http, _ = make_client(_daily_constants(datetime(2026, 7, 10, 0, 0), 6))
+
+        weather.backfill_sessions(db_session, user, dry_run=False, client=http)
+
+        db_session.refresh(first)
+        db_session.refresh(second)
+        # Der erste Vorgang hat keinen Vorgaenger -> nur sein Ladetag (0 Grad).
+        assert first.outside_temp_c == pytest.approx(0.0)
+        # Der zweite mittelt ueber 10.07. 12-20 Uhr (0), 11. und 12. je 6-20
+        # Uhr (1 bzw. 2) und 13.07. 6-12 Uhr (3).
+        expected = (9 * 0 + 15 * 1 + 15 * 2 + 7 * 3) / (9 + 15 + 15 + 7)
+        assert second.outside_temp_c == pytest.approx(round(expected, 1))
+    finally:
+        monkeypatch.delenv("TZ", raising=False)
+        time.tzset()

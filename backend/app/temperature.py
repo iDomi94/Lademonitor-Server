@@ -17,6 +17,12 @@ Deshalb wird gepaart: Temperatur der Fahrt = Mittel aus `temp(N-1)` und
 nur einen der beiden Endpunkte zu nehmen und bleibt trotzdem erklaerbar - eine
 echte Fahrtaufzeichnung mit Temperaturverlauf hat diese App nicht.
 
+**Ausnahme: Werte vom Wetterdienst** (`outside_temp_source == weather_daily`,
+seit v0.24.1) sind bereits das Mittel der Tagstunden ueber genau diesen
+Fahrt-Zeitraum - `weather.py` holt dafuer jeden Tag zwischen N-1 und N. Sie
+werden deshalb unveraendert genommen; sie nochmal mit dem Wert davor zu mitteln
+wuerde die Nachbarfahrt hineinmischen und die bessere Angabe verwaessern.
+
 **2. Gewichtet wird mit Kilometern, nicht pro Vorgang.**
 Wie beim Monatsdurchschnitt in `routers/stats.py`: ein 5-km-Vorgang und eine
 400-km-Fahrt sind nicht gleich viel wert. Ohne Gewichtung zieht eine einzelne
@@ -36,6 +42,17 @@ from datetime import datetime
 
 from . import models
 from .consumption import compute_vehicle_consumptions
+
+
+def _covers_the_whole_drive(session: models.ChargingSession) -> bool:
+    """Beschreibt die hinterlegte Temperatur schon die ganze Fahrt?
+
+    Nur Werte vom Wetterdienst koennen das: sie sind das Mittel der Tagstunden
+    ueber den Zeitraum seit dem vorherigen Ladevorgang. Ein Fahrzeugsensor
+    misst beim Einstecken, also punktuell am Ende der Fahrt - fuer ihn bleibt
+    es bei der Paarung mit dem Wert davor.
+    """
+    return session.outside_temp_source == models.TemperatureSource.WEATHER_DAILY
 
 # Breite einer Temperaturklasse in Grad. 5 ist ein Kompromiss: schmaler wird
 # jede Klasse zu duenn besetzt, breiter verwischt der Effekt, um den es geht
@@ -153,7 +170,13 @@ def collect_points(
 
             own = session.outside_temp_c
             before = previous_session.outside_temp_c if previous_session else None
-            if own is not None and before is not None:
+            if own is not None and _covers_the_whole_drive(session):
+                # Ein Wert vom Wetterdienst ist seit v0.24.1 bereits das Mittel
+                # ueber genau diesen Fahrt-Zeitraum (weather.py). Ihn nochmal
+                # mit dem Wert davor zu mitteln wuerde die Nachbarfahrt
+                # hineinmischen und die bessere Angabe wieder verwaessern.
+                temp = own
+            elif own is not None and before is not None:
                 temp = (own + before) / 2
             elif own is not None:
                 temp = own
