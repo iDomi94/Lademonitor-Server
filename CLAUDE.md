@@ -651,11 +651,15 @@ Icon/Tooltip-Logik in der SessionsList-View.
   bekommen** - siehe Abschnitt "Aussentemperatur vom Wetterdienst". Damit ist der
   Satz weiter oben ("fuer alte Vorgaenge laesst sich der Wert nicht nachtraeglich
   ermitteln") ueberholt, allerdings nur fuer Vorgaenge MIT Koordinaten: ein
-  Spritmonitor-Import ohne Ladeort bleibt ohne Wert. **Offen dabei:** beide Apps
-  zeigen die Herkunft (`outside_temp_source`) noch nicht an - sie brauchen sie
-  auch nicht, um korrekt zu bleiben (der Server leitet MANUAL nur aus einer
-  echten Wertaenderung ab), aber eine Kennzeichnung "vom Wetterdienst" waere in
-  der Detailansicht ehrlicher.
+  Spritmonitor-Import ohne Ladeort bleibt ohne Wert. **Erledigt am selben Tag:** beide Apps
+  zeigen die Herkunft (`outside_temp_source`) inzwischen in der Detailansicht an
+  (iOS als zweite Zeile unter dem Wert, Android als Zusatz dahinter wie das
+  "(geschaetzt)" bei den kWh). Das Feld ist in beiden Apps **nur lesend** - es
+  fehlt bewusst im Payload, weil der Server MANUAL aus einer echten
+  Wertaenderung ableitet: schickte eine App den alten Wert einfach zurueck,
+  bliebe eine von Hand korrigierte Temperatur faelschlich als "vom
+  Wetterdienst" stehen. Im Local-Only-Modus setzen die Apps die Quelle selbst,
+  nach derselben Regel. Android brauchte dafuer die Room-Migration 2->3.
 - **Xcode-Beta-Umgebung des Nutzers:** macOS 27 Beta + Xcode 27 Beta
   (Erstbeta, Stand Aug 2026). Es gab einen `dyld_shared_cache_extract_dylibs`
   Bug beim Installieren auf echtem Gerät - gelöst durch Löschen von
