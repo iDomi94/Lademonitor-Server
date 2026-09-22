@@ -48,8 +48,8 @@ Beta über TestFlight: [testflight.apple.com/join/NMbyFTEK](https://testflight.a
   0 °C braucht als bei 20 °C, dazu ein Vergleich der Jahreszeiten. Die
   Temperatur liefert Home Assistant (ab Lademonitor-HA 0.5.0) oder man trägt
   sie von Hand ein.
-- **Reifen** (seit 0.26.0): Reifenwechsel mit Art, Datum, Größe, Marke und
-  Modell eintragen – ab dem Datum gilt der Satz, bis der nächste Eintrag folgt.
+- **Reifen** (seit 0.26.0): Reifenwechsel mit Art, Datum, Kilometerstand, Größe,
+  Marke und Modell eintragen – ab dem Datum gilt der Satz, bis der nächste Eintrag folgt.
   Daraus eine Übersicht (wie lange ein Satz aufgezogen war, Kilometer, Fahrten,
   Alter seit der ersten Montage; Wiedermontagen desselben Satzes in einer Zeile)
   und der Vergleich, welcher Satz mehr braucht – **temperaturbereinigt**, denn

@@ -43,8 +43,8 @@ via TestFlight: [testflight.apple.com/join/NMbyFTEK](https://testflight.apple.co
   line – headlined by how much more the car uses at 0 °C than at 20 °C, plus a
   comparison of the seasons. The temperature comes from Home Assistant (from
   Lademonitor-HA 0.5.0) or you enter it by hand.
-- **Tires** (since 0.26.0): record tire changes with type, date, size, brand and
-  model – from that date the set applies until the next entry. From this comes
+- **Tires** (since 0.26.0): record tire changes with type, date, odometer reading, size,
+  brand and model – from that date the set applies until the next entry. From this comes
   an overview (how long a set was fitted, kilometres, drives, age since its
   first mounting; re-mountings of the same set on one row) and the comparison of
   which set uses more – **adjusted for temperature**, because a raw comparison
