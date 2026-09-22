@@ -114,6 +114,7 @@ def tire_overview(
                 days=m.days,
                 drives=m.drives,
                 km=m.km,
+                km_source=m.km_source,
                 energy_kwh=m.energy_kwh,
                 avg_consumption_kwh_per_100km=m.avg_consumption,
             )
@@ -130,6 +131,7 @@ def tire_overview(
                 days_mounted=s.days_mounted,
                 drives=s.drives,
                 km=s.km,
+                km_source=s.km_source,
                 energy_kwh=s.energy_kwh,
                 is_current=s.is_current,
                 avg_consumption_kwh_per_100km=s.avg_consumption,

@@ -226,6 +226,9 @@ class TireSetBase(BaseModel):
     # rechnet in naiven datetimes (siehe ChargingSession.start_time) - ein
     # zweiter Typ waere nur eine weitere Umrechnungsstelle.
     installed_on: datetime
+    # Kilometerstand beim Wechsel - macht die Laufleistung eines Satzes exakt
+    # statt sie aus den Fahrten zusammenzuzaehlen (siehe tires.py).
+    odometer_km: float | None = None
     size: str | None = None
     brand: str | None = None
     model: str | None = None
@@ -239,6 +242,7 @@ class TireSetCreate(TireSetBase):
 class TireSetUpdate(BaseModel):
     kind: TireKind | None = None
     installed_on: datetime | None = None
+    odometer_km: float | None = None
     size: str | None = None
     brand: str | None = None
     model: str | None = None
@@ -264,6 +268,11 @@ class TireMountingOut(BaseModel):
     days: int
     drives: int
     km: float
+    # "odometer" (Differenz der Kilometerstaende beider Wechsel) oder "drives"
+    # (Summe der zugeordneten Fahrten). Der erste Weg ist exakt, der zweite
+    # laesst die Fahrt ueber den Wechsel hinweg aussen vor - die Anzeige soll
+    # das unterscheiden koennen.
+    km_source: str
     energy_kwh: float
     avg_consumption_kwh_per_100km: float | None = None
 
@@ -282,6 +291,7 @@ class TireSetSummaryOut(BaseModel):
     days_mounted: int
     drives: int
     km: float
+    km_source: str
     energy_kwh: float
     is_current: bool
     avg_consumption_kwh_per_100km: float | None = None

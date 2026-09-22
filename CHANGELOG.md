@@ -19,6 +19,12 @@ folgen [Semantic Versioning](https://semver.org/).
   (der misst die Jahreszeit), sondern die km-gewichtete relative Abweichung von
   der Verbrauchskurve über der Außentemperatur, zurückgerechnet auf eine
   gemeinsame Referenztemperatur.
+- **`TireSet.odometer_km`**: Kilometerstand beim Wechsel, optional. Ist er an
+  beiden Enden einer Montage bekannt, ist die Laufleistung die Differenz —
+  exakt, und inklusive der Fahrt über den Wechsel hinweg; sonst bleibt es bei
+  der Summe der zugeordneten Fahrten. `km_source` (`odometer`/`drives`) sagt,
+  welcher Weg genommen wurde. Ein fehlender oder rückwärts laufender Stand
+  fällt sicher auf die Fahrten zurück.
 - **`GET /api/tires/overview`**: Laufleistung, Dauer und Fahrten je Montage
   und je Satz (Wiedermontagen zusammengefasst), plus Alter seit der ersten
   Montage. Gezählt werden nur Fahrten, die ganz auf einer Montage lagen —

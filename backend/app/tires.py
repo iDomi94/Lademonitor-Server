@@ -235,6 +235,10 @@ class MountingStat:
     days: int
     drives: int
     km: float
+    # Woher die Kilometer stammen: "odometer" = Differenz der beiden
+    # Kilometerstaende (exakt, enthaelt auch die Fahrt ueber den Wechsel),
+    # "drives" = Summe der zugeordneten Fahrten (laesst genau die aussen vor).
+    km_source: str
     energy_kwh: float
     avg_consumption: float | None = None
 
@@ -259,6 +263,10 @@ class SetStat:
     days_mounted: int
     drives: int
     km: float
+    # "odometer" nur, wenn JEDE Montage dieses Satzes ihre Kilometer aus
+    # Kilometerstaenden hat - sonst "drives", weil die Summe dann mindestens
+    # teilweise die ungenauere Quelle enthaelt.
+    km_source: str
     energy_kwh: float
     is_current: bool
     avg_consumption: float | None = None
@@ -327,19 +335,41 @@ def overview(
 
     # Das Ende einer Montage ist der naechste Wechsel an DIESEM Fahrzeug.
     next_change: dict[str, datetime | None] = {}
+    next_odometer: dict[str, float | None] = {}
     sets_by_vehicle: dict[str, list[models.TireSet]] = {}
     for tire_set in sorted(tire_sets, key=lambda t: t.installed_on):
         sets_by_vehicle.setdefault(tire_set.vehicle_id, []).append(tire_set)
-    for mounted in sets_by_vehicle.values():
+    # Fuer den noch montierten Satz ist das Ende "jetzt" - der beste bekannte
+    # Kilometerstand ist dann der des letzten Ladevorgangs.
+    last_odometer: dict[str, float] = {}
+    for vehicle_id, vehicle_sessions in by_vehicle.items():
+        known = [s.odometer_km for s in vehicle_sessions if s.odometer_km is not None]
+        if known:
+            last_odometer[vehicle_id] = max(known)
+    for vehicle_id, mounted in sets_by_vehicle.items():
         for current, following in zip(mounted, mounted[1:]):
             next_change[current.id] = following.installed_on
+            next_odometer[current.id] = following.odometer_km
         next_change[mounted[-1].id] = None
+        next_odometer[mounted[-1].id] = last_odometer.get(vehicle_id)
 
     result = TireOverview(drives_spanning_change=spanning)
     for tire_set in sorted(tire_sets, key=lambda t: t.installed_on, reverse=True):
         removed_on = next_change.get(tire_set.id)
         end = removed_on or now
         pairs = consumption_pairs.get(tire_set.id) or []
+        # Kilometerstaende zuerst: ihre Differenz enthaelt auch die Fahrt, die
+        # ueber den Wechsel hinweg lief und deshalb keinem Satz zugeordnet
+        # werden kann. Nur wenn sie fehlen (oder nicht aufsteigend sind, z.B.
+        # ein Tippfehler), wird ueber die Fahrten gezaehlt.
+        distance = km.get(tire_set.id, 0.0)
+        km_source = "drives"
+        end_odometer = next_odometer.get(tire_set.id)
+        if tire_set.odometer_km is not None and end_odometer is not None:
+            measured = end_odometer - tire_set.odometer_km
+            if measured >= 0:
+                distance = measured
+                km_source = "odometer"
         result.mountings.append(
             MountingStat(
                 tire_set_id=tire_set.id,
@@ -351,7 +381,8 @@ def overview(
                 is_current=removed_on is None,
                 days=max((end - tire_set.installed_on).days, 0),
                 drives=drives.get(tire_set.id, 0),
-                km=round(km.get(tire_set.id, 0.0), 1),
+                km=round(distance, 1),
+                km_source=km_source,
                 energy_kwh=round(energy.get(tire_set.id, 0.0), 2),
                 avg_consumption=round(_weighted(pairs), 1) if pairs else None,
             )
@@ -384,6 +415,11 @@ def overview(
                 days_mounted=sum(m.days for m in group),
                 drives=sum(m.drives for m in group),
                 km=round(sum(m.km for m in group), 1),
+                km_source=(
+                    "odometer"
+                    if all(m.km_source == "odometer" for m in group)
+                    else "drives"
+                ),
                 energy_kwh=round(sum(m.energy_kwh for m in group), 2),
                 is_current=any(m.is_current for m in group),
                 avg_consumption=round(_weighted(pairs), 1) if pairs else None,

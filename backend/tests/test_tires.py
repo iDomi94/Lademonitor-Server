@@ -21,12 +21,13 @@ BASE = datetime(2026, 1, 1, 8, 0, 0)
 
 
 def tire_set(idx, kind, day, *, brand="Michelin", model="Pilot", size="235/45 R21",
-             vehicle_id="v1"):
+             vehicle_id="v1", odo=None):
     return models.TireSet(
         id=f"t{idx}",
         vehicle_id=vehicle_id,
         kind=kind,
         installed_on=BASE + timedelta(days=day),
+        odometer_km=odo,
         brand=brand,
         model=model,
         size=size,
@@ -270,6 +271,67 @@ def test_overview_adds_up_the_mountings_of_one_set():
     )
 
 
+def test_kilometres_come_from_the_odometer_when_both_changes_have_one():
+    """Der Kilometerstand beim Wechsel ist die genauere Quelle: seine Differenz
+    enthaelt auch die Fahrt ueber den Wechsel hinweg, die keinem Satz
+    zugeordnet werden kann."""
+    sets = [
+        tire_set(1, models.TireKind.WINTER, 0, odo=10_000, brand="Nokian", model="Snowproof"),
+        tire_set(2, models.TireKind.SUMMER, 100, odo=12_500, brand="Michelin", model="Sport EV"),
+    ]
+    sessions = [
+        driven(0, 2, 10_100),
+        driven(1, 30, 11_000),
+        driven(2, 60, 12_000),
+        driven(3, 120, 13_000),
+        driven(4, 150, 14_500),
+    ]
+
+    result = tires.overview(sessions, sets, now=BASE + timedelta(days=200))
+
+    winter = next(m for m in result.mountings if m.kind == "winter")
+    summer = next(m for m in result.mountings if m.kind == "summer")
+    assert winter.km == 2500.0 and winter.km_source == "odometer"
+    # Ueber die Fahrten waeren es nur 1000 km gewesen (Tag 30 und Tag 60) -
+    # der Rest steckt im Anfahren des ersten Vorgangs und in der Fahrt ueber
+    # den Wechsel.
+    assert winter.drives == 2
+    # Der noch montierte Satz rechnet gegen den letzten bekannten Stand.
+    assert summer.km == 2000.0 and summer.km_source == "odometer"
+
+
+def test_a_missing_or_wrong_odometer_falls_back_to_the_drives():
+    """Ein fehlender Stand am zweiten Wechsel - oder ein Zahlendreher, der
+    rueckwaerts laeuft - darf keine negative Laufleistung ergeben."""
+    sets = [
+        tire_set(1, models.TireKind.WINTER, 0, odo=10_000, brand="Nokian", model="Snowproof"),
+        tire_set(2, models.TireKind.SUMMER, 100, odo=1_000, brand="Michelin", model="Sport EV"),
+    ]
+    sessions = [driven(0, 2, 10_100), driven(1, 30, 11_000), driven(2, 60, 12_000)]
+
+    result = tires.overview(sessions, sets, now=BASE + timedelta(days=200))
+
+    winter = next(m for m in result.mountings if m.kind == "winter")
+    assert winter.km_source == "drives"
+    assert winter.km == 1900.0  # die beiden Fahrten, mehr weiss die App nicht
+
+
+def test_a_set_is_only_exact_when_all_its_mountings_are():
+    sets = [
+        tire_set(1, models.TireKind.WINTER, 0, odo=10_000, brand="Nokian", model="Snowproof"),
+        tire_set(2, models.TireKind.SUMMER, 100, brand="Michelin", model="Sport EV"),
+        tire_set(3, models.TireKind.WINTER, 200, brand="Nokian", model="Snowproof"),
+    ]
+    sessions = [driven(i, day, 10_000 + i * 1000) for i, day in enumerate([2, 30, 130, 230, 260])]
+
+    result = tires.overview(sessions, sets, now=BASE + timedelta(days=300))
+
+    winter = next(s for s in result.sets if s.kind == "winter")
+    # Die erste Montage hat einen Stand, die zweite nicht - die Summe ist
+    # damit nicht durchgaengig gemessen.
+    assert winter.km_source == "drives"
+
+
 def test_overview_is_empty_without_tire_sets():
     result = tires.overview([driven(0, 2, 10_000), driven(1, 20, 10_500)], [])
 
@@ -285,10 +347,12 @@ def test_overview_over_the_api(client):
             "vehicle_id": vehicle["id"],
             "kind": "winter",
             "installed_on": "2026-01-15T00:00:00",
+            "odometer_km": 41000,
             "brand": "Nokian",
         },
     )
     assert created.status_code == 201
+    assert created.json()["odometer_km"] == 41000
 
     body = client.get("/api/tires/overview").json()
 

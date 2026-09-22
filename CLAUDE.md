@@ -1860,6 +1860,19 @@ eine Entitaet, die kein Client spiegelt, waere totes Gewicht. Dafuer raeumt
 Fremdschluessel an Nutzer UND Fahrzeug, eine verbliebene Zeile liesse das
 Loeschen des Kontos an Postgres scheitern (derselbe Fehlertyp wie 2026-09-09).
 
+**Der Kilometerstand beim Wechsel ist die bessere Quelle fuer die
+Laufleistung** (`TireSet.odometer_km`, optional). Ueber die Fahrten gezaehlt
+fehlt zwangslaeufig genau die Strecke, die ueber den Wechsel hinweg lief - und
+das ist die einzige, die der Zuordnung entgeht. Die Differenz der
+Kilometerstaende enthaelt sie. Deshalb: sind beide Enden einer Montage bekannt
+(der eigene Stand und der des naechsten Wechsels, beim noch montierten Satz der
+hoechste bekannte Stand der Ladevorgaenge), ist die Laufleistung die Differenz,
+sonst die Summe der Fahrten. `km_source` haelt fest, welcher Weg es war - die
+Web-UI markiert die ungenaue Variante mit einem Sternchen statt beide Zahlen
+gleich aussehen zu lassen. Ein fehlender oder rueckwaerts laufender Stand
+(Zahlendreher) faellt still auf die Fahrten zurueck; eine negative Laufleistung
+darf nicht entstehen.
+
 **Zwei Endpunkte, zwei Fragen.** `/api/tires/overview` beantwortet "wie alt
 ist der Satz und wieviel liegt drauf" (Montagen, Zeitraum, Tage, Fahrten, km,
 kWh - je Montage UND je Satz ueber alle Wiedermontagen hinweg), der Vergleich

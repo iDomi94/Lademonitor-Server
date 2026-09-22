@@ -85,6 +85,11 @@
             <input type="date" id="tire-installed" required>
           </div>
           <div>
+            <label>{{ t('tires.form.odometer') }}</label>
+            <input type="number" step="1" min="0" id="tire-odometer"
+                   placeholder="{{ t('tires.form.odometer_placeholder') }}">
+          </div>
+          <div>
             <label>{{ t('tires.form.size') }}</label>
             <input type="text" id="tire-size" placeholder="{{ t('tires.form.size_placeholder') }}">
           </div>
@@ -141,6 +146,7 @@ const T = {
   overlapMissing: {{ t('tires.overlap_missing')|tojson }},
   excluded: {{ t('tires.excluded')|tojson }},
   colStatus: {{ t('tires.col.status')|tojson }},
+  kmEstimated: {{ t('tires.km_estimated')|tojson }},
   colMountings: {{ t('tires.col.mountings')|tojson }},
   colAge: {{ t('tires.col.age')|tojson }},
   colDaysMounted: {{ t('tires.col.days_mounted')|tojson }},
@@ -213,7 +219,7 @@ async function loadTireSets() {
       `<td>${label}<div style="color:var(--muted); font-size:0.85em">${vehicleName(set.vehicle_id)}</div></td>` +
       `<td>${stats ? duration(stats.days) : '–'}</td>` +
       `<td>${stats ? stats.drives : '–'}</td>` +
-      `<td>${stats ? fmt(stats.km, 0) : '–'}</td>` +
+      `<td>${stats ? kmCell(stats.km, stats.km_source) : '–'}</td>` +
       `<td>${set.notes || ''}</td>` +
       `<td>${editDeleteButtons(`startEditTire('${set.id}')`, `deleteTire('${set.id}')`, T.edit, T.del)}</td></tr>`;
   }).join('');
@@ -288,6 +294,10 @@ async function loadComparison() {
       : '';
 }
 
+const kmCell = (value, source) => source === 'odometer'
+  ? fmt(value, 0)
+  : `<span title="${T.kmEstimated}">${fmt(value, 0)} *</span>`;
+
 async function loadOverview() {
   const filter = currentFilter();
   const res = await fetch('api/tires/overview' + (filter ? `?vehicle_id=${filter}` : ''));
@@ -314,7 +324,7 @@ async function loadOverview() {
       `<td>${duration(set.age_days)}<div style="color:var(--muted); font-size:0.85em">` +
       `${shortDate(set.first_installed_on)}</div></td>` +
       `<td>${duration(set.days_mounted)}</td><td>${set.drives}</td>` +
-      `<td>${fmt(set.km, 0)}</td><td>${fmt(set.energy_kwh, 1)} kWh</td>` +
+      `<td>${kmCell(set.km, set.km_source)}</td><td>${fmt(set.energy_kwh, 1)} kWh</td>` +
       `<td>${fmt(set.avg_consumption_kwh_per_100km, 1)}</td></tr>`;
   }).join('');
 }
@@ -334,6 +344,7 @@ function startEditTire(id) {
   document.getElementById('tire-vehicle').value = set.vehicle_id;
   document.getElementById('tire-kind').value = set.kind;
   document.getElementById('tire-installed').value = set.installed_on.slice(0, 10);
+  document.getElementById('tire-odometer').value = set.odometer_km ?? '';
   document.getElementById('tire-size').value = set.size || '';
   document.getElementById('tire-brand').value = set.brand || '';
   document.getElementById('tire-model').value = set.model || '';
@@ -364,6 +375,9 @@ document.getElementById('tire-form').addEventListener('submit', async (event) =>
     // Der Datumswert kommt ohne Uhrzeit; der Server rechnet in naiven
     // datetimes, deshalb Mitternacht ergaenzen statt ihn raten zu lassen.
     installed_on: document.getElementById('tire-installed').value + 'T00:00:00',
+    // Ohne Angabe bewusst null statt 0 - die Auswertung faellt dann auf die
+    // Summe der Fahrten zurueck, statt bei Kilometerstand 0 zu beginnen.
+    odometer_km: parseFloat(document.getElementById('tire-odometer').value) || null,
     size: document.getElementById('tire-size').value.trim() || null,
     brand: document.getElementById('tire-brand').value.trim() || null,
     model: document.getElementById('tire-model').value.trim() || null,

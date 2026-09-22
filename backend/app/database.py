@@ -181,6 +181,15 @@ def run_light_migrations() -> None:
             )
         )
 
+        # Kilometerstand beim Reifenwechsel (siehe tires.py). Nachgereicht,
+        # weil die Tabelle in 0.26.0 schon einmal ohne die Spalte angelegt
+        # worden sein kann (:beta-Image). Bestandszeilen bleiben NULL - die
+        # Laufleistung faellt dort auf die Summe der Fahrten zurueck, ein
+        # geratener Kilometerstand waere schlimmer als keiner.
+        conn.execute(
+            text("ALTER TABLE tire_sets ADD COLUMN IF NOT EXISTS odometer_km DOUBLE PRECISION")
+        )
+
         # i18n: UI-Sprache pro Nutzer (siehe models.User.language). DEFAULT 'de'
         # deckt sowohl neue Zeilen als auch - via UPDATE - bereits bestehende
         # Nutzer ab, die die Spalte noch nicht hatten (Postgres setzt den

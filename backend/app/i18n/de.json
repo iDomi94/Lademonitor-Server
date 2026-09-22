@@ -662,5 +662,8 @@
   "tires.status.stored": "eingelagert",
   "tires.period.current": "heute",
   "tires.unit.days": "Tage",
-  "tires.unit.years": "Jahre"
+  "tires.unit.years": "Jahre",
+  "tires.form.odometer": "Kilometerstand",
+  "tires.form.odometer_placeholder": "beim Wechsel, optional",
+  "tires.km_estimated": "Nur aus den zugeordneten Fahrten gezählt – die Fahrt über den Wechsel hinweg fehlt. Trage den Kilometerstand beim Wechsel ein, dann wird der Wert exakt."
 }

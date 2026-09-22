@@ -662,5 +662,8 @@
   "tires.status.stored": "stored",
   "tires.period.current": "today",
   "tires.unit.days": "days",
-  "tires.unit.years": "years"
+  "tires.unit.years": "years",
+  "tires.form.odometer": "Odometer",
+  "tires.form.odometer_placeholder": "at the change, optional",
+  "tires.km_estimated": "Counted from the attributed drives only \u2013 the drive across the change is missing. Enter the odometer reading at the change and the figure becomes exact."
 }

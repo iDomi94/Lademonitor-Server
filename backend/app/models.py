@@ -442,6 +442,11 @@ class TireSet(Base):
     # Montagedatum. Nur ein Datum, keine Uhrzeit - niemand weiss noch, ob der
     # Wechsel vormittags war, und fuer die Zuordnung ganzer Fahrten reicht es.
     installed_on: Mapped[datetime] = mapped_column(DateTime, index=True)
+    # Kilometerstand beim Wechsel. Optional, aber die genaueste Quelle fuer
+    # die Laufleistung eines Satzes: die Differenz zweier Wechsel enthaelt
+    # auch die Fahrt, die ueber den Wechsel hinweg lief und deshalb keinem
+    # Satz zugeordnet werden kann (siehe tires.py).
+    odometer_km: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Freitext, alle drei optional - ein Satz ohne Marke ist immer noch ein
     # Satz, und die Auswertung braucht nur `kind` und `installed_on`.
     size: Mapped[str | None] = mapped_column(String, nullable=True)
