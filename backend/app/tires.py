@@ -29,6 +29,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 
 from . import models
+from .consumption import ConsumptionResult
 from .temperature import TempPoint, Trend, build_trend
 
 # Unter so vielen Fahrten wird eine Gruppe nicht ausgewiesen - aus zwei Fahrten
@@ -210,6 +211,198 @@ def _group(
         if deltas:
             stat.delta_pct_vs_model = round(_weighted(deltas) * 100, 1)
     return stat
+
+
+@dataclass(slots=True)
+class MountingStat:
+    """Eine Montage mit dem, was auf ihr gefahren wurde.
+
+    Die Zahlen beantworten "wie lange liegt der Satz schon drauf und wieviel
+    hat er gesehen" - die Frage vor dem Reifenkauf, nicht die nach dem
+    Verbrauch (dafuer gibt es den Vergleich).
+    """
+
+    tire_set_id: str
+    vehicle_id: str
+    kind: str
+    label: str
+    installed_on: datetime
+    # Ende der Montage = der naechste Wechsel an DIESEM Fahrzeug. None, solange
+    # der Satz noch draufliegt (es gibt bewusst kein Enddatum, siehe
+    # models.TireSet).
+    removed_on: datetime | None
+    is_current: bool
+    days: int
+    drives: int
+    km: float
+    energy_kwh: float
+    avg_consumption: float | None = None
+
+
+@dataclass(slots=True)
+class SetStat:
+    """Ein Satz ueber ALLE seine Montagen hinweg - was der Reifen erlebt hat.
+
+    Wiedermontagen fallen hier zusammen (`_signature()`), sonst waere die
+    Laufleistung eines Satzes ueber zwei Winter auf zwei Zeilen verteilt und
+    die Frage "wieviel km sind da drauf" nicht zu beantworten.
+    """
+
+    key: str
+    label: str
+    kind: str
+    mountings: int
+    first_installed_on: datetime
+    # Tage seit der ersten Montage - der Reifen altert auch im Keller
+    # (Gummi), deshalb steht das neben den Tagen, die er wirklich drauf war.
+    age_days: int
+    days_mounted: int
+    drives: int
+    km: float
+    energy_kwh: float
+    is_current: bool
+    avg_consumption: float | None = None
+
+
+@dataclass(slots=True)
+class TireOverview:
+    mountings: list[MountingStat] = field(default_factory=list)
+    sets: list[SetStat] = field(default_factory=list)
+    # Fahrten, die keiner Montage zugerechnet werden konnten - dieselbe Regel
+    # wie beim Vergleich, damit beide Ansichten dieselben Zahlen meinen.
+    drives_without_set: int = 0
+    drives_spanning_change: int = 0
+
+
+def _drive_km(previous: models.ChargingSession, current: models.ChargingSession) -> float | None:
+    """Strecke zwischen zwei Ladevorgaengen, sofern der Kilometerstand sie hergibt."""
+    if previous.odometer_km is None or current.odometer_km is None:
+        return None
+    km = current.odometer_km - previous.odometer_km
+    return km if km > 0 else None
+
+
+def overview(
+    sessions: list[models.ChargingSession],
+    tire_sets: list[models.TireSet],
+    consumptions: dict[str, ConsumptionResult] | None = None,
+    now: datetime | None = None,
+) -> TireOverview:
+    """Laufleistung, Dauer und Fahrten je Montage und je Satz.
+
+    Gezaehlt werden - wie beim Vergleich - nur Fahrten, die GANZ auf einer
+    Montage lagen. Die eine Fahrt ueber den Wechsel hinweg lief auf beiden
+    Saetzen; sie hier dem neuen zuzuschlagen waere eine erfundene Genauigkeit,
+    und sie zu halbieren erst recht. Sie wird deshalb ausgewiesen statt
+    verteilt.
+    """
+    now = now or datetime.utcnow()
+    consumptions = consumptions or {}
+    assigned, spanning = sets_for_drives(sessions, tire_sets)
+
+    drives: dict[str, int] = {}
+    km: dict[str, float] = {}
+    energy: dict[str, float] = {}
+    consumption_pairs: dict[str, list[tuple[float, float]]] = {}
+
+    by_vehicle: dict[str, list[models.ChargingSession]] = {}
+    for session in sessions:
+        by_vehicle.setdefault(session.vehicle_id, []).append(session)
+
+    for vehicle_sessions in by_vehicle.values():
+        ordered = sorted(vehicle_sessions, key=lambda s: s.start_time)
+        for previous, current in zip(ordered, ordered[1:]):
+            tire_set = assigned.get(current.id)
+            if tire_set is None:
+                continue
+            key = tire_set.id
+            drives[key] = drives.get(key, 0) + 1
+            energy[key] = energy.get(key, 0.0) + (current.energy_kwh or 0.0)
+            distance = _drive_km(previous, current)
+            if distance is not None:
+                km[key] = km.get(key, 0.0) + distance
+            result = consumptions.get(current.id)
+            if result and result.value is not None and result.km:
+                consumption_pairs.setdefault(key, []).append((result.value, result.km))
+
+    # Das Ende einer Montage ist der naechste Wechsel an DIESEM Fahrzeug.
+    next_change: dict[str, datetime | None] = {}
+    sets_by_vehicle: dict[str, list[models.TireSet]] = {}
+    for tire_set in sorted(tire_sets, key=lambda t: t.installed_on):
+        sets_by_vehicle.setdefault(tire_set.vehicle_id, []).append(tire_set)
+    for mounted in sets_by_vehicle.values():
+        for current, following in zip(mounted, mounted[1:]):
+            next_change[current.id] = following.installed_on
+        next_change[mounted[-1].id] = None
+
+    result = TireOverview(drives_spanning_change=spanning)
+    for tire_set in sorted(tire_sets, key=lambda t: t.installed_on, reverse=True):
+        removed_on = next_change.get(tire_set.id)
+        end = removed_on or now
+        pairs = consumption_pairs.get(tire_set.id) or []
+        result.mountings.append(
+            MountingStat(
+                tire_set_id=tire_set.id,
+                vehicle_id=tire_set.vehicle_id,
+                kind=tire_set.kind.value,
+                label=set_label(tire_set),
+                installed_on=tire_set.installed_on,
+                removed_on=removed_on,
+                is_current=removed_on is None,
+                days=max((end - tire_set.installed_on).days, 0),
+                drives=drives.get(tire_set.id, 0),
+                km=round(km.get(tire_set.id, 0.0), 1),
+                energy_kwh=round(energy.get(tire_set.id, 0.0), 2),
+                avg_consumption=round(_weighted(pairs), 1) if pairs else None,
+            )
+        )
+
+    grouped: dict[str, list[MountingStat]] = {}
+    labels: dict[str, tuple[str, str]] = {}
+    for tire_set in tire_sets:
+        signature = _signature(tire_set)
+        labels.setdefault(signature, (set_label(tire_set), tire_set.kind.value))
+    by_id = {m.tire_set_id: m for m in result.mountings}
+    for tire_set in tire_sets:
+        grouped.setdefault(_signature(tire_set), []).append(by_id[tire_set.id])
+
+    for signature, group in grouped.items():
+        pairs = [
+            pair
+            for mounting in group
+            for pair in consumption_pairs.get(mounting.tire_set_id, [])
+        ]
+        first = min(m.installed_on for m in group)
+        result.sets.append(
+            SetStat(
+                key=signature,
+                label=labels[signature][0],
+                kind=labels[signature][1],
+                mountings=len(group),
+                first_installed_on=first,
+                age_days=max((now - first).days, 0),
+                days_mounted=sum(m.days for m in group),
+                drives=sum(m.drives for m in group),
+                km=round(sum(m.km for m in group), 1),
+                energy_kwh=round(sum(m.energy_kwh for m in group), 2),
+                is_current=any(m.is_current for m in group),
+                avg_consumption=round(_weighted(pairs), 1) if pairs else None,
+            )
+        )
+    # Montierte zuerst, danach nach Laufleistung - die Frage ist meistens
+    # "was liegt drauf und wieviel hat es schon".
+    result.sets.sort(key=lambda s: (not s.is_current, -s.km))
+
+    total_drives = sum(1 for _ in _drive_pairs(by_vehicle))
+    result.drives_without_set = max(total_drives - len(assigned) - spanning, 0)
+    return result
+
+
+def _drive_pairs(by_vehicle: dict[str, list[models.ChargingSession]]):
+    """Alle Fahrten (Paare aufeinanderfolgender Ladevorgaenge) eines Bestands."""
+    for vehicle_sessions in by_vehicle.values():
+        ordered = sorted(vehicle_sessions, key=lambda s: s.start_time)
+        yield from zip(ordered, ordered[1:])
 
 
 def _neutral_trend(

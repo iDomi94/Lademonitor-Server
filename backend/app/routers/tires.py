@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas, tires
 from ..auth import get_current_user
+from ..consumption import compute_vehicle_consumptions
 from ..database import get_db
 from ..temperature import collect_points
 
@@ -73,6 +74,73 @@ def delete_tire_set(
     db.commit()
 
 
+@router.get("/overview", response_model=schemas.TireOverviewOut)
+def tire_overview(
+    vehicle_id: str | None = None,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Laufleistung, Dauer und Fahrten je Montage und je Satz.
+
+    Getrennt vom Vergleich, weil die Frage eine andere ist: hier geht es um
+    Alter und Kilometer (also um den naechsten Reifenkauf), dort um den
+    Verbrauch. Zusammengelegt braeuchte eine Antwort beides, obwohl die
+    Uebersicht auch dann etwas zeigt, wenn fuer den Vergleich noch viel zu
+    wenige Fahrten mit Temperatur vorliegen.
+    """
+    sessions, tire_sets = _own_data(db, user, vehicle_id)
+
+    consumptions: dict = {}
+    for vid in {s.vehicle_id for s in sessions}:
+        vehicle = db.get(models.Vehicle, vid)
+        consumptions.update(
+            compute_vehicle_consumptions(
+                [s for s in sessions if s.vehicle_id == vid],
+                vehicle.battery_capacity_kwh if vehicle else None,
+            )
+        )
+
+    result = tires.overview(sessions, tire_sets, consumptions)
+    return schemas.TireOverviewOut(
+        mountings=[
+            schemas.TireMountingOut(
+                tire_set_id=m.tire_set_id,
+                vehicle_id=m.vehicle_id,
+                kind=m.kind,
+                label=m.label,
+                installed_on=m.installed_on,
+                removed_on=m.removed_on,
+                is_current=m.is_current,
+                days=m.days,
+                drives=m.drives,
+                km=m.km,
+                energy_kwh=m.energy_kwh,
+                avg_consumption_kwh_per_100km=m.avg_consumption,
+            )
+            for m in result.mountings
+        ],
+        sets=[
+            schemas.TireSetSummaryOut(
+                key=s.key,
+                label=s.label,
+                kind=s.kind,
+                mountings=s.mountings,
+                first_installed_on=s.first_installed_on,
+                age_days=s.age_days,
+                days_mounted=s.days_mounted,
+                drives=s.drives,
+                km=s.km,
+                energy_kwh=s.energy_kwh,
+                is_current=s.is_current,
+                avg_consumption_kwh_per_100km=s.avg_consumption,
+            )
+            for s in result.sets
+        ],
+        drives_without_set=result.drives_without_set,
+        drives_spanning_change=result.drives_spanning_change,
+    )
+
+
 @router.get("/comparison", response_model=schemas.TireComparisonOut)
 def tire_comparison(
     vehicle_id: str | None = None,
@@ -85,16 +153,7 @@ def tire_comparison(
     IST bereits ein Zeitraum. Ihn zusaetzlich zu beschneiden wuerde die
     Gruppen verkleinern, ohne die Frage zu schaerfen.
     """
-    sessions = (
-        db.query(models.ChargingSession)
-        .filter(models.ChargingSession.user_id == user.id)
-        .order_by(models.ChargingSession.start_time)
-        .all()
-    )
-    tire_sets = db.query(models.TireSet).filter(models.TireSet.user_id == user.id).all()
-    if vehicle_id:
-        sessions = [s for s in sessions if s.vehicle_id == vehicle_id]
-        tire_sets = [t for t in tire_sets if t.vehicle_id == vehicle_id]
+    sessions, tire_sets = _own_data(db, user, vehicle_id)
 
     capacity_by_vehicle_id = {
         v.id: v.battery_capacity_kwh
@@ -115,6 +174,27 @@ def tire_comparison(
         overlap_ok=result.overlap_ok,
         winter_vs_summer_pct=result.winter_vs_summer_pct,
     )
+
+
+def _own_data(
+    db: Session, user: models.User, vehicle_id: str | None
+) -> tuple[list[models.ChargingSession], list[models.TireSet]]:
+    """Ladevorgaenge und Reifensaetze des Nutzers, chronologisch.
+
+    Der Fahrzeugfilter greift erst in Python: beide Auswertungen brauchen die
+    Vorgaenge in einem Stueck, und die Menge ist die eines einzelnen Nutzers.
+    """
+    sessions = (
+        db.query(models.ChargingSession)
+        .filter(models.ChargingSession.user_id == user.id)
+        .order_by(models.ChargingSession.start_time)
+        .all()
+    )
+    tire_sets = db.query(models.TireSet).filter(models.TireSet.user_id == user.id).all()
+    if vehicle_id:
+        sessions = [s for s in sessions if s.vehicle_id == vehicle_id]
+        tire_sets = [t for t in tire_sets if t.vehicle_id == vehicle_id]
+    return sessions, tire_sets
 
 
 def _group_out(group: tires.GroupStat) -> schemas.TireGroupOut:

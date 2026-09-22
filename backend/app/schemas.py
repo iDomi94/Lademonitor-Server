@@ -251,6 +251,49 @@ class TireSetOut(TireSetBase):
     created_at: datetime
 
 
+class TireMountingOut(BaseModel):
+    """Eine Montage mit ihrer Laufleistung - die Uebersicht, nicht der Vergleich."""
+
+    tire_set_id: str
+    vehicle_id: str
+    kind: str
+    label: str
+    installed_on: datetime
+    removed_on: datetime | None = None
+    is_current: bool
+    days: int
+    drives: int
+    km: float
+    energy_kwh: float
+    avg_consumption_kwh_per_100km: float | None = None
+
+
+class TireSetSummaryOut(BaseModel):
+    """Ein Satz ueber alle seine Montagen hinweg."""
+
+    key: str
+    label: str
+    kind: str
+    mountings: int
+    first_installed_on: datetime
+    # Alter seit der ersten Montage UND die Tage, die er wirklich drauf war -
+    # Gummi altert auch im Keller, die Laufleistung tut es nicht.
+    age_days: int
+    days_mounted: int
+    drives: int
+    km: float
+    energy_kwh: float
+    is_current: bool
+    avg_consumption_kwh_per_100km: float | None = None
+
+
+class TireOverviewOut(BaseModel):
+    mountings: list[TireMountingOut] = []
+    sets: list[TireSetSummaryOut] = []
+    drives_without_set: int = 0
+    drives_spanning_change: int = 0
+
+
 class TireGroupOut(BaseModel):
     key: str
     label: str

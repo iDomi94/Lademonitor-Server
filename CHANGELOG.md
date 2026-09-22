@@ -19,6 +19,12 @@ folgen [Semantic Versioning](https://semver.org/).
   (der misst die Jahreszeit), sondern die km-gewichtete relative Abweichung von
   der Verbrauchskurve über der Außentemperatur, zurückgerechnet auf eine
   gemeinsame Referenztemperatur.
+- **`GET /api/tires/overview`**: Laufleistung, Dauer und Fahrten je Montage
+  und je Satz (Wiedermontagen zusammengefasst), plus Alter seit der ersten
+  Montage. Gezählt werden nur Fahrten, die ganz auf einer Montage lagen —
+  dieselbe Regel wie beim Vergleich. Die Web-UI zeigt das als Übersicht über
+  der Auswertung und ergänzt die Wechsel-Tabelle um Zeitraum, Dauer, Fahrten
+  und Kilometer.
 - `overlap_span_c`/`overlap_ok`: gemeinsamer Temperaturbereich der Sätze. Ohne
   ihn ist die Bereinigung eine Hochrechnung; die Web-UI weist darauf **über**
   der Tabelle hin. `drives_without_set`/`drives_spanning_change` zählen die

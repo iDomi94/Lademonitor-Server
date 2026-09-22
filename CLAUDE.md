@@ -1854,6 +1854,19 @@ eine Entitaet, die kein Client spiegelt, waere totes Gewicht. Dafuer raeumt
 Fremdschluessel an Nutzer UND Fahrzeug, eine verbliebene Zeile liesse das
 Loeschen des Kontos an Postgres scheitern (derselbe Fehlertyp wie 2026-09-09).
 
+**Zwei Endpunkte, zwei Fragen.** `/api/tires/overview` beantwortet "wie alt
+ist der Satz und wieviel liegt drauf" (Montagen, Zeitraum, Tage, Fahrten, km,
+kWh - je Montage UND je Satz ueber alle Wiedermontagen hinweg), der Vergleich
+beantwortet "verbraucht er mehr". Zusammengelegt braeuchte eine Antwort
+beides, obwohl die Uebersicht schon nach dem ersten Wechsel etwas zeigt,
+waehrend der Vergleich Fahrten mit Temperatur ueber zwei Saetze braucht.
+Gezaehlt wird in beiden nach derselben Regel (nur Fahrten ganz auf einem
+Satz), damit die Zahlen auf einer Seite nicht auseinanderlaufen. Das Ende
+einer Montage ist abgeleitet (der naechste Wechsel an DIESEM Fahrzeug, sonst
+"heute") - es steht bewusst nicht am Datensatz, siehe oben. Das Alter steht
+neben den Tagen, die der Satz wirklich drauf war: Gummi altert auch im
+Keller, die Laufleistung tut es nicht.
+
 **`/api/tires/comparison` hat bewusst KEINEN Datumsfilter** - ein Reifensatz
 IST bereits ein Zeitraum, ihn zusaetzlich zu beschneiden verkleinert nur die
 Gruppen. Gruppen unter `MIN_DRIVES_PER_GROUP` (3) Fahrten werden gar nicht

@@ -648,5 +648,19 @@
   "tires.form.notes": "Notiz",
   "tires.form.submit_new": "Anlegen",
   "tires.form.submit_edit": "Speichern",
-  "tires.form.cancel": "Abbrechen"
+  "tires.form.cancel": "Abbrechen",
+  "tires.overview_heading": "Reifensätze",
+  "tires.overview_empty": "Noch kein Reifensatz eingetragen.",
+  "tires.overview_hint": "Gezählt werden nur Fahrten, die vollständig auf einem Satz lagen - die eine Fahrt über einen Wechsel hinweg lief auf beiden und gehört zu keinem. Kilometer kommen aus dem Kilometerstand der Ladevorgänge; fehlt er, fehlt die Strecke.",
+  "tires.col.status": "Status",
+  "tires.col.mountings": "Montagen",
+  "tires.col.age": "Alter",
+  "tires.col.days_mounted": "Montiert",
+  "tires.col.period": "Zeitraum",
+  "tires.col.energy": "Geladen",
+  "tires.status.current": "aufgezogen",
+  "tires.status.stored": "eingelagert",
+  "tires.period.current": "heute",
+  "tires.unit.days": "Tage",
+  "tires.unit.years": "Jahre"
 }

@@ -648,5 +648,19 @@
   "tires.form.notes": "Note",
   "tires.form.submit_new": "Create",
   "tires.form.submit_edit": "Save",
-  "tires.form.cancel": "Cancel"
+  "tires.form.cancel": "Cancel",
+  "tires.overview_heading": "Tire sets",
+  "tires.overview_empty": "No tire set recorded yet.",
+  "tires.overview_hint": "Only drives that lay entirely on one set are counted - the single drive across a change ran on both and belongs to neither. Kilometres come from the odometer readings of the charging sessions; without them the distance is missing.",
+  "tires.col.status": "Status",
+  "tires.col.mountings": "Mountings",
+  "tires.col.age": "Age",
+  "tires.col.days_mounted": "Fitted",
+  "tires.col.period": "Period",
+  "tires.col.energy": "Charged",
+  "tires.status.current": "fitted",
+  "tires.status.stored": "stored",
+  "tires.period.current": "today",
+  "tires.unit.days": "days",
+  "tires.unit.years": "years"
 }

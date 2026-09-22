@@ -17,6 +17,15 @@
   <select id="tire-vehicle-filter" style="max-width:260px"></select>
 </div>
 
+<h2>{{ t('tires.overview_heading') }}</h2>
+<div class="card" id="tire-overview">
+  <div id="tire-overview-empty" style="color:var(--muted); font-size:0.9em"></div>
+  <div class="tablewrap"><table id="tire-sets-table"></table></div>
+  <div style="margin-top:8px; color:var(--muted); font-size:0.85em">
+    {{ t('tires.overview_hint') }}
+  </div>
+</div>
+
 <h2>{{ t('tires.comparison_heading') }}</h2>
 <div class="card" id="tire-comparison">
   <div id="tire-empty" style="color:var(--muted); font-size:0.9em"></div>
@@ -131,6 +140,18 @@ const T = {
   overlapWarning: {{ t('tires.overlap_warning')|tojson }},
   overlapMissing: {{ t('tires.overlap_missing')|tojson }},
   excluded: {{ t('tires.excluded')|tojson }},
+  colStatus: {{ t('tires.col.status')|tojson }},
+  colMountings: {{ t('tires.col.mountings')|tojson }},
+  colAge: {{ t('tires.col.age')|tojson }},
+  colDaysMounted: {{ t('tires.col.days_mounted')|tojson }},
+  colPeriod: {{ t('tires.col.period')|tojson }},
+  colEnergy: {{ t('tires.col.energy')|tojson }},
+  statusCurrent: {{ t('tires.status.current')|tojson }},
+  statusStored: {{ t('tires.status.stored')|tojson }},
+  periodCurrent: {{ t('tires.period.current')|tojson }},
+  unitDays: {{ t('tires.unit.days')|tojson }},
+  unitYears: {{ t('tires.unit.years')|tojson }},
+  overviewEmpty: {{ t('tires.overview_empty')|tojson }},
   formNew: {{ t('tires.form.new_heading')|tojson }},
   formEdit: {{ t('tires.form.edit_heading')|tojson }},
   submitNew: {{ t('tires.form.submit_new')|tojson }},
@@ -139,6 +160,9 @@ const T = {
 
 let vehicles = [];
 let tireSets = [];
+// Kennzahlen je Montage, aus /api/tires/overview - die Wechsel-Tabelle zeigt
+// sie in denselben Zeilen, statt dieselbe Liste ein zweites Mal aufzubauen.
+let mountingById = {};
 
 const fmt = (value, digits) =>
   value === null || value === undefined ? '–' : Number(value).toFixed(digits);
@@ -146,6 +170,13 @@ const signed = (value, digits) =>
   value === null || value === undefined ? '–'
     : (value >= 0 ? '+' : '') + Number(value).toFixed(digits);
 const vehicleName = id => (vehicles.find(v => v.id === id) || {}).name || '–';
+const shortDate = value =>
+  new Date(value).toLocaleDateString(window.LADEMONITOR_LANG, { dateStyle: 'medium' });
+// Ein Reifen laeuft ueber Jahre - in Tagen ist das ab einem gewissen Punkt
+// keine ablesbare Zahl mehr.
+const duration = days => days >= 365
+  ? `${(days / 365).toFixed(1)} ${T.unitYears}`
+  : `${days} ${T.unitDays}`;
 
 async function loadVehicles() {
   const res = await fetch('api/vehicles');
@@ -168,14 +199,21 @@ async function loadTireSets() {
 
   const table = document.getElementById('tire-table');
   if (!tireSets.length) { table.innerHTML = ''; return; }
-  const head = `<tr><th>${T.colInstalled}</th><th>${T.colKind}</th>` +
-    `<th>${T.colTire}</th><th>${T.colNotes}</th><th></th></tr>`;
+  const head = `<tr><th>${T.colPeriod}</th><th>${T.colKind}</th>` +
+    `<th>${T.colTire}</th><th>${T.colDaysMounted}</th><th>${T.colDrives}</th>` +
+    `<th>${T.colKm}</th><th>${T.colNotes}</th><th></th></tr>`;
   table.innerHTML = head + tireSets.map(set => {
     const label = [set.brand, set.model, set.size].filter(Boolean).join(' ') || '–';
-    const when = new Date(set.installed_on).toLocaleDateString(window.LADEMONITOR_LANG,
-      { dateStyle: 'medium' });
-    return `<tr><td>${when}</td><td>${T.kind[set.kind] || set.kind}</td>` +
+    // Die Montage endet erst mit dem naechsten Wechsel - das Enddatum steht
+    // deshalb nicht am Datensatz, sondern kommt aus der Uebersicht.
+    const stats = mountingById[set.id];
+    const until = stats && stats.removed_on ? shortDate(stats.removed_on) : T.periodCurrent;
+    return `<tr><td>${shortDate(set.installed_on)}<div style="color:var(--muted); font-size:0.85em">` +
+      `→ ${until}</div></td><td>${T.kind[set.kind] || set.kind}</td>` +
       `<td>${label}<div style="color:var(--muted); font-size:0.85em">${vehicleName(set.vehicle_id)}</div></td>` +
+      `<td>${stats ? duration(stats.days) : '–'}</td>` +
+      `<td>${stats ? stats.drives : '–'}</td>` +
+      `<td>${stats ? fmt(stats.km, 0) : '–'}</td>` +
       `<td>${set.notes || ''}</td>` +
       `<td>${editDeleteButtons(`startEditTire('${set.id}')`, `deleteTire('${set.id}')`, T.edit, T.del)}</td></tr>`;
   }).join('');
@@ -250,6 +288,37 @@ async function loadComparison() {
       : '';
 }
 
+async function loadOverview() {
+  const filter = currentFilter();
+  const res = await fetch('api/tires/overview' + (filter ? `?vehicle_id=${filter}` : ''));
+  const data = res.ok ? await res.json() : { mountings: [], sets: [] };
+  mountingById = {};
+  data.mountings.forEach(m => { mountingById[m.tire_set_id] = m; });
+
+  const table = document.getElementById('tire-sets-table');
+  document.getElementById('tire-overview-empty').textContent =
+    data.sets.length ? '' : T.overviewEmpty;
+  if (!data.sets.length) { table.innerHTML = ''; return; }
+
+  const head = `<tr><th>${T.colTire}</th><th>${T.colStatus}</th>` +
+    `<th>${T.colMountings}</th><th>${T.colAge}</th><th>${T.colDaysMounted}</th>` +
+    `<th>${T.colDrives}</th><th>${T.colKm}</th><th>${T.colEnergy}</th>` +
+    `<th>${T.colAvg}</th></tr>`;
+  table.innerHTML = head + data.sets.map(set => {
+    const status = set.is_current
+      ? `<span class="badge" style="background:rgba(79,209,165,0.15); color:var(--accent)">${T.statusCurrent}</span>`
+      : `<span style="color:var(--muted)">${T.statusStored}</span>`;
+    return `<tr><td>${set.label || T.kind[set.kind] || set.kind}` +
+      `<div style="color:var(--muted); font-size:0.85em">${T.kind[set.kind] || set.kind}</div></td>` +
+      `<td>${status}</td><td>${set.mountings}</td>` +
+      `<td>${duration(set.age_days)}<div style="color:var(--muted); font-size:0.85em">` +
+      `${shortDate(set.first_installed_on)}</div></td>` +
+      `<td>${duration(set.days_mounted)}</td><td>${set.drives}</td>` +
+      `<td>${fmt(set.km, 0)}</td><td>${fmt(set.energy_kwh, 1)} kWh</td>` +
+      `<td>${fmt(set.avg_consumption_kwh_per_100km, 1)}</td></tr>`;
+  }).join('');
+}
+
 function resetTireForm() {
   document.getElementById('tire-id').value = '';
   document.getElementById('tire-form').reset();
@@ -314,6 +383,8 @@ document.getElementById('tire-cancel').addEventListener('click', resetTireForm);
 document.getElementById('tire-vehicle-filter').addEventListener('change', reloadAll);
 
 async function reloadAll() {
+  // Zuerst die Uebersicht: die Wechsel-Tabelle zeigt deren Kennzahlen mit.
+  await loadOverview();
   await loadTireSets();
   await loadComparison();
 }

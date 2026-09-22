@@ -39,6 +39,14 @@ def session(idx, day, vehicle_id="v1"):
     )
 
 
+def driven(idx, day, odo, *, kwh=40.0, vehicle_id="v1"):
+    """Ladevorgang mit Kilometerstand - fuer die Laufleistung der Uebersicht."""
+    row = session(idx, day, vehicle_id=vehicle_id)
+    row.odometer_km = odo
+    row.energy_kwh = kwh
+    return row
+
+
 def point(idx, *, temp, consumption, km=200.0):
     return TempPoint(
         session_id=f"s{idx}",
@@ -206,6 +214,88 @@ def test_drives_without_a_set_are_counted():
     # Wechsel", sondern eine ohne bekannten Satz.
     assert result.drives_without_set == 3
     assert result.drives_spanning_change == 0
+
+
+# ---------- Uebersicht ----------
+
+
+def test_overview_counts_days_and_kilometres_per_mounting():
+    sets = [
+        tire_set(1, models.TireKind.WINTER, 0, brand="Nokian", model="Snowproof"),
+        tire_set(2, models.TireKind.SUMMER, 100, brand="Michelin", model="Sport EV"),
+    ]
+    sessions = [
+        driven(0, 2, 10_000),
+        driven(1, 30, 11_000),
+        driven(2, 60, 12_000),
+        driven(3, 120, 13_000),   # Fahrt ueber den Wechsel hinweg
+        driven(4, 150, 14_500),
+    ]
+
+    result = tires.overview(sessions, sets, now=BASE + timedelta(days=200))
+
+    winter = next(m for m in result.mountings if m.kind == "winter")
+    summer = next(m for m in result.mountings if m.kind == "summer")
+    assert winter.days == 100 and winter.removed_on == sets[1].installed_on
+    assert winter.is_current is False
+    assert winter.drives == 2 and winter.km == 2000.0  # Tag 30 und Tag 60
+    assert summer.is_current is True and summer.removed_on is None
+    assert summer.days == 100  # Montage bis "jetzt"
+    # Die Fahrt von Tag 60 bis Tag 120 lief auf beiden Saetzen und zaehlt fuer
+    # keinen - sie wird ausgewiesen statt verteilt.
+    assert summer.drives == 1 and summer.km == 1500.0
+    assert result.drives_spanning_change == 1
+
+
+def test_overview_adds_up_the_mountings_of_one_set():
+    """Derselbe Satz im naechsten Winter ist dieselbe Gummimischung - seine
+    Laufleistung steht auf EINER Zeile, sonst ist "wieviel km sind drauf"
+    nicht zu beantworten."""
+    sets = [
+        tire_set(1, models.TireKind.WINTER, 0, brand="Nokian", model="Snowproof"),
+        tire_set(2, models.TireKind.SUMMER, 100, brand="Michelin", model="Sport EV"),
+        tire_set(3, models.TireKind.WINTER, 200, brand="Nokian", model="Snowproof"),
+    ]
+    sessions = [driven(i, day, 10_000 + i * 1000) for i, day in enumerate([2, 30, 60, 130, 160, 230, 260])]
+
+    result = tires.overview(sessions, sets, now=BASE + timedelta(days=300))
+
+    winter = next(s for s in result.sets if s.kind == "winter")
+    assert winter.mountings == 2
+    assert winter.is_current is True
+    assert winter.days_mounted == 200  # 100 im ersten, 100 seit der zweiten
+    assert winter.age_days == 300      # Gummi altert auch zwischen den Saisons
+    assert winter.km == sum(
+        m.km for m in result.mountings if m.kind == "winter"
+    )
+
+
+def test_overview_is_empty_without_tire_sets():
+    result = tires.overview([driven(0, 2, 10_000), driven(1, 20, 10_500)], [])
+
+    assert result.mountings == [] and result.sets == []
+
+
+def test_overview_over_the_api(client):
+    register(client)
+    vehicle = create_vehicle(client)
+    created = client.post(
+        "/api/tires",
+        json={
+            "vehicle_id": vehicle["id"],
+            "kind": "winter",
+            "installed_on": "2026-01-15T00:00:00",
+            "brand": "Nokian",
+        },
+    )
+    assert created.status_code == 201
+
+    body = client.get("/api/tires/overview").json()
+
+    assert len(body["mountings"]) == 1
+    assert body["mountings"][0]["is_current"] is True
+    assert body["mountings"][0]["removed_on"] is None
+    assert body["sets"][0]["mountings"] == 1
 
 
 # ---------- API ----------
