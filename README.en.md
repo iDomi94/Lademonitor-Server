@@ -43,6 +43,14 @@ via TestFlight: [testflight.apple.com/join/NMbyFTEK](https://testflight.apple.co
   line – headlined by how much more the car uses at 0 °C than at 20 °C, plus a
   comparison of the seasons. The temperature comes from Home Assistant (from
   Lademonitor-HA 0.5.0) or you enter it by hand.
+- **Tires** (since 0.26.0): record tire changes with type, date, size, brand and
+  model – from that date the set applies until the next entry. From this comes
+  an overview (how long a set was fitted, kilometres, drives, age since its
+  first mounting; re-mountings of the same set on one row) and the comparison of
+  which set uses more – **adjusted for temperature**, because a raw comparison
+  of the seasonal averages would only measure that winter tires are driven in
+  winter. If the two sets share no temperature range, the extrapolation warning
+  sits above the table.
 - **Map view** (since 0.20.0) of your charging locations (including their
   matching radius) and every charging session that has coordinates, with
   clustering, previews and a legend that doubles as a filter. Leaflet ships

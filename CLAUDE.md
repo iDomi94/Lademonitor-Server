@@ -666,12 +666,18 @@ Icon/Tooltip-Logik in der SessionsList-View.
   2026-09-22 (v0.26.0)**, siehe Abschnitt "Reifensaetze". Umgesetzt sind
   Wechseldaten als Liste ("ab Datum gilt Satz X", ausdruecklich mehr als zwei
   Eintraege pro Jahr), der temperaturbereinigte Vergleich gegen `build_trend()`
-  und die Offenlegung der Ueberlappung. **Noch offen:** die Auswertung in den
-  beiden Apps (bisher nur Server + Web-UI, die Endpunkte sind aber regulaerer
-  Teil der REST-API), und vor allem der Praxistest - die Trennung von Reifen-
-  und Temperatureffekt ist bisher nur an synthetischen Daten verifiziert, weil
-  die echten Daten des Nutzers erst ab Maerz reichen und noch keinen Winter
-  enthalten.
+  und die Offenlegung der Ueberlappung. **Ebenfalls erledigt (2026-09-22):** die
+  Uebersicht (Laufleistung, Dauer, Alter je Montage und je Satz) und der Punkt
+  "Reifen" in den Einstellungen BEIDER Apps - dort bewusst nur im Server-Modus,
+  aus demselben Grund wie bei der Temperaturauswertung (die Rechnung liegt
+  allein in `tires.py`; lokal nachgebaut wuerden App und Web frueher oder
+  spaeter andere Zahlen zeigen). Reifen sind deshalb auch nicht Teil des
+  lokalen Spiegels - Android brauchte keine Room-Migration. **Noch offen:** der
+  Praxistest - die Trennung von Reifen- und Temperatureffekt ist bisher nur an
+  synthetischen Daten verifiziert, weil die echten Daten des Nutzers erst ab
+  Maerz reichen und noch keinen Winter enthalten. Ausserdem sind beide Apps in
+  dieser Umgebung nicht kompilierbar (kein Xcode, kein Android-SDK), der Code
+  ist also ungebaut.
 - **Xcode-Beta-Umgebung des Nutzers:** macOS 27 Beta + Xcode 27 Beta
   (Erstbeta, Stand Aug 2026). Es gab einen `dyld_shared_cache_extract_dylibs`
   Bug beim Installieren auf echtem Gerät - gelöst durch Löschen von
