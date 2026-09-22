@@ -21,7 +21,7 @@ BASE = datetime(2026, 1, 1, 8, 0, 0)
 
 
 def tire_set(idx, kind, day, *, brand="Michelin", model="Pilot", size="235/45 R21",
-             vehicle_id="v1", odo=None):
+             size_rear=None, vehicle_id="v1", odo=None):
     return models.TireSet(
         id=f"t{idx}",
         vehicle_id=vehicle_id,
@@ -31,6 +31,7 @@ def tire_set(idx, kind, day, *, brand="Michelin", model="Pilot", size="235/45 R2
         brand=brand,
         model=model,
         size=size,
+        size_rear=size_rear,
     )
 
 
@@ -217,6 +218,37 @@ def test_drives_without_a_set_are_counted():
     assert result.drives_spanning_change == 0
 
 
+def test_a_staggered_fitment_shows_both_axles():
+    """Mischbereifung: beide Groessen in einer Zeile, vorne zuerst."""
+    mixed = tire_set(1, models.TireKind.SUMMER, 0, brand="Michelin", model="Sport EV",
+                     size="235/45 R21", size_rear="255/40 R21")
+    same = tire_set(2, models.TireKind.WINTER, 100, brand="Nokian", model="Snowproof",
+                    size="235/45 R21")
+
+    assert tires.set_label(mixed) == "Michelin Sport EV 235/45 R21 / 255/40 R21"
+    # Gleiche Groesse rundum bleibt eine Angabe - kein "X / X".
+    assert tires.set_label(same) == "Nokian Snowproof 235/45 R21"
+
+
+def test_the_rear_size_separates_two_otherwise_identical_sets():
+    """Derselbe Reifen einmal rundum und einmal als Mischbereifung sind zwei
+    verschiedene Saetze - sie duerfen nicht zu einer Gruppe verschmelzen."""
+    sets = [
+        tire_set(1, models.TireKind.SUMMER, 0, brand="Michelin", model="Sport EV",
+                 size="235/45 R21"),
+        tire_set(2, models.TireKind.WINTER, 100, brand="Nokian", model="Snowproof"),
+        tire_set(3, models.TireKind.SUMMER, 200, brand="Michelin", model="Sport EV",
+                 size="235/45 R21", size_rear="255/40 R21"),
+    ]
+    sessions = [driven(i, day, 10_000 + i * 1000) for i, day in enumerate([2, 30, 130, 230, 260])]
+
+    result = tires.overview(sessions, sets, now=BASE + timedelta(days=300))
+
+    summer = [s for s in result.sets if s.kind == "summer"]
+    assert len(summer) == 2
+    assert {s.mountings for s in summer} == {1}
+
+
 # ---------- Uebersicht ----------
 
 
@@ -376,11 +408,13 @@ def test_crud_over_the_api(client):
             "kind": "winter",
             "installed_on": "2026-10-15T00:00:00",
             "size": "235/45 R21",
+            "size_rear": "255/40 R21",
             "brand": "Nokian",
             "model": "Snowproof",
         },
     )
     assert created.status_code == 201, created.text
+    assert created.json()["size_rear"] == "255/40 R21"
     tire_id = created.json()["id"]
 
     listed = client.get("/api/tires")

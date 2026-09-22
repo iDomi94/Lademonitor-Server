@@ -139,9 +139,22 @@ def sets_for_drives(
     return assigned, spanning
 
 
+def size_label(tire_set: models.TireSet) -> str:
+    """Die Groesse als EIN Text - bei Mischbereifung beide Achsen.
+
+    Ohne Hinterachsen-Groesse gilt `size` fuer alle vier Raeder, dann steht
+    sie allein da. Sonst "vorne / hinten" in genau dieser Reihenfolge; die
+    Achse dazuzuschreiben waere in der Liste nur Ballast, die Reihenfolge ist
+    bei Mischbereifung die uebliche Lesart.
+    """
+    if tire_set.size and tire_set.size_rear:
+        return f"{tire_set.size} / {tire_set.size_rear}"
+    return tire_set.size or tire_set.size_rear or ""
+
+
 def set_label(tire_set: models.TireSet) -> str:
     """Marke, Modell und Groesse zu einer Zeile - leere Felder fallen weg."""
-    parts = [part for part in (tire_set.brand, tire_set.model, tire_set.size) if part]
+    parts = [part for part in (tire_set.brand, tire_set.model, size_label(tire_set)) if part]
     return " ".join(parts)
 
 
@@ -151,8 +164,17 @@ def _signature(tire_set: models.TireSet) -> str:
     Eine Zeile ist eine Montage (siehe models.TireSet) - derselbe Satz im
     naechsten Winter waere sonst eine zweite, halb so grosse Gruppe.
     """
+    # Die Hinterachsen-Groesse gehoert dazu: zwei Saetze, die sich NUR darin
+    # unterscheiden (einmal rundum gleich, einmal Mischbereifung), sind
+    # verschiedene Reifen und duerfen nicht zu einer Gruppe verschmelzen.
     return "|".join(
-        (tire_set.kind.value, tire_set.brand or "", tire_set.model or "", tire_set.size or "")
+        (
+            tire_set.kind.value,
+            tire_set.brand or "",
+            tire_set.model or "",
+            tire_set.size or "",
+            tire_set.size_rear or "",
+        )
     )
 
 

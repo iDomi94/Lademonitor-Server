@@ -5,6 +5,15 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.26.1",
+        "date": "2026-09-22",
+        "title": "Reifen: Mischbereifung",
+        "changes": [
+            "Für Mischbereifung gibt es ein zweites Größenfeld: vorne und hinten getrennt. Ist die Größe rundum gleich – der Normalfall –, bleibt das zweite Feld leer und es wird auch nur eine Größe angezeigt.",
+            "Ein Satz, der einmal rundum gleich und einmal als Mischbereifung gefahren wurde, zählt in der Auswertung als zwei verschiedene Sätze; das sind ja auch verschiedene Reifen.",
+        ],
+    },
+    {
         "version": "0.26.0",
         "date": "2026-09-22",
         "title": "Reifen: Sommer gegen Winter, temperaturbereinigt",

@@ -229,7 +229,10 @@ class TireSetBase(BaseModel):
     # Kilometerstand beim Wechsel - macht die Laufleistung eines Satzes exakt
     # statt sie aus den Fahrten zusammenzuzaehlen (siehe tires.py).
     odometer_km: float | None = None
+    # Groesse aller Raeder oder, bei Mischbereifung, die der Vorderachse;
+    # `size_rear` bleibt dann fuer die Hinterachse (siehe models.TireSet).
     size: str | None = None
+    size_rear: str | None = None
     brand: str | None = None
     model: str | None = None
     notes: str | None = None
@@ -244,6 +247,7 @@ class TireSetUpdate(BaseModel):
     installed_on: datetime | None = None
     odometer_km: float | None = None
     size: str | None = None
+    size_rear: str | None = None
     brand: str | None = None
     model: str | None = None
     notes: str | None = None

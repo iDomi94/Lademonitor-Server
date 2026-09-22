@@ -103,6 +103,11 @@
             <input type="text" id="tire-size" placeholder="{{ t('tires.form.size_placeholder') }}">
           </div>
           <div>
+            <label>{{ t('tires.form.size_rear') }}</label>
+            <input type="text" id="tire-size-rear"
+                   placeholder="{{ t('tires.form.size_rear_placeholder') }}">
+          </div>
+          <div>
             <label>{{ t('tires.form.brand') }}</label>
             <input type="text" id="tire-brand" placeholder="{{ t('tires.form.brand_placeholder') }}">
           </div>
@@ -113,6 +118,9 @@
           <div>
             <label>{{ t('tires.form.notes') }}</label>
             <input type="text" id="tire-notes">
+          </div>
+          <div style="grid-column:1/-1; color:var(--muted); font-size:0.85em">
+            {{ t('tires.form.size_hint') }}
           </div>
           <div class="form-actions">
             <button type="submit" id="tire-submit">{{ t('tires.form.submit_new') }}</button>
@@ -185,6 +193,11 @@ const signed = (value, digits) =>
   value === null || value === undefined ? '–'
     : (value >= 0 ? '+' : '') + Number(value).toFixed(digits);
 const vehicleName = id => (vehicles.find(v => v.id === id) || {}).name || '–';
+// Bei Mischbereifung beide Achsen, sonst die eine Groesse - dieselbe Regel
+// wie serverseitig in tires.py::size_label().
+const sizeLabel = set => set.size && set.size_rear
+  ? `${set.size} / ${set.size_rear}`
+  : (set.size || set.size_rear || '');
 const shortDate = value =>
   new Date(value).toLocaleDateString(window.LADEMONITOR_LANG, { dateStyle: 'medium' });
 // Ein Reifen laeuft ueber Jahre - in Tagen ist das ab einem gewissen Punkt
@@ -219,7 +232,7 @@ async function loadTireSets() {
     `<th>${T.colTire}</th><th>${T.colDaysMounted}</th><th>${T.colDrives}</th>` +
     `<th>${T.colKm}</th><th>${T.colNotes}</th><th></th></tr>`;
   table.innerHTML = head + tireSets.map(set => {
-    const label = [set.brand, set.model, set.size].filter(Boolean).join(' ') || '–';
+    const label = [set.brand, set.model, sizeLabel(set)].filter(Boolean).join(' ') || '–';
     // Die Montage endet erst mit dem naechsten Wechsel - das Enddatum steht
     // deshalb nicht am Datensatz, sondern kommt aus der Uebersicht.
     const stats = mountingById[set.id];
@@ -356,6 +369,7 @@ function startEditTire(id) {
   document.getElementById('tire-installed').value = set.installed_on.slice(0, 10);
   document.getElementById('tire-odometer').value = set.odometer_km ?? '';
   document.getElementById('tire-size').value = set.size || '';
+  document.getElementById('tire-size-rear').value = set.size_rear || '';
   document.getElementById('tire-brand').value = set.brand || '';
   document.getElementById('tire-model').value = set.model || '';
   document.getElementById('tire-notes').value = set.notes || '';
@@ -389,6 +403,7 @@ document.getElementById('tire-form').addEventListener('submit', async (event) =>
     // Summe der Fahrten zurueck, statt bei Kilometerstand 0 zu beginnen.
     odometer_km: parseFloat(document.getElementById('tire-odometer').value) || null,
     size: document.getElementById('tire-size').value.trim() || null,
+    size_rear: document.getElementById('tire-size-rear').value.trim() || null,
     brand: document.getElementById('tire-brand').value.trim() || null,
     model: document.getElementById('tire-model').value.trim() || null,
     notes: document.getElementById('tire-notes').value.trim() || null,

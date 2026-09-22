@@ -1821,6 +1821,17 @@ als zu frueh** - ein zu frueh gesetztes Datum schreibt diesem Satz Fahrten zu,
 die auf einem anderen liefen (falsche Zahlen), ein zu spaetes laesst nur ein
 paar Fahrten weg (weniger Zahlen).
 
+**Mischbereifung: zwei Groessenfelder** (`size`, `size_rear`, ab v0.26.1). Ohne
+`size_rear` gilt `size` fuer alle vier Raeder, mit ihr fuer die Vorderachse -
+ein Pflichtfeld "hinten" waere bei den allermeisten Fahrzeugen eine Dopplung.
+Bewusst zwei Spalten statt eines Freitexts ("vorne X, hinten Y"): sonst haette
+jeder seine eigene Schreibweise und ein spaeterer Vergleich ueber die Groesse
+scheiterte daran. `size_label()` baut daraus "vorne / hinten" bzw. die eine
+Groesse; die Web-UI hat dieselbe Regel nochmal in JS, damit Liste und Formular
+nicht auseinanderlaufen. `_signature()` nimmt `size_rear` mit auf - derselbe
+Reifen einmal rundum gleich und einmal gestaffelt sind zwei verschiedene
+Saetze und duerfen nicht zu einer Gruppe verschmelzen.
+
 **Was zu welchem Satz zaehlt:** der Verbrauch eines Vorgangs N beschreibt die
 Strecke zwischen N-1 und N (siehe `consumption.py`). `sets_for_drives()` ordnet
 eine Fahrt deshalb nur zu, wenn an BEIDEN Enden derselbe Satz montiert war;

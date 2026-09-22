@@ -190,6 +190,13 @@ def run_light_migrations() -> None:
             text("ALTER TABLE tire_sets ADD COLUMN IF NOT EXISTS odometer_km DOUBLE PRECISION")
         )
 
+        # Mischbereifung: zweite Groesse fuer die Hinterachse (siehe
+        # models.TireSet). Bestandszeilen bleiben NULL - das heisst "gleiche
+        # Groesse rundum", und genau so war es bis hierher auch gemeint.
+        conn.execute(
+            text("ALTER TABLE tire_sets ADD COLUMN IF NOT EXISTS size_rear VARCHAR")
+        )
+
         # i18n: UI-Sprache pro Nutzer (siehe models.User.language). DEFAULT 'de'
         # deckt sowohl neue Zeilen als auch - via UPDATE - bereits bestehende
         # Nutzer ab, die die Spalte noch nicht hatten (Postgres setzt den
