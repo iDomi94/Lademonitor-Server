@@ -646,13 +646,27 @@ class SeasonStatOut(BaseModel):
     km: float
 
 
+class TempCurveVertexOut(BaseModel):
+    temp_c: float
+    consumption: float
+
+
 class TempTrendOut(BaseModel):
+    # slope/intercept beschreiben IMMER die einfache Ausgleichsgerade, auch
+    # wenn model == "breakpoint" - aeltere Clients zeichnen damit weiter eine
+    # plausible Linie. Wer die Kurve kennt, nimmt `curve` als Streckenzug.
     slope: float
     intercept: float
     r2: float
     consumption_at_0c: float
     consumption_at_20c: float
     extra_pct_at_0c: float
+    model: str = "linear"
+    curve: list[TempCurveVertexOut] = []
+    breakpoint_c: float | None = None
+    slope_cold: float | None = None
+    slope_warm: float | None = None
+    at_0c_is_extrapolated: bool = False
 
 
 class TemperatureStats(BaseModel):

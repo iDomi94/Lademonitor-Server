@@ -12,6 +12,7 @@ import pytest
 from app import models
 from app.temperature import (
     BUCKET_WIDTH_C,
+    TempPoint,
     build_buckets,
     build_seasons,
     build_trend,
@@ -397,3 +398,178 @@ def test_a_vehicle_value_is_still_paired_with_its_predecessor():
     points, _ = points_for(sessions)
 
     assert points[0].temp_c == pytest.approx(5.0)
+
+
+# ---------------------------------------------------------------------------
+# Knickmodell: zwei Geraden statt einer
+# ---------------------------------------------------------------------------
+
+
+def _wanne(temp: float) -> float:
+    """Verbrauch einer idealisierten Wanne: Knick bei 18 Grad.
+
+    Unterhalb steigt er je Grad Kaelte um 0,25 kWh/100 km (Heizen), oberhalb je
+    Grad Waerme um 0,10 (Kuehlen) - Heizen kostet deutlich mehr, genau die
+    Asymmetrie, an der eine Parabel scheitern wuerde.
+    """
+    return 16.0 + (0.25 * (18 - temp) if temp < 18 else 0.10 * (temp - 18))
+
+
+def _wannen_sessions() -> list[models.ChargingSession]:
+    rows = []
+    odo = 1000.0
+    for index, temp in enumerate(
+        [-5.0, 0.0, 3.0, 7.0, 11.0, 15.0, 19.0, 22.0, 26.0, 30.0, 33.0, 35.0]
+    ):
+        km = 200.0
+        # Energie so waehlen, dass genau der gewuenschte Verbrauch herauskommt;
+        # SoC_Ende konstant, damit der Korrekturterm der Kette wegfaellt.
+        rows.append(
+            session(index, temp=temp, odo=odo + km, kwh=_wanne(temp) * km / 100, soc_end=80)
+        )
+        odo += km
+    # Der erste Vorgang liefert nur den Ausgangs-Kilometerstand.
+    rows.insert(0, session(99, temp=None, odo=1000.0, kwh=10.0, soc_end=80))
+    rows.sort(key=lambda r: r.start_time)
+    return rows
+
+
+def test_a_u_shape_is_fitted_with_two_lines_not_one():
+    """Eine Gerade presst Heizen und Kuehlen in eine Steigung und mittelt sie
+    gegeneinander weg. Genau deshalb gibt es das Knickmodell."""
+    points, _ = points_for(_wannen_sessions())
+
+    trend = build_trend(points)
+
+    assert trend is not None
+    assert trend.model == "breakpoint"
+    # Der gesuchte Knick liegt beim Minimum der Wanne.
+    assert trend.breakpoint_c == pytest.approx(18.0, abs=1.5)
+    assert trend.slope_cold < 0 and trend.slope_warm > 0
+    # Eine Gerade wuerde hier deutlich schlechter passen.
+    assert trend.r2 > 0.9
+
+
+def test_the_curve_has_three_vertices_and_stays_inside_the_data():
+    """Gezeichnet wird nur ueber den gemessenen Bereich - eine bis 0 Grad
+    verlaengerte Kurve liesse eine Hochrechnung wie eine Messung aussehen."""
+    points, _ = points_for(_wannen_sessions())
+
+    trend = build_trend(points)
+
+    assert len(trend.curve) == 3
+    temps = [v.temp_c for v in trend.curve]
+    assert temps[0] == pytest.approx(min(p.temp_c for p in points))
+    assert temps[-1] == pytest.approx(max(p.temp_c for p in points))
+    assert temps[0] < temps[1] < temps[2]
+
+
+def test_a_purely_linear_relation_stays_a_single_line():
+    """Zwei zusaetzliche Parameter passen IMMER besser. Ohne die Huerde waere
+    das Ergebnis nie wieder eine Gerade."""
+    rows = [session(99, temp=None, odo=1000.0, kwh=10.0, soc_end=80)]
+    odo = 1000.0
+    for index, temp in enumerate([-5.0, 0.0, 5.0, 10.0, 15.0, 20.0, 25.0, 30.0]):
+        km = 200.0
+        consumption = 22.0 - 0.2 * temp
+        rows.append(session(index, temp=temp, odo=odo + km, kwh=consumption * km / 100, soc_end=80))
+        odo += km
+    rows.sort(key=lambda r: r.start_time)
+
+    trend = build_trend(points_for(rows)[0])
+
+    assert trend.model == "linear"
+    assert trend.breakpoint_c is None
+    assert trend.slope < 0
+
+
+def test_data_without_a_cold_branch_stays_a_single_line():
+    """Genau der Fall des Nutzers im ersten Jahr: gemessen ab Maerz, kaeltester
+    Wert 5,7 Grad. Fuer einen kalten Ast fehlen schlicht die Fahrten - dann
+    darf das Modell auch keinen behaupten."""
+    rows = [session(99, temp=None, odo=1000.0, kwh=10.0, soc_end=80)]
+    odo = 1000.0
+    for index, temp in enumerate([16.0, 18.0, 20.0, 22.0, 24.0, 26.0, 28.0, 30.0]):
+        km = 200.0
+        rows.append(
+            session(index, temp=temp, odo=odo + km, kwh=_wanne(temp) * km / 100, soc_end=80)
+        )
+        odo += km
+    rows.sort(key=lambda r: r.start_time)
+
+    trend = build_trend(points_for(rows)[0])
+
+    assert trend.model == "linear"
+
+
+def test_the_extrapolation_flag_marks_a_winter_that_was_never_measured():
+    """Die Kennzahl "bei 0 statt 20 Grad" ist dann eine Hochrechnung. Ohne
+    diesen Hinweis liest man sie als Messung."""
+    points, _ = points_for(_wannen_sessions())
+    assert build_trend(points).at_0c_is_extrapolated is False
+
+    rows = [session(99, temp=None, odo=1000.0, kwh=10.0, soc_end=80)]
+    odo = 1000.0
+    for index, temp in enumerate([6.0, 10.0, 14.0, 18.0, 22.0, 26.0, 30.0]):
+        km = 200.0
+        rows.append(
+            session(index, temp=temp, odo=odo + km, kwh=_wanne(temp) * km / 100, soc_end=80)
+        )
+        odo += km
+    rows.sort(key=lambda r: r.start_time)
+
+    assert build_trend(points_for(rows)[0]).at_0c_is_extrapolated is True
+
+
+def test_the_simple_line_is_reported_even_when_the_breakpoint_model_wins():
+    """slope/intercept beschreiben IMMER die Gerade - aeltere Apps zeichnen
+    damit weiter eine plausible Linie, statt gar keine."""
+    points, _ = points_for(_wannen_sessions())
+
+    trend = build_trend(points)
+
+    assert trend.model == "breakpoint"
+    assert trend.slope != 0.0
+    # Die Gerade durch eine Wanne mit laengerem kalten Ast faellt.
+    assert trend.intercept > 0
+
+
+# Die echten Fahrten des Nutzers, Stand 09/2026: (Temperatur, kWh/100 km,
+# Kilometer). Gemessen ab Maerz, kaeltester Wert 5,7 Grad - es gibt also gar
+# keinen Winter in den Daten, nur Streuung zwischen 6 und 30 Grad.
+REAL_DRIVES = [
+    (9.1, 13.06, 432.0), (5.7, 18.01, 348.0), (12.6, 17.46, 282.0), (12.7, 25.83, 82.0),
+    (11.6, 14.45, 158.0), (15.1, 19.08, 246.0), (23.7, 17.16, 186.0), (15.9, 26.19, 52.0),
+    (9.8, 16.29, 298.0), (16.2, 17.29, 283.0), (24.1, 17.34, 116.0), (22.8, 16.89, 330.0),
+    (20.6, 17.26, 110.0), (18.5, 15.16, 218.0), (24.6, 21.84, 58.0), (30.2, 24.28, 81.0),
+    (22.4, 18.29, 246.0), (24.5, 18.62, 322.0), (24.4, 16.61, 300.0), (26.5, 20.98, 175.0),
+    (24.3, 12.37, 274.0), (20.1, 17.08, 120.0), (20.0, 17.44, 215.0), (25.7, 19.06, 123.0),
+    (28.1, 19.63, 317.0), (27.0, 17.15, 144.0), (24.6, 18.59, 127.0), (28.2, 12.44, 130.0),
+    (30.2, 38.5, 6.0), (23.4, 17.42, 379.0), (21.7, 18.4, 113.0), (17.8, 18.27, 367.0),
+    (22.4, 15.88, 95.0), (22.6, 12.43, 316.0), (19.4, 15.86, 145.0), (19.9, 18.61, 269.0),
+    (17.5, 15.0, 272.0),
+]
+
+
+def test_a_year_without_winter_does_not_get_a_breakpoint():
+    """Regression an echten Daten: ohne kalte Fahrten darf kein kalter Ast
+    behauptet werden.
+
+    Mit den urspruenglichen Huerden (5 K je Ast, 0,05 r2-Gewinn) legte das
+    Modell den Knick genau hier auf 23 Grad, machte aus dem gesamten Bereich
+    5,7-23 Grad einen praktisch waagerechten "kalten" Ast und aus den zwei
+    heissesten Fahrten einen steilen "warmen" - formal besser (r2 0,08 statt
+    0,03), inhaltlich zwei Ausreisser mit einer Geschichte drumherum.
+    """
+    points = [
+        TempPoint(f"s{i}", BASE + timedelta(days=i), temp, consumption, km,
+                  "soc_corrected", "summer")
+        for i, (temp, consumption, km) in enumerate(REAL_DRIVES)
+    ]
+
+    trend = build_trend(points)
+
+    assert trend.model == "linear"
+    assert trend.breakpoint_c is None
+    # Und der Hinweis, dass die Kennzahl fuer 0 Grad eine Hochrechnung ist.
+    assert trend.at_0c_is_extrapolated is True
