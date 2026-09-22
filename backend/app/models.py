@@ -447,9 +447,18 @@ class TireSet(Base):
     # auch die Fahrt, die ueber den Wechsel hinweg lief und deshalb keinem
     # Satz zugeordnet werden kann (siehe tires.py).
     odometer_km: Mapped[float | None] = mapped_column(Float, nullable=True)
-    # Freitext, alle drei optional - ein Satz ohne Marke ist immer noch ein
+    # Freitext, alle vier optional - ein Satz ohne Marke ist immer noch ein
     # Satz, und die Auswertung braucht nur `kind` und `installed_on`.
+    #
+    # `size` ist die Groesse aller vier Raeder ODER, bei Mischbereifung, die
+    # der VORDERACHSE; `size_rear` bleibt dann fuer die Hinterachse. Zwei
+    # Felder statt eines Freitexts ("vorne X, hinten Y"), weil sonst jeder
+    # seine eigene Schreibweise haette und ein spaeterer Vergleich ueber die
+    # Groesse daran scheitern wuerde. Gleiche Groesse rundum: nur `size`
+    # fuellen - ein Pflichtfeld "hinten" waere bei den allermeisten
+    # Fahrzeugen eine Dopplung.
     size: Mapped[str | None] = mapped_column(String, nullable=True)
+    size_rear: Mapped[str | None] = mapped_column(String, nullable=True)
     brand: Mapped[str | None] = mapped_column(String, nullable=True)
     model: Mapped[str | None] = mapped_column(String, nullable=True)
     # Verschluesselt (siehe crypto.py) - Freitext, keine SQL-Filterung darauf,

@@ -23,6 +23,11 @@ folgen [Semantic Versioning](https://semver.org/).
   aufgezogene Satz mit seinem tatsächlichen Montagedatum. Sie steht über dem
   Formular, solange noch kein Wechsel existiert — im zugeklappten Hilfetext
   findet sie in genau diesem Moment niemand.
+- **`TireSet.size_rear`**: zweite Größe für die Hinterachse (Mischbereifung),
+  optional. `size` gilt ohne sie für alle vier Räder, mit ihr für die
+  Vorderachse. Zwei Felder statt eines Freitexts, weil sonst jeder seine eigene
+  Schreibweise hätte. Geht in `_signature()` ein: derselbe Reifen einmal rundum
+  gleich und einmal gestaffelt sind zwei Sätze.
 - **`TireSet.odometer_km`**: Kilometerstand beim Wechsel, optional. Ist er an
   beiden Enden einer Montage bekannt, ist die Laufleistung die Differenz —
   exakt, und inklusive der Fahrt über den Wechsel hinweg; sonst bleibt es bei

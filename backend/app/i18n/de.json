@@ -639,7 +639,7 @@
   "tires.form.vehicle": "Fahrzeug",
   "tires.form.kind": "Art",
   "tires.form.installed_on": "Montiert am",
-  "tires.form.size": "Groesse",
+  "tires.form.size": "Größe",
   "tires.form.size_placeholder": "z. B. 235/45 R21",
   "tires.form.brand": "Marke",
   "tires.form.brand_placeholder": "z. B. Michelin",
@@ -667,5 +667,8 @@
   "tires.form.odometer_placeholder": "beim Wechsel, optional",
   "tires.km_estimated": "Nur aus den zugeordneten Fahrten gezählt – die Fahrt über den Wechsel hinweg fehlt. Trage den Kilometerstand beim Wechsel ein, dann wird der Wert exakt.",
   "tires.getting_started_heading": "So fängst du an:",
-  "tires.getting_started": "Trag den Satz ein, der gerade aufgezogen ist – mit dem Datum, an dem er montiert wurde, auch wenn das ein Jahr zurückliegt, und dem Kilometerstand von damals, falls du ihn noch findest (Werkstattrechnung, Serviceheft). Alle Fahrten VOR diesem Datum bleiben bewusst ohne Reifensatz: was damals drauf war, weiß die App nicht, und ein geratener Eintrag wäre schlimmer als keiner. Weißt du das Montagedatum nicht mehr genau, nimm lieber ein etwas späteres als ein zu frühes – zu früh geraten schreibt diesem Satz fremde Fahrten zu, zu spät lässt nur ein paar Fahrten unberücksichtigt. Der Vergleich beginnt erst, wenn der zweite Satz eingetragen ist und auf beiden gefahren wurde; die Übersicht füllt sich schon vorher."
+  "tires.getting_started": "Trag den Satz ein, der gerade aufgezogen ist – mit dem Datum, an dem er montiert wurde, auch wenn das ein Jahr zurückliegt, und dem Kilometerstand von damals, falls du ihn noch findest (Werkstattrechnung, Serviceheft). Alle Fahrten VOR diesem Datum bleiben bewusst ohne Reifensatz: was damals drauf war, weiß die App nicht, und ein geratener Eintrag wäre schlimmer als keiner. Weißt du das Montagedatum nicht mehr genau, nimm lieber ein etwas späteres als ein zu frühes – zu früh geraten schreibt diesem Satz fremde Fahrten zu, zu spät lässt nur ein paar Fahrten unberücksichtigt. Der Vergleich beginnt erst, wenn der zweite Satz eingetragen ist und auf beiden gefahren wurde; die Übersicht füllt sich schon vorher.",
+  "tires.form.size_rear": "Größe hinten",
+  "tires.form.size_rear_placeholder": "nur bei Mischbereifung",
+  "tires.form.size_hint": "Gleiche Größe rundum? Dann reicht das erste Feld. Bei Mischbereifung steht dort die Vorderachse und rechts die Hinterachse."
 }
