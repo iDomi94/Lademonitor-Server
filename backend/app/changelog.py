@@ -5,6 +5,24 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.26.0",
+        "date": "2026-09-22",
+        "title": "Reifen: Sommer gegen Winter, temperaturbereinigt",
+        "changes": [
+            "Neuer Punkt in der Hauptleiste: „Reifen\". Dort trägst du jeden Reifenwechsel ein - Art (Sommer/Winter/Ganzjahr), Datum, Größe, Marke und Modell. Ab dem Datum gilt der neue Satz, bis der nächste Eintrag folgt; mehr als zwei Einträge pro Jahr sind ausdrücklich vorgesehen (neue Sommerreifen mitten in der Saison sind ein eigener Satz, kein zweiter Frühling).",
+            "Darunter der eigentliche Punkt: der Vergleich, was welcher Satz verbraucht - und zwar temperaturbereinigt. Die beiden Saison-Durchschnitte einfach gegeneinanderzustellen, würde nur messen, dass Winterreifen im Winter gefahren werden: Heizung, kalter Akku und Rollwiderstand bei Kälte landeten allesamt auf dem Konto der Reifen.",
+            "Stattdessen wird gegen die Verbrauchskurve über der Außentemperatur gerechnet (dieselbe wie im Dashboard): für jede Fahrt gibt es einen bei ihrer Temperatur erwarteten Verbrauch, verglichen wird die Abweichung davon. „Dieser Satz liegt bei gleicher Temperatur um X % darüber\" ist eine Aussage über Reifen. Die Kurve selbst wird dabei um die Niveauunterschiede der Sätze bereinigt - sonst zöge ein durstigerer Satz die Kurve in seinem Temperaturband mit hoch und der gemessene Unterschied fiele zu klein aus.",
+            "Die Grenze der Rechnung steht über der Tabelle statt in einer Fußnote: Trennen lassen sich Reifen- und Temperatureffekt nur dort, wo beide Sätze über einen gemeinsamen Temperaturbereich gefahren wurden. Den liefern die Übergangsmonate um den Wechsel herum. Fehlt er, ist die bereinigte Spalte eine Hochrechnung - und die Seite sagt das.",
+            "Eine Fahrt, in deren Zeitraum gewechselt wurde, lief auf beiden Sätzen und gehört zu keinem. Sie wird verworfen und mitgezählt, ebenso die Fahrten vor dem ersten eingetragenen Wechsel - beide Zahlen stehen unter der Tabelle, damit sichtbar bleibt, auf wie viel die Auswertung sich stützt.",
+            "Über der Auswertung steht eine Übersicht der Sätze: seit wann es sie gibt, wie lange sie insgesamt aufgezogen waren, wie viele Fahrten und Kilometer darauf liegen und wie viel geladen wurde. Wiedermontagen desselben Satzes stehen dabei in EINER Zeile - sonst ließe sich „wie viel km sind da drauf\" gar nicht beantworten. Das Alter seit der ersten Montage steht daneben, weil Gummi auch im Keller altert.",
+            "Erklärt wird auch, wie man überhaupt anfängt: der erste Eintrag ist der Satz, der GERADE aufgezogen ist – mit dem Datum, an dem er montiert wurde, nicht dem von heute. Solange noch kein Wechsel eingetragen ist, steht der Hinweis direkt über dem Formular statt im zugeklappten Hilfetext. Fahrten vor diesem Datum bleiben bewusst ohne Satz, und beim Raten gilt: lieber ein etwas späteres Datum als ein zu frühes.",
+            "Beim Reifenwechsel lässt sich der Kilometerstand mitangeben. Er ist die genauere Quelle für die Laufleistung: die Differenz zweier Wechsel enthält auch die eine Fahrt, die über den Wechsel hinweg lief und deshalb keinem Satz zugeordnet werden kann. Fehlt er, wird weiter über die zugeordneten Fahrten gezählt – solche Werte sind in der Übersicht mit einem Sternchen markiert.",
+            "Die Tabelle der Wechsel zeigt jetzt den Zeitraum jeder Montage (bis zum nächsten Wechsel bzw. „heute\") samt Dauer, Fahrten und Kilometern - das Enddatum wird abgeleitet, eingetragen wird weiterhin nur der Wechsel selbst.",
+            "Derselbe Reifensatz im nächsten Winter fällt mit seiner früheren Montage zu einer Gruppe zusammen (gleiche Art, Marke, Modell, Größe) statt als zweite, halb so große Gruppe zu erscheinen.",
+            "Vorerst nur Server und Web-Oberfläche; die Endpunkte sind regulärer Teil der REST-API, damit iOS- und Android-App später ohne Serveränderung nachziehen können.",
+        ],
+    },
+    {
         "version": "0.25.0",
         "date": "2026-09-22",
         "title": "Verbrauchskurve: zwei Geraden statt einer",

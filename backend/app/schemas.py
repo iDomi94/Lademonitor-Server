@@ -10,6 +10,7 @@ from .models import (
     SmtpSecurity,
     SyncEntityType,
     TemperatureSource,
+    TireKind,
     WebdavBackupFrequency,
 )
 
@@ -214,6 +215,125 @@ class ProviderOut(ProviderBase):
     model_config = ConfigDict(from_attributes=True)
     id: str
     created_at: datetime
+
+
+# ---------- Reifen ----------
+
+class TireSetBase(BaseModel):
+    vehicle_id: str
+    kind: TireKind
+    # Montagedatum. Datum ohne Uhrzeit waere sauberer, aber die ganze App
+    # rechnet in naiven datetimes (siehe ChargingSession.start_time) - ein
+    # zweiter Typ waere nur eine weitere Umrechnungsstelle.
+    installed_on: datetime
+    # Kilometerstand beim Wechsel - macht die Laufleistung eines Satzes exakt
+    # statt sie aus den Fahrten zusammenzuzaehlen (siehe tires.py).
+    odometer_km: float | None = None
+    size: str | None = None
+    brand: str | None = None
+    model: str | None = None
+    notes: str | None = None
+
+
+class TireSetCreate(TireSetBase):
+    pass
+
+
+class TireSetUpdate(BaseModel):
+    kind: TireKind | None = None
+    installed_on: datetime | None = None
+    odometer_km: float | None = None
+    size: str | None = None
+    brand: str | None = None
+    model: str | None = None
+    notes: str | None = None
+
+
+class TireSetOut(TireSetBase):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    created_at: datetime
+
+
+class TireMountingOut(BaseModel):
+    """Eine Montage mit ihrer Laufleistung - die Uebersicht, nicht der Vergleich."""
+
+    tire_set_id: str
+    vehicle_id: str
+    kind: str
+    label: str
+    installed_on: datetime
+    removed_on: datetime | None = None
+    is_current: bool
+    days: int
+    drives: int
+    km: float
+    # "odometer" (Differenz der Kilometerstaende beider Wechsel) oder "drives"
+    # (Summe der zugeordneten Fahrten). Der erste Weg ist exakt, der zweite
+    # laesst die Fahrt ueber den Wechsel hinweg aussen vor - die Anzeige soll
+    # das unterscheiden koennen.
+    km_source: str
+    energy_kwh: float
+    avg_consumption_kwh_per_100km: float | None = None
+
+
+class TireSetSummaryOut(BaseModel):
+    """Ein Satz ueber alle seine Montagen hinweg."""
+
+    key: str
+    label: str
+    kind: str
+    mountings: int
+    first_installed_on: datetime
+    # Alter seit der ersten Montage UND die Tage, die er wirklich drauf war -
+    # Gummi altert auch im Keller, die Laufleistung tut es nicht.
+    age_days: int
+    days_mounted: int
+    drives: int
+    km: float
+    km_source: str
+    energy_kwh: float
+    is_current: bool
+    avg_consumption_kwh_per_100km: float | None = None
+
+
+class TireOverviewOut(BaseModel):
+    mountings: list[TireMountingOut] = []
+    sets: list[TireSetSummaryOut] = []
+    drives_without_set: int = 0
+    drives_spanning_change: int = 0
+
+
+class TireGroupOut(BaseModel):
+    key: str
+    label: str
+    kind: str
+    drives: int
+    km: float
+    avg_consumption_kwh_per_100km: float
+    avg_temp_c: float
+    min_temp_c: float
+    max_temp_c: float
+    # Erst diese beiden Werte sind zwischen den Gruppen vergleichbar: der rohe
+    # Durchschnitt misst vor allem, bei welchen Temperaturen gefahren wurde.
+    adjusted_consumption_kwh_per_100km: float | None = None
+    delta_pct_vs_model: float | None = None
+
+
+class TireComparisonOut(BaseModel):
+    by_kind: list[TireGroupOut] = []
+    by_set: list[TireGroupOut] = []
+    # Temperatur, auf die beide Gruppen umgerechnet wurden.
+    reference_temp_c: float | None = None
+    model: str | None = None
+    r2: float | None = None
+    drives_without_set: int = 0
+    drives_spanning_change: int = 0
+    # Gemeinsamer Temperaturbereich der Arten. Ohne ihn ist die Bereinigung
+    # eine Hochrechnung - die Oberflaeche sagt das dann auch.
+    overlap_span_c: float | None = None
+    overlap_ok: bool = False
+    winter_vs_summer_pct: float | None = None
 
 
 # ---------- ChargingLocation ----------

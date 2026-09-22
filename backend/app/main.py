@@ -38,6 +38,7 @@ from .routers import (
     sessions,
     stats,
     sync,
+    tires,
     vehicles,
     weather,
     webdav_backup,
@@ -182,6 +183,7 @@ app.include_router(backup.router, dependencies=[Depends(get_current_user)])
 app.include_router(webdav_backup.router, dependencies=[Depends(get_current_user)])
 app.include_router(myskoda.router, dependencies=[Depends(get_current_user)])
 app.include_router(weather.router, dependencies=[Depends(get_current_user)])
+app.include_router(tires.router, dependencies=[Depends(get_current_user)])
 # email.router prueft pro Endpunkt selbst auf Admin (require_admin), braucht
 # hier also nur die allgemeine Anmeldepflicht wie die uebrigen Router.
 app.include_router(email.router, dependencies=[Depends(get_current_user)])
@@ -245,6 +247,11 @@ def sessions_page(request: Request, db: Session = Depends(get_db)):
 @app.get("/map", response_class=HTMLResponse)
 def map_page(request: Request, db: Session = Depends(get_db)):
     return _page(request, db, "map.html")
+
+
+@app.get("/tires", response_class=HTMLResponse)
+def tires_page(request: Request, db: Session = Depends(get_db)):
+    return _page(request, db, "tires.html")
 
 
 @app.get("/import", response_class=HTMLResponse)

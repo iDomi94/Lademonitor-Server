@@ -60,6 +60,21 @@ class SessionSource(str, enum.Enum):
     IMPORT = "import"
 
 
+class TireKind(str, enum.Enum):
+    """Art eines Reifensatzes.
+
+    Bewusst nur diese drei: die Auswertung (`tires.py`) vergleicht Saetze
+    GEGENEINANDER, und dafuer ist die Art nur die Gruppierung. Alles Weitere
+    (Marke, Modell, Groesse) steht als Freitext daneben, weil eine Liste
+    gepflegter Reifenmodelle in einer selbstgehosteten App niemand aktuell
+    haelt.
+    """
+
+    SUMMER = "summer"
+    WINTER = "winter"
+    ALL_SEASON = "all_season"
+
+
 class WebdavBackupFrequency(str, enum.Enum):
     DAILY = "daily"
     WEEKLY = "weekly"
@@ -262,6 +277,12 @@ class Vehicle(Base):
     sessions: Mapped[list["ChargingSession"]] = relationship(
         back_populates="vehicle", cascade="all, delete-orphan"
     )
+    # Kaskade wie bei den Ladevorgaengen: ohne sie scheitert das Loeschen
+    # eines Fahrzeugs an Postgres' Fremdschluessel, sobald ein Reifensatz
+    # daran haengt (genau der Fehlertyp aus der Loeschfunktion von 2026-09-09).
+    tire_sets: Mapped[list["TireSet"]] = relationship(
+        back_populates="vehicle", cascade="all, delete-orphan"
+    )
 
 
 class Provider(Base):
@@ -389,6 +410,54 @@ class ChargingSession(Base):
     vehicle: Mapped["Vehicle"] = relationship(back_populates="sessions")
     provider: Mapped["Provider"] = relationship(back_populates="sessions")
     location: Mapped["ChargingLocation"] = relationship(back_populates="sessions")
+
+
+class TireSet(Base):
+    """Ein Reifensatz ab seinem Montagedatum.
+
+    **Eine Zeile ist eine MONTAGE, nicht ein physischer Satz.** Wird derselbe
+    Satz im Herbst wieder aufgezogen, kommt eine zweite Zeile dazu. Das ist
+    bewusst so: die Alternative waere eine zweite Tabelle (Satz + Montagen),
+    also ein zweites Formular und eine Auswahlliste fuer einen Vorgang, den
+    man zweimal im Jahr macht. Die Auswertung fasst Wiedermontagen ohnehin
+    zusammen, indem sie nach `(kind, brand, model, size)` gruppiert - zweimal
+    derselbe Satz ist dort ein Eintrag.
+
+    Welcher Satz zu einem Ladevorgang gehoert, entscheidet nicht diese
+    Tabelle, sondern `tires.py`: der jeweils letzte Wechsel VOR dem Vorgang.
+    Deshalb gibt es kein Enddatum - ein Wechsel beendet den vorherigen Satz.
+
+    Bewusst NICHT Teil von `SyncEntityType`: Reifen gibt es vorerst nur auf
+    dem Server und in der Web-Oberflaeche. Einen Grabstein anzulegen wuerde
+    den Apps eine Entitaet ankuendigen, die sie gar nicht kennen.
+    """
+
+    __tablename__ = "tire_sets"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_uuid)
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    # Pflicht: ohne Fahrzeug liesse sich ein Satz keinem Ladevorgang zuordnen.
+    vehicle_id: Mapped[str] = mapped_column(ForeignKey("vehicles.id"), index=True)
+    kind: Mapped[TireKind] = mapped_column(Enum(TireKind))
+    # Montagedatum. Nur ein Datum, keine Uhrzeit - niemand weiss noch, ob der
+    # Wechsel vormittags war, und fuer die Zuordnung ganzer Fahrten reicht es.
+    installed_on: Mapped[datetime] = mapped_column(DateTime, index=True)
+    # Kilometerstand beim Wechsel. Optional, aber die genaueste Quelle fuer
+    # die Laufleistung eines Satzes: die Differenz zweier Wechsel enthaelt
+    # auch die Fahrt, die ueber den Wechsel hinweg lief und deshalb keinem
+    # Satz zugeordnet werden kann (siehe tires.py).
+    odometer_km: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Freitext, alle drei optional - ein Satz ohne Marke ist immer noch ein
+    # Satz, und die Auswertung braucht nur `kind` und `installed_on`.
+    size: Mapped[str | None] = mapped_column(String, nullable=True)
+    brand: Mapped[str | None] = mapped_column(String, nullable=True)
+    model: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Verschluesselt (siehe crypto.py) - Freitext, keine SQL-Filterung darauf,
+    # gleiche Behandlung wie Provider.notes.
+    notes: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    vehicle: Mapped["Vehicle"] = relationship(back_populates="tire_sets")
 
 
 class SyncEntityType(str, enum.Enum):

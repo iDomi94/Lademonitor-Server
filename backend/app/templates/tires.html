@@ -1,0 +1,421 @@
+{% extends "base.html" %}
+{% block content %}
+{# Eigene Hauptleisten-Seite statt eines weiteren Klappabschnitts in den
+   Einstellungen: hier stehen Stammdaten UND eine Auswertung nebeneinander,
+   das ist fuer einen Abschnitt zu viel. Der Pfad liegt wie alle Seiten genau
+   EINE Ebene unter der Basis (/tires), damit die relativen fetch()-Aufrufe
+   unter dem HA-Ingress genauso aufloesen wie am Domain-Root. #}
+<h1>{{ t('tires.page_heading') }}</h1>
+
+<details class="help">
+  <summary>{{ t('common.help') }}</summary>
+  <div class="inner">
+    <p>{{ t('tires.description') }}</p>
+    <p><strong>{{ t('tires.getting_started_heading') }}</strong> {{ t('tires.getting_started') }}</p>
+  </div>
+</details>
+
+<div class="form-actions" style="margin-top:8px">
+  <label style="margin:0">{{ t('tires.vehicle_filter') }}</label>
+  <select id="tire-vehicle-filter" style="max-width:260px"></select>
+</div>
+
+<h2>{{ t('tires.overview_heading') }}</h2>
+<div class="card" id="tire-overview">
+  <div id="tire-overview-empty" style="color:var(--muted); font-size:0.9em"></div>
+  <div class="tablewrap"><table id="tire-sets-table"></table></div>
+  <div style="margin-top:8px; color:var(--muted); font-size:0.85em">
+    {{ t('tires.overview_hint') }}
+  </div>
+</div>
+
+<h2>{{ t('tires.comparison_heading') }}</h2>
+<div class="card" id="tire-comparison">
+  <div id="tire-empty" style="color:var(--muted); font-size:0.9em"></div>
+
+  <div id="tire-hero" hidden style="display:flex; align-items:baseline; gap:12px; flex-wrap:wrap">
+    <div style="font-size:40px; font-weight:600; color:#bd8a26" id="tire-hero-figure"></div>
+    <div>
+      <div>{{ t('tires.hero_label') }}</div>
+      <div style="color:var(--muted); font-size:0.85em" id="tire-hero-detail"></div>
+    </div>
+  </div>
+
+  {# Der Warnhinweis steht UEBER der Tabelle, nicht darunter: ohne
+     Temperatur-Ueberlappung ist die bereinigte Spalte eine Hochrechnung, und
+     das muss man lesen, bevor man die Zahlen liest. #}
+  <div id="tire-overlap-warning" hidden
+       style="margin-top:10px; padding:8px 10px; border-left:3px solid #bd8a26;
+              background:rgba(189,138,38,0.08); font-size:0.88em"></div>
+
+  <div class="tablewrap" style="margin-top:12px">
+    <table id="tire-kind-table"></table>
+  </div>
+
+  <details class="panel plain" id="tire-set-panel" style="margin-top:12px">
+    <summary>{{ t('tires.by_set_heading') }}</summary>
+    <div class="inner">
+      <div class="tablewrap"><table id="tire-set-table"></table></div>
+    </div>
+  </details>
+
+  <div id="tire-excluded" style="margin-top:10px; color:var(--muted); font-size:0.85em"></div>
+</div>
+
+<h2>{{ t('tires.changes_heading') }}</h2>
+<details class="panel" id="tire-list-panel" open>
+  <summary>{{ t('tires.changes_heading') }} <span class="count" id="tire-count"></span></summary>
+  <div class="inner">
+    <div id="tire-getting-started" hidden
+         style="margin-bottom:12px; padding:10px 12px; border-left:3px solid var(--accent2);
+                background:rgba(91,141,239,0.08); font-size:0.9em">
+      <strong>{{ t('tires.getting_started_heading') }}</strong>
+      {{ t('tires.getting_started') }}
+    </div>
+    <details class="panel plain" id="tire-form-panel">
+      <summary id="tire-form-heading">{{ t('tires.form.new_heading') }}</summary>
+      <div class="inner">
+        <form class="inline-form" id="tire-form">
+          <input type="hidden" id="tire-id">
+          <div>
+            <label>{{ t('tires.form.vehicle') }}</label>
+            <select id="tire-vehicle" required></select>
+          </div>
+          <div>
+            <label>{{ t('tires.form.kind') }}</label>
+            <select id="tire-kind" required>
+              <option value="summer">{{ t('tires.kind.summer') }}</option>
+              <option value="winter">{{ t('tires.kind.winter') }}</option>
+              <option value="all_season">{{ t('tires.kind.all_season') }}</option>
+            </select>
+          </div>
+          <div>
+            <label>{{ t('tires.form.installed_on') }}</label>
+            <input type="date" id="tire-installed" required>
+          </div>
+          <div>
+            <label>{{ t('tires.form.odometer') }}</label>
+            <input type="number" step="1" min="0" id="tire-odometer"
+                   placeholder="{{ t('tires.form.odometer_placeholder') }}">
+          </div>
+          <div>
+            <label>{{ t('tires.form.size') }}</label>
+            <input type="text" id="tire-size" placeholder="{{ t('tires.form.size_placeholder') }}">
+          </div>
+          <div>
+            <label>{{ t('tires.form.brand') }}</label>
+            <input type="text" id="tire-brand" placeholder="{{ t('tires.form.brand_placeholder') }}">
+          </div>
+          <div>
+            <label>{{ t('tires.form.model') }}</label>
+            <input type="text" id="tire-model" placeholder="{{ t('tires.form.model_placeholder') }}">
+          </div>
+          <div>
+            <label>{{ t('tires.form.notes') }}</label>
+            <input type="text" id="tire-notes">
+          </div>
+          <div class="form-actions">
+            <button type="submit" id="tire-submit">{{ t('tires.form.submit_new') }}</button>
+            <button type="button" class="ghost" id="tire-cancel" hidden>{{ t('tires.form.cancel') }}</button>
+          </div>
+        </form>
+      </div>
+    </details>
+
+    <div class="tablewrap"><table id="tire-table"></table></div>
+  </div>
+</details>
+
+<script>
+const T = {
+  kind: {
+    summer: {{ t('tires.kind.summer')|tojson }},
+    winter: {{ t('tires.kind.winter')|tojson }},
+    all_season: {{ t('tires.kind.all_season')|tojson }},
+  },
+  colKind: {{ t('tires.col.kind')|tojson }},
+  colInstalled: {{ t('tires.col.installed_on')|tojson }},
+  colTire: {{ t('tires.col.tire')|tojson }},
+  colNotes: {{ t('tires.col.notes')|tojson }},
+  colDrives: {{ t('tires.col.drives')|tojson }},
+  colKm: {{ t('tires.col.km')|tojson }},
+  colAvg: {{ t('tires.col.avg')|tojson }},
+  colTemp: {{ t('tires.col.temp')|tojson }},
+  colAdjusted: {{ t('tires.col.adjusted')|tojson }},
+  colDelta: {{ t('tires.col.delta')|tojson }},
+  edit: {{ t('common.edit')|tojson }},
+  del: {{ t('common.delete')|tojson }},
+  confirmDelete: {{ t('tires.confirm_delete')|tojson }},
+  errorPrefix: {{ t('sessions.error.save_prefix')|tojson }},
+  allVehicles: {{ t('tires.all_vehicles')|tojson }},
+  emptyNoSets: {{ t('tires.empty.no_sets')|tojson }},
+  emptyTooFew: {{ t('tires.empty.too_few')|tojson }},
+  heroDetail: {{ t('tires.hero_detail')|tojson }},
+  overlapWarning: {{ t('tires.overlap_warning')|tojson }},
+  overlapMissing: {{ t('tires.overlap_missing')|tojson }},
+  excluded: {{ t('tires.excluded')|tojson }},
+  colStatus: {{ t('tires.col.status')|tojson }},
+  kmEstimated: {{ t('tires.km_estimated')|tojson }},
+  colMountings: {{ t('tires.col.mountings')|tojson }},
+  colAge: {{ t('tires.col.age')|tojson }},
+  colDaysMounted: {{ t('tires.col.days_mounted')|tojson }},
+  colPeriod: {{ t('tires.col.period')|tojson }},
+  colEnergy: {{ t('tires.col.energy')|tojson }},
+  statusCurrent: {{ t('tires.status.current')|tojson }},
+  statusStored: {{ t('tires.status.stored')|tojson }},
+  periodCurrent: {{ t('tires.period.current')|tojson }},
+  unitDays: {{ t('tires.unit.days')|tojson }},
+  unitYears: {{ t('tires.unit.years')|tojson }},
+  overviewEmpty: {{ t('tires.overview_empty')|tojson }},
+  formNew: {{ t('tires.form.new_heading')|tojson }},
+  formEdit: {{ t('tires.form.edit_heading')|tojson }},
+  submitNew: {{ t('tires.form.submit_new')|tojson }},
+  submitEdit: {{ t('tires.form.submit_edit')|tojson }},
+};
+
+let vehicles = [];
+let tireSets = [];
+// Kennzahlen je Montage, aus /api/tires/overview - die Wechsel-Tabelle zeigt
+// sie in denselben Zeilen, statt dieselbe Liste ein zweites Mal aufzubauen.
+let mountingById = {};
+
+const fmt = (value, digits) =>
+  value === null || value === undefined ? '–' : Number(value).toFixed(digits);
+const signed = (value, digits) =>
+  value === null || value === undefined ? '–'
+    : (value >= 0 ? '+' : '') + Number(value).toFixed(digits);
+const vehicleName = id => (vehicles.find(v => v.id === id) || {}).name || '–';
+const shortDate = value =>
+  new Date(value).toLocaleDateString(window.LADEMONITOR_LANG, { dateStyle: 'medium' });
+// Ein Reifen laeuft ueber Jahre - in Tagen ist das ab einem gewissen Punkt
+// keine ablesbare Zahl mehr.
+const duration = days => days >= 365
+  ? `${(days / 365).toFixed(1)} ${T.unitYears}`
+  : `${days} ${T.unitDays}`;
+
+async function loadVehicles() {
+  const res = await fetch('api/vehicles');
+  vehicles = res.ok ? await res.json() : [];
+  const options = vehicles.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+  document.getElementById('tire-vehicle').innerHTML = options;
+  document.getElementById('tire-vehicle-filter').innerHTML =
+    `<option value="">${T.allVehicles}</option>` + options;
+}
+
+function currentFilter() {
+  return document.getElementById('tire-vehicle-filter').value;
+}
+
+async function loadTireSets() {
+  const filter = currentFilter();
+  const res = await fetch('api/tires' + (filter ? `?vehicle_id=${filter}` : ''));
+  tireSets = res.ok ? await res.json() : [];
+  document.getElementById('tire-count').textContent = tireSets.length;
+
+  const table = document.getElementById('tire-table');
+  document.getElementById('tire-getting-started').hidden = tireSets.length > 0;
+  if (!tireSets.length) { table.innerHTML = ''; return; }
+  const head = `<tr><th>${T.colPeriod}</th><th>${T.colKind}</th>` +
+    `<th>${T.colTire}</th><th>${T.colDaysMounted}</th><th>${T.colDrives}</th>` +
+    `<th>${T.colKm}</th><th>${T.colNotes}</th><th></th></tr>`;
+  table.innerHTML = head + tireSets.map(set => {
+    const label = [set.brand, set.model, set.size].filter(Boolean).join(' ') || '–';
+    // Die Montage endet erst mit dem naechsten Wechsel - das Enddatum steht
+    // deshalb nicht am Datensatz, sondern kommt aus der Uebersicht.
+    const stats = mountingById[set.id];
+    const until = stats && stats.removed_on ? shortDate(stats.removed_on) : T.periodCurrent;
+    return `<tr><td>${shortDate(set.installed_on)}<div style="color:var(--muted); font-size:0.85em">` +
+      `→ ${until}</div></td><td>${T.kind[set.kind] || set.kind}</td>` +
+      `<td>${label}<div style="color:var(--muted); font-size:0.85em">${vehicleName(set.vehicle_id)}</div></td>` +
+      `<td>${stats ? duration(stats.days) : '–'}</td>` +
+      `<td>${stats ? stats.drives : '–'}</td>` +
+      `<td>${stats ? kmCell(stats.km, stats.km_source) : '–'}</td>` +
+      `<td>${set.notes || ''}</td>` +
+      `<td>${editDeleteButtons(`startEditTire('${set.id}')`, `deleteTire('${set.id}')`, T.edit, T.del)}</td></tr>`;
+  }).join('');
+}
+
+function groupRows(groups, withLabel) {
+  return groups.map(g => {
+    const name = withLabel ? (g.label || T.kind[g.kind] || g.kind) : (T.kind[g.kind] || g.kind);
+    const sub = withLabel ? `<div style="color:var(--muted); font-size:0.85em">${T.kind[g.kind] || g.kind}</div>` : '';
+    return `<tr><td>${name}${sub}</td><td>${g.drives}</td><td>${fmt(g.km, 0)}</td>` +
+      `<td>${fmt(g.avg_consumption_kwh_per_100km, 1)}</td>` +
+      `<td>${fmt(g.avg_temp_c, 1)} °C<div style="color:var(--muted); font-size:0.85em">` +
+      `${fmt(g.min_temp_c, 0)} … ${fmt(g.max_temp_c, 0)} °C</div></td>` +
+      `<td><strong>${fmt(g.adjusted_consumption_kwh_per_100km, 1)}</strong></td>` +
+      `<td>${signed(g.delta_pct_vs_model, 1)} %</td></tr>`;
+  }).join('');
+}
+
+function groupHead(firstColumn) {
+  return `<tr><th>${firstColumn}</th><th>${T.colDrives}</th><th>${T.colKm}</th>` +
+    `<th>${T.colAvg}</th><th>${T.colTemp}</th><th>${T.colAdjusted}</th>` +
+    `<th>${T.colDelta}</th></tr>`;
+}
+
+async function loadComparison() {
+  const filter = currentFilter();
+  const res = await fetch('api/tires/comparison' + (filter ? `?vehicle_id=${filter}` : ''));
+  if (!res.ok) return;
+  const data = await res.json();
+
+  const empty = document.getElementById('tire-empty');
+  const hero = document.getElementById('tire-hero');
+  const warning = document.getElementById('tire-overlap-warning');
+  const kindTable = document.getElementById('tire-kind-table');
+  const setPanel = document.getElementById('tire-set-panel');
+
+  kindTable.innerHTML = data.by_kind.length
+    ? groupHead(T.colKind) + groupRows(data.by_kind, false) : '';
+  document.getElementById('tire-set-table').innerHTML = data.by_set.length
+    ? groupHead(T.colTire) + groupRows(data.by_set, true) : '';
+  setPanel.hidden = !data.by_set.length;
+
+  empty.textContent = data.by_kind.length ? '' :
+    (tireSets.length ? T.emptyTooFew : T.emptyNoSets);
+
+  hero.hidden = data.winter_vs_summer_pct === null || data.winter_vs_summer_pct === undefined;
+  if (!hero.hidden) {
+    const value = data.winter_vs_summer_pct;
+    document.getElementById('tire-hero-figure').textContent =
+      (value >= 0 ? '+' : '') + value.toFixed(1) + ' %';
+    document.getElementById('tire-hero-detail').textContent = T.heroDetail
+      .replace('{temp}', fmt(data.reference_temp_c, 0))
+      .replace('{r2}', fmt(data.r2, 2));
+  }
+
+  // Ohne gemeinsamen Temperaturbereich rechnet das Modell den einen Satz in
+  // Temperaturen hoch, in denen er nie gefahren ist.
+  if (data.by_kind.length > 1 && !data.overlap_ok) {
+    warning.hidden = false;
+    warning.textContent = data.overlap_span_c === null
+      ? T.overlapMissing
+      : T.overlapWarning.replace('{span}', fmt(data.overlap_span_c, 1));
+  } else {
+    warning.hidden = true;
+  }
+
+  document.getElementById('tire-excluded').textContent =
+    (data.drives_without_set || data.drives_spanning_change)
+      ? T.excluded
+          .replace('{without}', data.drives_without_set)
+          .replace('{spanning}', data.drives_spanning_change)
+      : '';
+}
+
+const kmCell = (value, source) => source === 'odometer'
+  ? fmt(value, 0)
+  : `<span title="${T.kmEstimated}">${fmt(value, 0)} *</span>`;
+
+async function loadOverview() {
+  const filter = currentFilter();
+  const res = await fetch('api/tires/overview' + (filter ? `?vehicle_id=${filter}` : ''));
+  const data = res.ok ? await res.json() : { mountings: [], sets: [] };
+  mountingById = {};
+  data.mountings.forEach(m => { mountingById[m.tire_set_id] = m; });
+
+  const table = document.getElementById('tire-sets-table');
+  document.getElementById('tire-overview-empty').textContent =
+    data.sets.length ? '' : T.overviewEmpty;
+  if (!data.sets.length) { table.innerHTML = ''; return; }
+
+  const head = `<tr><th>${T.colTire}</th><th>${T.colStatus}</th>` +
+    `<th>${T.colMountings}</th><th>${T.colAge}</th><th>${T.colDaysMounted}</th>` +
+    `<th>${T.colDrives}</th><th>${T.colKm}</th><th>${T.colEnergy}</th>` +
+    `<th>${T.colAvg}</th></tr>`;
+  table.innerHTML = head + data.sets.map(set => {
+    const status = set.is_current
+      ? `<span class="badge" style="background:rgba(79,209,165,0.15); color:var(--accent)">${T.statusCurrent}</span>`
+      : `<span style="color:var(--muted)">${T.statusStored}</span>`;
+    return `<tr><td>${set.label || T.kind[set.kind] || set.kind}` +
+      `<div style="color:var(--muted); font-size:0.85em">${T.kind[set.kind] || set.kind}</div></td>` +
+      `<td>${status}</td><td>${set.mountings}</td>` +
+      `<td>${duration(set.age_days)}<div style="color:var(--muted); font-size:0.85em">` +
+      `${shortDate(set.first_installed_on)}</div></td>` +
+      `<td>${duration(set.days_mounted)}</td><td>${set.drives}</td>` +
+      `<td>${kmCell(set.km, set.km_source)}</td><td>${fmt(set.energy_kwh, 1)} kWh</td>` +
+      `<td>${fmt(set.avg_consumption_kwh_per_100km, 1)}</td></tr>`;
+  }).join('');
+}
+
+function resetTireForm() {
+  document.getElementById('tire-id').value = '';
+  document.getElementById('tire-form').reset();
+  document.getElementById('tire-form-heading').textContent = T.formNew;
+  document.getElementById('tire-submit').textContent = T.submitNew;
+  document.getElementById('tire-cancel').hidden = true;
+}
+
+function startEditTire(id) {
+  const set = tireSets.find(s => s.id === id);
+  if (!set) return;
+  document.getElementById('tire-id').value = set.id;
+  document.getElementById('tire-vehicle').value = set.vehicle_id;
+  document.getElementById('tire-kind').value = set.kind;
+  document.getElementById('tire-installed').value = set.installed_on.slice(0, 10);
+  document.getElementById('tire-odometer').value = set.odometer_km ?? '';
+  document.getElementById('tire-size').value = set.size || '';
+  document.getElementById('tire-brand').value = set.brand || '';
+  document.getElementById('tire-model').value = set.model || '';
+  document.getElementById('tire-notes').value = set.notes || '';
+  document.getElementById('tire-form-heading').textContent = T.formEdit;
+  document.getElementById('tire-submit').textContent = T.submitEdit;
+  document.getElementById('tire-cancel').hidden = false;
+  // Beide Ebenen oeffnen, sonst scrollt das Bearbeiten ins Leere - dasselbe
+  // Muster wie openForEdit() in den Einstellungen.
+  document.getElementById('tire-list-panel').open = true;
+  document.getElementById('tire-form-panel').open = true;
+  document.getElementById('tire-form-panel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+async function deleteTire(id) {
+  if (!confirm(T.confirmDelete)) return;
+  const res = await fetch(`api/tires/${id}`, { method: 'DELETE' });
+  if (!res.ok) { alert(T.errorPrefix + await res.text()); return; }
+  await reloadAll();
+}
+
+document.getElementById('tire-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const id = document.getElementById('tire-id').value;
+  const payload = {
+    vehicle_id: document.getElementById('tire-vehicle').value,
+    kind: document.getElementById('tire-kind').value,
+    // Der Datumswert kommt ohne Uhrzeit; der Server rechnet in naiven
+    // datetimes, deshalb Mitternacht ergaenzen statt ihn raten zu lassen.
+    installed_on: document.getElementById('tire-installed').value + 'T00:00:00',
+    // Ohne Angabe bewusst null statt 0 - die Auswertung faellt dann auf die
+    // Summe der Fahrten zurueck, statt bei Kilometerstand 0 zu beginnen.
+    odometer_km: parseFloat(document.getElementById('tire-odometer').value) || null,
+    size: document.getElementById('tire-size').value.trim() || null,
+    brand: document.getElementById('tire-brand').value.trim() || null,
+    model: document.getElementById('tire-model').value.trim() || null,
+    notes: document.getElementById('tire-notes').value.trim() || null,
+  };
+  const res = await fetch(id ? `api/tires/${id}` : 'api/tires', {
+    method: id ? 'PATCH' : 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) { alert(T.errorPrefix + await res.text()); return; }
+  resetTireForm();
+  await reloadAll();
+});
+
+document.getElementById('tire-cancel').addEventListener('click', resetTireForm);
+document.getElementById('tire-vehicle-filter').addEventListener('change', reloadAll);
+
+async function reloadAll() {
+  // Zuerst die Uebersicht: die Wechsel-Tabelle zeigt deren Kennzahlen mit.
+  await loadOverview();
+  await loadTireSets();
+  await loadComparison();
+}
+
+(async () => {
+  await loadVehicles();
+  await reloadAll();
+})();
+</script>
+{% endblock %}
