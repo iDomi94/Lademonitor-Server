@@ -1529,6 +1529,20 @@ Kurve kennt, zeichnet `curve` als Streckenzug (zwei Eckpunkte bei der Geraden,
 drei beim Knickmodell). Dazu `breakpoint_c` (Temperatur des geringsten
 Verbrauchs), `slope_cold`/`slope_warm` und `at_0c_is_extrapolated`.
 
+**Beide Apps ziehen das inzwischen nach** (`DashboardView.swift::trendLine()`
+bzw. `DashboardScreen.kt`): sie zeichnen den Streckenzug aus `curve`, benennen
+im Kennzahl-Text das benutzte Modell (samt Knicktemperatur) und zeigen den
+Hochrechnungs-Hinweis. Wichtig war dabei ein Detail auf Android: `Charts.kt`
+zog den Trend als EINE Linie vom ersten zum letzten Punkt - ein dritter
+Stuetzpunkt waere stillschweigend uebersprungen worden und die Linie genau
+durch den Knick hindurchgegangen. Jetzt abschnittsweise ueber `zipWithNext()`,
+wie die Klassenmittel-Linie darunter es ohnehin schon macht. In SwiftUI Charts
+ergab sich der Knick dagegen von selbst, weil `trendLine()` ohnehin ein Array
+von `LineMark`s liefert. Ohne diese Anpassung waere nichts kaputtgegangen
+(beide Apps ignorieren unbekannte JSON-Felder), aber die gezeichnete Gerade
+haette nicht mehr zu r2 und dem 0-Grad-Wert daneben gepasst - die gehoeren zu
+dem Modell, das der Server tatsaechlich benutzt hat.
+
 **Gezeichnet wird nur ueber den GEMESSENEN Bereich.** Die Kurve darueber hinaus
 zu verlaengern liesse eine Hochrechnung wie eine Messung aussehen. Die Kennzahl
 "Mehrverbrauch bei 0 statt 20 Grad" wird trotzdem ausgewiesen - aber mit
