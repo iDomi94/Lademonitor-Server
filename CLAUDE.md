@@ -1821,7 +1821,7 @@ als zu frueh** - ein zu frueh gesetztes Datum schreibt diesem Satz Fahrten zu,
 die auf einem anderen liefen (falsche Zahlen), ein zu spaetes laesst nur ein
 paar Fahrten weg (weniger Zahlen).
 
-**Mischbereifung: zwei Groessenfelder** (`size`, `size_rear`). Ohne
+**Mischbereifung: zwei Groessenfelder** (`size`, `size_rear`, ab v0.26.1). Ohne
 `size_rear` gilt `size` fuer alle vier Raeder, mit ihr fuer die Vorderachse -
 ein Pflichtfeld "hinten" waere bei den allermeisten Fahrzeugen eine Dopplung.
 Bewusst zwei Spalten statt eines Freitexts ("vorne X, hinten Y"): sonst haette

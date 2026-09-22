@@ -6,6 +6,22 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.26.1] — 2026-09-22
+
+### Added
+- **`TireSet.size_rear`**: zweite Größe für die Hinterachse (Mischbereifung),
+  optional. `size` gilt ohne sie für alle vier Räder, mit ihr für die
+  Vorderachse — ein Pflichtfeld „hinten" wäre bei den meisten Fahrzeugen eine
+  Dopplung. Zwei Felder statt eines Freitexts, weil sonst jeder seine eigene
+  Schreibweise hätte und ein späterer Vergleich über die Größe daran
+  scheiterte. Geht in `_signature()` ein: derselbe Reifen einmal rundum gleich
+  und einmal gestaffelt sind zwei Sätze und dürfen nicht zu einer Gruppe
+  verschmelzen. Bestandszeilen bleiben NULL — das heißt „gleiche Größe rundum".
+
+### Fixed
+- Das deutsche Label der Reifengröße stand als „Groesse" ohne Umlaut da,
+  während alle übrigen Texte ihn ausschreiben.
+
 ## [0.26.0] — 2026-09-22
 
 ### Added
@@ -23,11 +39,6 @@ folgen [Semantic Versioning](https://semver.org/).
   aufgezogene Satz mit seinem tatsächlichen Montagedatum. Sie steht über dem
   Formular, solange noch kein Wechsel existiert — im zugeklappten Hilfetext
   findet sie in genau diesem Moment niemand.
-- **`TireSet.size_rear`**: zweite Größe für die Hinterachse (Mischbereifung),
-  optional. `size` gilt ohne sie für alle vier Räder, mit ihr für die
-  Vorderachse. Zwei Felder statt eines Freitexts, weil sonst jeder seine eigene
-  Schreibweise hätte. Geht in `_signature()` ein: derselbe Reifen einmal rundum
-  gleich und einmal gestaffelt sind zwei Sätze.
 - **`TireSet.odometer_km`**: Kilometerstand beim Wechsel, optional. Ist er an
   beiden Enden einer Montage bekannt, ist die Laufleistung die Differenz —
   exakt, und inklusive der Fahrt über den Wechsel hinweg; sonst bleibt es bei
