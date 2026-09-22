@@ -2,7 +2,9 @@
 
 Gedacht als Backup/Restore-Mechanismus (z.B. Neuaufsetzen des Servers), nicht
 als flexibles Datenaustauschformat - Reimport erwartet exakt die vom Export
-erzeugte ZIP-Struktur mit den vier festen Dateinamen.
+erzeugte ZIP-Struktur mit den vier festen Dateinamen (plus optional
+`fees.csv` seit v0.27.0 - aeltere ZIPs haben sie nicht und bleiben
+importierbar).
 
 Zwei Faelle, die der Import auseinanderhalten muss (siehe `_target_id`):
 
@@ -62,6 +64,13 @@ SESSION_FIELDS = [
     "outside_temp_source",
 ]
 
+# Seit v0.27.0 (Grundgebuehren, siehe models.ProviderFee). Beim Import
+# OPTIONAL - jede aeltere ZIP hat die Datei nicht.
+FEE_FIELDS = [
+    "id", "provider_id", "provider_name", "amount", "interval",
+    "start_date", "end_date", "label", "notes", "created_at",
+]
+
 README_TEMPLATE = """Lademonitor Backup
 ===================
 
@@ -72,6 +81,7 @@ Inhalt dieser ZIP-Datei:
 - providers.csv   - alle Ladeanbieter
 - locations.csv   - alle bekannten Ladeorte
 - sessions.csv    - alle Ladevorgaenge
+- fees.csv        - Grundgebuehren/Abos der Anbieter (seit v0.27.0)
 
 Format:
 - Trennzeichen: Komma, UTF-8, Kopfzeile in der ersten Zeile
@@ -94,11 +104,14 @@ Reimport:
 - Bereits vorhandene Datensaetze werden uebersprungen statt ueberschrieben.
   Erkannt werden sie an ihrer ID und zusaetzlich an den Fachdaten
   (Fahrzeug: External ID, Anbieter: Name, Ladeort: Name + Koordinaten,
-  Ladevorgang: Fahrzeug + Startzeit) - der Import ist daher gefahrlos
+  Ladevorgang: Fahrzeug + Startzeit, Grundgebuehr: Anbieter + Beginn +
+  Rhythmus + Betrag) - der Import ist daher gefahrlos
   mehrfach ausfuehrbar und legt auch dann nichts doppelt an, wenn die ZIP
   von einem anderen Server stammt und alle IDs abweichen.
-- Die Reihenfolge (Fahrzeuge vor Anbietern vor Ladeorten vor Ladevorgaengen,
-  wegen Fremdschluesseln) uebernimmt der Importer automatisch.
+- Die Reihenfolge (Fahrzeuge vor Anbietern vor Grundgebuehren, Ladeorten und
+  Ladevorgaengen, wegen Fremdschluesseln) uebernimmt der Importer automatisch.
+- fees.csv ist optional: ZIPs aus Versionen vor 0.27.0 enthalten sie nicht
+  und lassen sich trotzdem einlesen.
 
 Nicht enthalten:
 - Zugangsdaten. Insbesondere der MyŠkoda-API-Key und das WebDAV-Passwort sind
@@ -156,6 +169,12 @@ def build_backup_zip(db: Session, user: models.User) -> bytes:
         db.query(models.ChargingSession)
         .filter(models.ChargingSession.user_id == user.id)
         .order_by(models.ChargingSession.start_time)
+        .all()
+    )
+    fees = (
+        db.query(models.ProviderFee)
+        .filter(models.ProviderFee.user_id == user.id)
+        .order_by(models.ProviderFee.start_date)
         .all()
     )
 
@@ -217,6 +236,17 @@ def build_backup_zip(db: Session, user: models.User) -> bytes:
         }
         for s in sessions
     ]
+    fee_rows = [
+        {
+            "id": _c(f.id),
+            "provider_id": _c(f.provider_id),
+            "provider_name": _c(providers_by_id[f.provider_id].name) if f.provider_id in providers_by_id else "",
+            "amount": _c(f.amount), "interval": _c(f.interval),
+            "start_date": _c(f.start_date), "end_date": _c(f.end_date),
+            "label": _c(f.label), "notes": _c(f.notes), "created_at": _c(f.created_at),
+        }
+        for f in fees
+    ]
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -225,6 +255,7 @@ def build_backup_zip(db: Session, user: models.User) -> bytes:
         zf.writestr("providers.csv", _write_csv(PROVIDER_FIELDS, provider_rows))
         zf.writestr("locations.csv", _write_csv(LOCATION_FIELDS, location_rows))
         zf.writestr("sessions.csv", _write_csv(SESSION_FIELDS, session_rows))
+        zf.writestr("fees.csv", _write_csv(FEE_FIELDS, fee_rows))
     return buf.getvalue()
 
 
@@ -248,6 +279,8 @@ class BackupImportResult(BaseModel):
     locations_skipped: int
     sessions_imported: int
     sessions_skipped: int
+    fees_imported: int = 0
+    fees_skipped: int = 0
 
 
 def _parse_bool(v: str | None) -> bool:
@@ -284,6 +317,12 @@ def _location_key(name: str, latitude: float, longitude: float) -> tuple:
     (mehrere "Ionity"), die Koordinaten allein auch nicht - gerundet, weil
     der Umweg ueber CSV die letzten Nachkommastellen veraendern kann."""
     return (name, round(latitude, 5), round(longitude, 5))
+
+
+def _fee_key(provider_id: str, start_date: datetime, interval, amount: float) -> tuple:
+    """Fachlicher Schluessel einer Grundgebuehr: derselbe Anbieter, derselbe
+    Beginn, derselbe Rhythmus und Betrag ist dieselbe Gebuehr."""
+    return (provider_id, start_date, models.FeeInterval(interval), round(amount, 2))
 
 
 def _target_id(old_id: str, owner: str | None, user_id: str) -> str | None:
@@ -573,6 +612,67 @@ async def import_backup(
         sessions_imported += 1
     db.commit()
 
+    fees_imported = fees_skipped = 0
+    if "fees.csv" in names:
+        existing_fee_owners = {
+            row[0]: row[1] for row in db.query(models.ProviderFee.id, models.ProviderFee.user_id).all()
+        }
+        own_fee_keys = {
+            _fee_key(row[0], row[1], row[2], row[3])
+            for row in db.query(
+                models.ProviderFee.provider_id,
+                models.ProviderFee.start_date,
+                models.ProviderFee.interval,
+                models.ProviderFee.amount,
+            )
+            .filter(models.ProviderFee.user_id == user.id)
+            .all()
+        }
+        for row in _read_csv(zf.read("fees.csv")):
+            old_id = row["id"]
+            new_id = _target_id(old_id, existing_fee_owners.get(old_id), user.id)
+            provider_id = _parse_str(row.get("provider_id"))
+            if provider_id:
+                provider_id = provider_id_map.get(provider_id, provider_id)
+            start_date = _parse_dt(row.get("start_date"))
+            amount = _parse_float(row.get("amount"))
+            try:
+                interval = models.FeeInterval(_parse_str(row.get("interval")) or "monthly")
+            except ValueError:
+                interval = None
+            if (
+                new_id is None
+                or not provider_id
+                or existing_provider_owners.get(provider_id) != user.id
+                or start_date is None
+                or amount is None
+                or interval is None
+            ):
+                fees_skipped += 1
+                continue
+            key = _fee_key(provider_id, start_date, interval, amount)
+            if key in own_fee_keys:
+                fees_skipped += 1
+                continue
+            db.add(
+                models.ProviderFee(
+                    id=new_id,
+                    user_id=user.id,
+                    provider_id=provider_id,
+                    amount=amount,
+                    interval=interval,
+                    start_date=start_date,
+                    end_date=_parse_dt(row.get("end_date")),
+                    label=_parse_str(row.get("label")),
+                    notes=_parse_str(row.get("notes")),
+                    created_at=_parse_dt(row.get("created_at")),
+                )
+            )
+            existing_fee_owners[new_id] = user.id
+            own_fee_keys.add(key)
+            fees_imported += 1
+        db.commit()
+
     return BackupImportResult(
         vehicles_imported=vehicles_imported,
         vehicles_skipped=vehicles_skipped,
@@ -582,4 +682,6 @@ async def import_backup(
         locations_skipped=locations_skipped,
         sessions_imported=sessions_imported,
         sessions_skipped=sessions_skipped,
+        fees_imported=fees_imported,
+        fees_skipped=fees_skipped,
     )

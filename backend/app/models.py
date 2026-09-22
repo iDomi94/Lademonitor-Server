@@ -75,6 +75,18 @@ class TireKind(str, enum.Enum):
     ALL_SEASON = "all_season"
 
 
+class FeeInterval(str, enum.Enum):
+    """Rhythmus einer Grundgebuehr (siehe ProviderFee und fees.py).
+
+    MONTHLY/YEARLY wiederholen sich ab `start_date` bis `end_date` (oder bis
+    heute), ONCE ist genau ein Zeitraum von `start_date` bis `end_date`.
+    """
+
+    MONTHLY = "monthly"
+    YEARLY = "yearly"
+    ONCE = "once"
+
+
 class WebdavBackupFrequency(str, enum.Enum):
     DAILY = "daily"
     WEEKLY = "weekly"
@@ -307,6 +319,57 @@ class Provider(Base):
 
     sessions: Mapped[list["ChargingSession"]] = relationship(back_populates="provider")
     locations: Mapped[list["ChargingLocation"]] = relationship(back_populates="default_provider")
+    fees: Mapped[list["ProviderFee"]] = relationship(back_populates="provider")
+
+
+class ProviderFee(Base):
+    """Grundgebuehr bzw. Abo eines Anbieters, z.B. Ionity Powerpass 15 EUR im
+    Monat.
+
+    Haengt am ANBIETER, nicht am Ladevorgang: "Anbieter" ist in dieser App,
+    wer abrechnet (Karte/Vertrag) - genau daran haengt ein Abo. Wer mit einer
+    fremden Karte an einer Ionity-Saeule laedt, zahlt dort keinen
+    Powerpass-Anteil.
+
+    Der Anteil pro Ladevorgang wird NICHT gespeichert, sondern bei jedem
+    Abruf frisch umgelegt (fees.py) - dieselbe Ueberlegung wie beim Verbrauch
+    in consumption.py: kommt ein Ladevorgang in der Periode dazu oder aendert
+    sich eine Gebuehr, verschieben sich alle Anteile der Periode mit. In
+    `price_total` geschrieben waere ausserdem der echte Saeulenpreis weg und
+    das Preis-Gedaechtnis des Anbieters (sync_provider_last_price) wuerde den
+    Mischpreis uebernehmen.
+
+    Eine wiederkehrende Gebuehr ist EINE Zeile ("ab 03.05. monatlich 15 EUR"),
+    die Perioden erzeugt fees.periods(). Gekuendigt wird ueber `end_date`,
+    eine Preisaenderung ist eine zweite Zeile ab dem neuen Datum - dasselbe
+    Muster wie bei den Reifensaetzen.
+    """
+
+    __tablename__ = "provider_fees"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_uuid)
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    provider_id: Mapped[str] = mapped_column(ForeignKey("providers.id"), index=True)
+    # Betrag JE PERIODE in Euro. Nicht verschluesselt: kein personenbezogenes
+    # Datum, und die Statistik rechnet damit.
+    amount: Mapped[float] = mapped_column(Float)
+    interval: Mapped[FeeInterval] = mapped_column(Enum(FeeInterval), default=FeeInterval.MONTHLY)
+    # Erster Tag der ersten Periode und - optional - letzter Tag, an dem die
+    # Gebuehr noch gilt (Kuendigung; bei ONCE Pflicht). Beide als naive
+    # datetime um Mitternacht statt als Date, aus demselben Grund wie
+    # TireSet.installed_on: die ganze App rechnet in naiven datetimes, und die
+    # Datums-Decoder beider Apps kennen nur dieses Format.
+    start_date: Mapped[datetime] = mapped_column(DateTime, index=True)
+    end_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Verschluesselt (siehe crypto.py) - Freitext wie Provider.notes.
+    label: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    notes: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    provider: Mapped["Provider"] = relationship(back_populates="fees")
 
 
 class ChargingLocation(Base):
@@ -470,12 +533,15 @@ class TireSet(Base):
 
 
 class SyncEntityType(str, enum.Enum):
-    """Die vier Kern-Entitaeten, die App und Web-UI spiegeln (siehe DeletedRecord)."""
+    """Die Entitaeten, die App und Web-UI spiegeln (siehe DeletedRecord)."""
 
     VEHICLE = "vehicle"
     PROVIDER = "provider"
     LOCATION = "location"
     SESSION = "session"
+    # Seit v0.27.0. Aeltere Apps ueberspringen einen unbekannten Typ (siehe
+    # SyncService.applyDeletions in beiden Apps), scheitern also nicht daran.
+    PROVIDER_FEE = "provider_fee"
 
 
 class DeletedRecord(Base):

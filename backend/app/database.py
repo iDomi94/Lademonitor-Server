@@ -61,6 +61,8 @@ _ENCRYPTABLE_TEXT_COLUMNS = (
     ("myskoda_configs", "vin"),
     ("providers", "notes"),
     ("myskoda_log_entries", "payload"),
+    ("provider_fees", "label"),
+    ("provider_fees", "notes"),
 )
 
 
@@ -271,6 +273,15 @@ def run_light_migrations() -> None:
         # fruehestens der naechste Request.
         conn.execute(
             text("ALTER TYPE temperaturesource ADD VALUE IF NOT EXISTS 'WEATHER_DAILY'")
+        )
+
+        # v0.27.0: Grabsteine fuer Grundgebuehren (models.ProviderFee). Die
+        # Tabelle selbst und ihr Enum `feeinterval` legt create_all() an; den
+        # bestehenden Enum-Typ der Grabsteine erweitert es dagegen nicht.
+        # Idempotent, und wie oben wird der Wert hier nur angelegt, nicht
+        # benutzt.
+        conn.execute(
+            text("ALTER TYPE syncentitytype ADD VALUE IF NOT EXISTS 'PROVIDER_FEE'")
         )
 
         # Multi-User-Umstellung: user_id auf allen vier Kern-Tabellen ergaenzen.

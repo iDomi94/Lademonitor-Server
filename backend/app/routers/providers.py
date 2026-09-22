@@ -61,6 +61,12 @@ def delete_provider(
     user: models.User = Depends(get_current_user),
 ):
     provider = _get_owned(db, user, provider_id)
+    # Grundgebuehren gehen mit: ohne Anbieter lassen sie sich keinem
+    # Ladevorgang mehr zuordnen (provider_id ist dort Pflicht). Je ein eigener
+    # Grabstein, sonst behielten die Apps sie als Waisen.
+    for fee in list(provider.fees):
+        record_deletion(db, user.id, models.SyncEntityType.PROVIDER_FEE, fee.id)
+        db.delete(fee)
     # Grabstein VOR dem Loeschen, im selben Commit - siehe sync.record_deletion().
     record_deletion(db, user.id, models.SyncEntityType.PROVIDER, provider.id)
     db.delete(provider)

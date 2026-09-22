@@ -7,7 +7,7 @@
 <div class="grid" id="stat-cards">
   <div class="card"><div class="stat-label">{{ t('dashboard.stat.count') }}</div><div class="stat-value" id="s-count">–</div></div>
   <div class="card"><div class="stat-label">{{ t('dashboard.stat.kwh') }}</div><div class="stat-value" id="s-kwh">–</div></div>
-  <div class="card"><div class="stat-label">{{ t('dashboard.stat.cost') }}</div><div class="stat-value" id="s-cost">–</div></div>
+  <div class="card"><div class="stat-label">{{ t('dashboard.stat.cost') }}</div><div class="stat-value" id="s-cost">–</div><div class="stat-sub" id="s-cost-fees"></div></div>
   <div class="card"><div class="stat-label">{{ t('dashboard.stat.price') }}</div><div class="stat-value" id="s-price">–</div></div>
   <div class="card"><div class="stat-label">{{ t('dashboard.stat.consumption') }}</div><div class="stat-value" id="s-consumption">–</div></div>
   <div class="card"><div class="stat-label">{{ t('dashboard.stat.price_100km') }}</div><div class="stat-value" id="s-price-100km">–</div></div>
@@ -83,6 +83,9 @@ function setText(id, value) {
 const LOCALE = {{ lang|default('de')|tojson }} === 'en' ? 'en-US' : 'de-DE';
 const NO_DATA_TEXT = {{ t('dashboard.js.no_data')|tojson }};
 const OTHER_PROVIDERS_LABEL = {{ t('dashboard.other_providers')|tojson }};
+// "davon X € Grundgebuehren" unter den Gesamtkosten (siehe fees.py) - die
+// Kosten selbst enthalten sie bereits, ebenso Preis je kWh und je 100 km.
+const FEES_INCLUDED_TEXT = {{ t('dashboard.stat.cost_fees')|tojson }};
 
 const TEMP_T = {
   axisX: {{ t('temp.axis_x')|tojson }},
@@ -511,6 +514,8 @@ async function loadStats() {
     setText('s-count', data.total_sessions);
     setText('s-kwh', data.total_kwh.toFixed(1) + ' kWh');
     setText('s-cost', data.total_cost.toFixed(2) + ' €');
+    setText('s-cost-fees', data.total_fees
+      ? FEES_INCLUDED_TEXT.replace('{amount}', data.total_fees.toFixed(2) + ' €') : '');
     setText('s-price', data.avg_price_per_kwh ? data.avg_price_per_kwh.toFixed(3) + ' €' : '–');
     setText('s-consumption', data.avg_consumption_kwh_per_100km ? data.avg_consumption_kwh_per_100km.toFixed(1) + ' kWh' : '–');
     setText('s-price-100km', data.price_per_100km != null ? data.price_per_100km.toFixed(2) + ' €' : '–');

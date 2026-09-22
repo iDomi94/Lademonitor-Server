@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .models import (
     ChargingType,
+    FeeInterval,
     ReviewDigestFrequency,
     SessionSource,
     SmtpSecurity,
@@ -215,6 +216,48 @@ class ProviderOut(ProviderBase):
     model_config = ConfigDict(from_attributes=True)
     id: str
     created_at: datetime
+
+
+# ---------- Grundgebuehren (siehe models.ProviderFee, fees.py) ----------
+
+class ProviderFeeBase(BaseModel):
+    provider_id: str
+    # Betrag je Periode in EUR.
+    amount: float = Field(ge=0)
+    interval: FeeInterval = FeeInterval.MONTHLY
+    # Nur das Datum zaehlt, eine Uhrzeit wird beim Speichern verworfen (siehe
+    # routers/provider_fees.py) - wie bei TireSet.installed_on als naive
+    # datetime, weil die Apps nur dieses Format dekodieren.
+    start_date: datetime
+    # Letzter Tag, an dem die Gebuehr gilt (inklusive). Bei `once` Pflicht,
+    # sonst optional (= Kuendigung).
+    end_date: datetime | None = None
+    label: str | None = None
+    notes: str | None = None
+
+
+class ProviderFeeCreate(ProviderFeeBase):
+    pass
+
+
+class ProviderFeeUpdate(BaseModel):
+    provider_id: str | None = None
+    amount: float | None = Field(default=None, ge=0)
+    interval: FeeInterval | None = None
+    start_date: datetime | None = None
+    end_date: datetime | None = None
+    label: str | None = None
+    notes: str | None = None
+
+
+class ProviderFeeOut(ProviderFeeBase):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    created_at: datetime
+    updated_at: datetime
+    # Nur lesend: was die Gebuehr bis heute insgesamt gekostet hat (Summe der
+    # begonnenen Perioden). Fuer die Anzeige in der Liste.
+    charged_to_date: float = 0
 
 
 # ---------- Reifen ----------
@@ -437,6 +480,11 @@ class SessionOut(SessionBase):
     external_session_id: str | None = None
     consumption_kwh_per_100km: float | None = None
     consumption_method: str | None = None
+    # Umgelegter Anteil an Grundgebuehren des Anbieters (fees.py), nur
+    # lesend und - wie der Verbrauch - bei jedem Abruf frisch gerechnet.
+    # `price_total` bleibt der an der Saeule bezahlte Betrag; die Kosten des
+    # Vorgangs insgesamt sind price_total + fee_share.
+    fee_share: float | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -504,6 +552,8 @@ class MonthlyStat(BaseModel):
     total_cost: float
     total_kwh: float
     session_count: int
+    # Anteil der Grundgebuehren an total_cost (der enthaelt sie bereits).
+    total_fees: float = 0
     # Km-gewichteter Monatsdurchschnitt (gleiche Fallback-Kette wie pro
     # Ladevorgang, siehe consumption.py) - None wenn in dem Monat kein
     # Vorgang einen berechenbaren Wert hat
@@ -513,7 +563,9 @@ class MonthlyStat(BaseModel):
 class ProviderStat(BaseModel):
     provider_name: str
     total_kwh: float
+    # Inklusive Grundgebuehren; der Anteil daran steht in total_fees.
     total_cost: float
+    total_fees: float = 0
 
 
 class GeocodeResult(BaseModel):
@@ -525,7 +577,13 @@ class GeocodeResult(BaseModel):
 class StatsSummary(BaseModel):
     total_sessions: int
     total_kwh: float
+    # Seit v0.27.0 inklusive Grundgebuehren (fees.py) - ebenso
+    # avg_price_per_kwh, price_per_100km, by_provider und monthly.
     total_cost: float
+    # Davon Grundgebuehren insgesamt, und davon wiederum der Teil aus
+    # Perioden ohne einen einzigen Ladevorgang (an keinem Vorgang sichtbar).
+    total_fees: float = 0
+    unallocated_fees: float = 0
     avg_price_per_kwh: float | None
     avg_consumption_kwh_per_100km: float | None
     price_per_100km: float | None = None

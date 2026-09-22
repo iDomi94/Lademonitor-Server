@@ -6,6 +6,32 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.27.0] — 2026-09-22
+
+### Added
+- **Grundgebühren/Abos der Anbieter** (`models.ProviderFee`, `fees.py`,
+  `routers/provider_fees.py`, neuer Abschnitt in den Einstellungen): Betrag je
+  Periode, Rhythmus (`monthly`/`yearly`/`once`), Beginn und optionales Ende
+  (Kündigung; bei `once` Pflicht). Monatliche Perioden laufen vom
+  ursprünglichen Ankertag aus (31.01. → 28.02. → 31.03.), halboffen, und nur bis
+  heute; eine angebrochene Periode zählt voll.
+- **Umlage nach kWh** auf alle Ladevorgänge des Anbieters in der Periode, auf
+  den Cent genau (Rest an den größten Vorgang). Haben alle Vorgänge keine kWh,
+  wird gleichmäßig verteilt. Frisch bei jedem Abruf gerechnet wie der
+  Verbrauch, nie gespeichert; `price_total` bleibt der Säulenpreis.
+- `SessionOut.fee_share` (nur lesend); `StatsSummary.total_fees` und
+  `.unallocated_fees`, `ProviderStat.total_fees`, `MonthlyStat.total_fees`.
+- Grabstein-Typ `provider_fee`; Löschen eines Anbieters löscht seine Gebühren
+  mit, je mit Grabstein.
+- Backup: `fees.csv` (beim Import optional), Dublette = Anbieter + Beginn +
+  Rhythmus + Betrag.
+
+### Changed
+- `total_cost`, `avg_price_per_kwh`, `price_per_100km`, `by_provider[].total_cost`
+  und `monthly[].total_cost` enthalten die Grundgebühren. Die Umlage läuft über
+  alle Vorgänge, Filter greifen erst danach. Perioden ohne Ladevorgang zählen
+  im Monat ihres Beginns, nicht bei einem Fahrzeugfilter.
+
 ## [0.26.1] — 2026-09-22
 
 ### Added
