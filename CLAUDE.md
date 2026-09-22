@@ -660,6 +660,24 @@ Icon/Tooltip-Logik in der SessionsList-View.
   bliebe eine von Hand korrigierte Temperatur faelschlich als "vom
   Wetterdienst" stehen. Im Local-Only-Modus setzen die Apps die Quelle selbst,
   nach derselben Regel. Android brauchte dafuer die Room-Migration 2->3.
+- **Reifen (Sommer/Winter) als eigene Dimension - noch nicht umgesetzt.** Idee:
+  Wechseldaten pflegen (normalerweise zweimal im Jahr, aber ausdruecklich MEHR
+  als zwei Eintraege moeglich - z.B. neue Sommerreifen mitten in der Saison,
+  also eher eine Liste von "ab Datum gilt Reifensatz X" als ein simples
+  Sommer/Winter-Flag). Daraus dann: Verbrauch je Reifensatz vergleichen, und
+  zwar **temperaturbereinigt** - sonst misst man nur, dass Winterreifen im
+  Winter gefahren werden. Die Trennung ist genau der Punkt: der Temperatureffekt
+  (siehe `temperature.py`) und der Reifeneffekt fallen zeitlich fast vollstaendig
+  zusammen, ein naiver Vergleich der beiden Saison-Durchschnitte schreibt den
+  gesamten Winter-Mehrverbrauch den Reifen zu. Brauchbar waere die Differenz
+  gegenueber der fuer die jeweilige Temperatur ERWARTETEN Kurve (Residuum
+  gegenueber `build_trend()`, seit v0.25.0 ggf. dem Knickmodell - eine Gerade
+  taugt dafuer ohnehin nicht, siehe Abschnitt "Knickmodell statt einer
+  Geraden"), also "dieser Satz liegt bei gleicher Temperatur um X %
+  darueber/darunter" - und das ehrlicherweise erst, wenn beide Saetze ueber
+  einen ueberlappenden Temperaturbereich gefahren wurden. Die Uebergangsmonate
+  (Wechsel meist Maerz/Oktober bei 5-15 Grad) liefern diese Ueberlappung; ohne
+  sie waere jede Aussage nur die Jahreszeit unter anderem Namen.
 - **Xcode-Beta-Umgebung des Nutzers:** macOS 27 Beta + Xcode 27 Beta
   (Erstbeta, Stand Aug 2026). Es gab einen `dyld_shared_cache_extract_dylibs`
   Bug beim Installieren auf echtem Gerät - gelöst durch Löschen von
@@ -1440,7 +1458,7 @@ Ladevorgangs-Formular.
 **Nicht verschluesselt** (siehe crypto.py): eine Temperatur ist kein
 personenbezogenes Datum, und die Auswertung filtert/sortiert per SQL danach.
 
-**Wann bewusst NICHTS ausgewiesen wird.** Eine Ausgleichsgerade erscheint erst
+**Wann bewusst NICHTS ausgewiesen wird.** Eine Ausgleichskurve erscheint erst
 ab `MIN_POINTS_FOR_TREND` (5) Fahrten UND `MIN_TEMP_SPAN_FOR_TREND_C` (8 Grad)
 Spannweite. Vier Punkte zwischen 18 und 20 Grad ergeben rechnerisch auch eine
 Steigung - nur sagt die nichts ueber den Winter, und einer Zahl sieht man das
@@ -1456,6 +1474,82 @@ und bleiben ueberall richtig.
 **Regression von Hand** (fuenf Summen fuer eine Gerade) statt numpy/scipy:
 scipy haengt zwar ueber `reverse_geocoder` ohnehin im Image, ist aber genau
 das Paket, das beim Bauen fuer fremde Architekturen schon Aerger gemacht hat.
+
+### Knickmodell statt einer Geraden (2026-09-22, v0.25.0)
+
+Der Verbrauch ueber der Temperatur ist eine **Wanne, kein Hang**: unterhalb der
+Komfortgrenze HEIZT das Fahrzeug, oberhalb KUEHLT es. Das sind zwei
+verschiedene Verbraucher, nicht eine gemeinsame lineare Ursache. Eine einzelne
+Gerade presst beide Aeste in eine Steigung und mittelt sie gegeneinander weg -
+bei einem Datensatz mit viel Sommer und wenig Winter kommt dabei sogar das
+falsche Vorzeichen heraus (an den echten Daten des Nutzers: +0,07 kWh/100 km je
+Kelvin, also "je waermer desto durstiger").
+
+**Warum zwei Geraden und keine Parabel:** die Parabel erzwingt symmetrische
+Kruemmung um ihren Scheitel und biegt ausserhalb der Daten schnell ins
+Unsinnige ab. Heiz- und Kuehlleistung wachsen dagegen jeweils ungefaehr linear
+mit dem Abstand zur Komforttemperatur, und beide Aeste duerfen unterschiedlich
+steil sein (Heizen kostet deutlich mehr als Kuehlen). Zwei Geraden bilden das
+ab und bleiben erklaerbar: "je Grad kaelter X, je Grad waermer Y".
+
+**Rechnung:** `y = a + s_kalt * min(x-b, 0) + s_warm * max(x-b, 0)`. Bei festem
+Knickpunkt `b` ist das in den drei Unbekannten LINEAR, und weil die beiden
+Basisfunktionen nie gleichzeitig ungleich null sind, faellt der Kreuzterm weg -
+das 3x3-System loest sich von Hand auf (`_fit_at_breakpoint()`). `b` wird
+deshalb aussen in 0,5-K-Schritten abgesucht (`_best_breakpoint()`) statt mit
+einem Optimierer: genau das ist der Grund, warum hier weiterhin kein scipy
+noetig ist.
+
+**Das Wichtigere sind die Huerden**, nicht der Fit. Zwei zusaetzliche Parameter
+passen IMMER besser; ohne sie waere das Ergebnis nie wieder eine Gerade.
+Verlangt werden:
+
+* `MIN_POINTS_PER_BRANCH` (4) Fahrten je Ast,
+* `MIN_BRANCH_SPAN_C` (8 K) Spreizung je Ast - dieselbe Schwelle wie fuer die
+  Kurve als Ganzes,
+* die physikalisch erwartete Wannenform (kalter Ast faellt, warmer steigt) -
+  kommt etwas anderes heraus, sagen die Daten gerade nicht das, was das Modell
+  behauptet,
+* `MIN_R2_GAIN_FOR_BREAKPOINT` (0,10) besseres r2 als die Gerade.
+
+**Die letzten beiden Werte stammen aus einem Fehlschlag an echten Daten** und
+standen zuerst auf 5 K und 0,05: der Datensatz des Nutzers (ab Maerz gemessen,
+kaeltester Wert 5,7 Grad, dazu zwei sehr heisse Urlaubsfahrten) bekam damit
+einen Knick bei 23 Grad - der gesamte Bereich 5,7-23 Grad wurde zum praktisch
+waagerechten "kalten" Ast, die zwei heissesten Fahrten zum steilen "warmen".
+Formal besser (r2 0,08 statt 0,03), inhaltlich zwei Ausreisser mit einer
+Geschichte drumherum. `tests/test_temperature.py::
+test_a_year_without_winter_does_not_get_a_breakpoint` haelt genau diese Fahrten
+fest.
+
+**Was die API liefert:** `slope`/`intercept` beschreiben IMMER die einfache
+Ausgleichsgerade, auch wenn `model == "breakpoint"` - aeltere iOS-/Android-
+Builds zeichnen damit weiter eine plausible Linie, statt gar keine. Wer die
+Kurve kennt, zeichnet `curve` als Streckenzug (zwei Eckpunkte bei der Geraden,
+drei beim Knickmodell). Dazu `breakpoint_c` (Temperatur des geringsten
+Verbrauchs), `slope_cold`/`slope_warm` und `at_0c_is_extrapolated`.
+
+**Beide Apps ziehen das inzwischen nach** (`DashboardView.swift::trendLine()`
+bzw. `DashboardScreen.kt`): sie zeichnen den Streckenzug aus `curve`, benennen
+im Kennzahl-Text das benutzte Modell (samt Knicktemperatur) und zeigen den
+Hochrechnungs-Hinweis. Wichtig war dabei ein Detail auf Android: `Charts.kt`
+zog den Trend als EINE Linie vom ersten zum letzten Punkt - ein dritter
+Stuetzpunkt waere stillschweigend uebersprungen worden und die Linie genau
+durch den Knick hindurchgegangen. Jetzt abschnittsweise ueber `zipWithNext()`,
+wie die Klassenmittel-Linie darunter es ohnehin schon macht. In SwiftUI Charts
+ergab sich der Knick dagegen von selbst, weil `trendLine()` ohnehin ein Array
+von `LineMark`s liefert. Ohne diese Anpassung waere nichts kaputtgegangen
+(beide Apps ignorieren unbekannte JSON-Felder), aber die gezeichnete Gerade
+haette nicht mehr zu r2 und dem 0-Grad-Wert daneben gepasst - die gehoeren zu
+dem Modell, das der Server tatsaechlich benutzt hat.
+
+**Gezeichnet wird nur ueber den GEMESSENEN Bereich.** Die Kurve darueber hinaus
+zu verlaengern liesse eine Hochrechnung wie eine Messung aussehen. Die Kennzahl
+"Mehrverbrauch bei 0 statt 20 Grad" wird trotzdem ausgewiesen - aber mit
+`at_0c_is_extrapolated` markiert, sobald 0 Grad unter der kaeltesten gemessenen
+Fahrt liegt, und die Oberflaeche haengt den Hinweis direkt an die Zahl statt in
+eine Fussnote. Wer im Fruehjahr angefangen hat zu messen, liest sonst eine
+Hochrechnung auf einen Winter, den es in den Daten gar nicht gibt.
 
 ### Darstellung (`templates/index.html`)
 
@@ -1597,6 +1691,11 @@ Drei Sonderfaelle:
 * **Kein Vorgaenger** (erster Vorgang eines Fahrzeugs) oder **gar keine
   Tagstunde im Zeitraum** (beide Ladungen nachts am selben Tag): zurueck auf
   die Tagstunden des Ladetages. Ein grober Wert ist besser als keiner.
+  Dieselbe Ruecknahme greift in `_evaluate()`, wenn der Zeitraum zwar
+  Tagstunden enthaelt, aber keine volle STUNDE trifft - zwei Ladevorgaenge
+  wenige Minuten auseinander (07:36 -> 07:41, echter Fall aus den Daten des
+  Nutzers) haetten sonst gar keinen Wert bekommen und waeren still auf ihrem
+  alten stehengeblieben.
 * **Abstand groesser als `MAX_INTERVAL_DAYS` (60)**: gekappt. Ein groesserer
   Abstand ist keine Fahrt mehr, sondern eine Luecke (Urlaub ohne Auto,
   unvollstaendiger Import) - ueber Jahre zu mitteln ergaebe einen

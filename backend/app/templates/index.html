@@ -90,6 +90,9 @@ const TEMP_T = {
   legendPoints: {{ t('temp.legend.points')|tojson }},
   legendBuckets: {{ t('temp.legend.buckets')|tojson }},
   legendTrend: {{ t('temp.legend.trend')|tojson }},
+  modelLinear: {{ t('temp.model.linear')|tojson }},
+  modelBreakpoint: {{ t('temp.model.breakpoint')|tojson }},
+  heroExtrapolated: {{ t('temp.hero.extrapolated')|tojson }},
   heroDetail: {{ t('temp.hero.detail')|tojson }},
   missing: {{ t('temp.missing')|tojson }},
   tableRange: {{ t('temp.table.range')|tojson }},
@@ -345,10 +348,16 @@ function renderTemperatureScatter(data) {
   });
 
   if (data.trend) {
-    const y1 = data.trend.slope * xMin + data.trend.intercept;
-    const y2 = data.trend.slope * xMax + data.trend.intercept;
-    svg += `<line x1="${x(xMin)}" y1="${y(y1)}" x2="${x(xMax)}" y2="${y(y2)}"`
-         + ` stroke="${TEMP_COLORS.trend}" stroke-width="2" stroke-linecap="round"></line>`;
+    // `curve` ist der Streckenzug des tatsaechlich benutzten Modells: zwei
+    // Eckpunkte bei der Geraden, drei beim Knickmodell. Aeltere Server ohne
+    // das Feld liefern nur slope/intercept - dann die Gerade wie bisher.
+    const curve = (data.trend.curve && data.trend.curve.length > 1)
+      ? data.trend.curve
+      : [{ temp_c: xMin, consumption: data.trend.slope * xMin + data.trend.intercept },
+         { temp_c: xMax, consumption: data.trend.slope * xMax + data.trend.intercept }];
+    const pts = curve.map(v => `${x(v.temp_c)},${y(v.consumption)}`).join(' ');
+    svg += `<polyline points="${pts}" fill="none" stroke="${TEMP_COLORS.trend}"`
+         + ` stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></polyline>`;
   }
 
   if (data.buckets.length > 1) {
@@ -450,10 +459,18 @@ async function loadTemperature() {
   if (data.trend) {
     const sign = data.trend.extra_pct_at_0c >= 0 ? '+' : '';
     setText('temp-hero-figure', `${sign}${fmtNumber(data.trend.extra_pct_at_0c, 0)} %`);
-    setText('temp-hero-detail', TEMP_T.heroDetail
+    let detail = TEMP_T.heroDetail
       .replace('{cold}', fmtNumber(data.trend.consumption_at_0c, 1))
       .replace('{warm}', fmtNumber(data.trend.consumption_at_20c, 1))
-      .replace('{r2}', fmtNumber(data.trend.r2, 2)));
+      .replace('{model}', data.trend.model === 'breakpoint'
+        ? TEMP_T.modelBreakpoint.replace('{at}', fmtNumber(data.trend.breakpoint_c, 0))
+        : TEMP_T.modelLinear)
+      .replace('{r2}', fmtNumber(data.trend.r2, 2));
+    // Der Hinweis gehoert an die Kennzahl, nicht in eine Fussnote: wer erst im
+    // Fruehjahr angefangen hat zu messen, sieht hier eine Hochrechnung auf
+    // einen Winter, den es in den Daten gar nicht gibt.
+    if (data.trend.at_0c_is_extrapolated) detail += ' · ' + TEMP_T.heroExtrapolated;
+    setText('temp-hero-detail', detail);
   }
 
   lastTemperatureData = data;

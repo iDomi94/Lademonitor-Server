@@ -6,6 +6,38 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.25.0] — 2026-09-22
+
+### Changed
+- **`temperature.build_trend()` fittet ein Knickmodell statt einer Geraden**:
+  zwei Geraden mit gemeinsamem Knickpunkt
+  (`y = a + s_kalt·min(x−b,0) + s_warm·max(x−b,0)`), Knickpunkt in
+  0,5-K-Schritten abgesucht. Der Verbrauch über der Temperatur ist eine Wanne
+  (Heizen unten, Kühlen oben) — eine Gerade mittelt beide Äste gegeneinander
+  weg. Eine Parabel erzwänge symmetrische Krümmung und extrapoliert
+  unbrauchbar; beide Äste dürfen unterschiedlich steil sein.
+- Bei festem Knickpunkt ist das Modell linear in seinen drei Parametern und
+  der Kreuzterm fällt weg — das 3×3-System löst sich in geschlossener Form.
+  Weiterhin kein numpy/scipy.
+
+### Added
+- **`TempTrendOut.curve`**: Streckenzug des tatsächlich benutzten Modells (zwei
+  Eckpunkte bei der Geraden, drei beim Knickmodell), nur über den gemessenen
+  Bereich. Dazu `model`, `breakpoint_c`, `slope_cold`, `slope_warm`.
+  `slope`/`intercept` beschreiben weiterhin IMMER die einfache Gerade, damit
+  ältere App-Builds eine plausible Linie zeichnen.
+- **`TempTrendOut.at_0c_is_extrapolated`**: true, sobald 0 °C unter der
+  kältesten gemessenen Fahrt liegt. Die Web-Oberfläche hängt den Hinweis direkt
+  an die Kennzahl statt in eine Fußnote.
+
+### Notes
+- Das Knickmodell ersetzt die Gerade nur bei ≥4 Fahrten UND ≥8 K Spannweite je
+  Ast, erwarteter Wannenform und ≥0,10 besserem R². Die letzten beiden Werte
+  standen zuerst auf 5 K / 0,05 und wurden an echten Daten korrigiert: ein
+  Datensatz ohne Winter bekam damit einen Knick bei 23 °C, bei dem zwei heiße
+  Urlaubsfahrten den „warmen" Ast trugen. `tests/test_temperature.py` hält
+  diese Fahrten als Regressionsfall fest.
+
 ## [0.24.1] — 2026-09-21
 
 ### Changed
@@ -31,6 +63,11 @@ folgen [Semantic Versioning](https://semver.org/).
   Archiv-Endpunkt überschreiten.
 
 ### Fixed
+- **Zeitraum ohne vollen Stundenwert**: zwei Ladevorgänge wenige Minuten
+  auseinander (07:36 → 07:41) ergeben ein Fenster, in dem kein Stundenwert
+  liegt. `_evaluate()` greift dort auf die Tagstunden des Ladetages zurück,
+  statt gar keinen Wert zu liefern und die Zeile still auf ihrem alten stehen
+  zu lassen.
 - **Spritmonitor-Importe** tragen keine Uhrzeit (der Importer setzt 00:00).
   Beim Wort genommen traf der alte Punktwert dort systematisch das
   Tagesminimum – an echten Stundendaten im Mittel 3,9 K zu kalt, in der

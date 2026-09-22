@@ -5,6 +5,18 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.25.0",
+        "date": "2026-09-22",
+        "title": "Verbrauchskurve: zwei Geraden statt einer",
+        "changes": [
+            "Der Verbrauch über der Außentemperatur ist eine Wanne, kein Hang: unterhalb der Komfortgrenze heizt das Fahrzeug, oberhalb kühlt es. Das sind zwei verschiedene Verbraucher. Eine einzelne Ausgleichsgerade presst beide in eine Steigung und mittelt sie gegeneinander weg - bei viel Sommer und wenig Winter kommt dabei sogar heraus, das Auto brauche bei Wärme mehr. Die Auswertung sucht jetzt den Knickpunkt und legt je eine Gerade nach kalt und nach warm.",
+            "Eine Parabel wäre der naheliegende Gegenvorschlag, passt aber schlechter: sie erzwingt symmetrische Krümmung und biegt außerhalb der Daten schnell ins Unsinnige ab. Heizen und Kühlen wachsen jeweils ungefähr linear mit dem Abstand zur Komforttemperatur - und Heizen kostet deutlich mehr. Zwei Geraden bilden genau das ab und bleiben ablesbar: „je Grad kälter X, je Grad wärmer Y\".",
+            "Der Knick wird nur dann behauptet, wenn die Daten ihn hergeben: mindestens vier Fahrten UND 8 °C Spannweite auf JEDER Seite, die erwartete Wannenform, und ein spürbar besserer Fit als die Gerade. Sonst bleibt es bei einer Geraden - zwei zusätzliche Parameter passen sonst immer besser, auch wenn nur zwei heiße Ausreißer dahinterstecken.",
+            "Neu dabei: die Temperatur des geringsten Verbrauchs wird mit angezeigt. Und wenn 0 °C unterhalb der kältesten je gemessenen Fahrt liegt, steht das jetzt direkt an der Kennzahl - wer im Frühjahr angefangen hat zu messen, liest sonst eine Hochrechnung auf einen Winter, den es in den Daten gar nicht gibt.",
+            "Die Kurve wird nur über den gemessenen Temperaturbereich gezeichnet. Sie darüber hinaus zu verlängern ließe eine Hochrechnung wie eine Messung aussehen.",
+        ],
+    },
+    {
         "version": "0.24.1",
         "date": "2026-09-21",
         "title": "Wetterdienst mittelt über den ganzen Zeitraum",
@@ -13,6 +25,7 @@ CHANGELOG = [
             "Zwei Ladevorgänge am selben Tag mitteln nur die Stunden dazwischen - dazwischen liegt ja auch nur diese eine Fahrt. Liegt der vorherige Ladevorgang länger als 60 Tage zurück, zählen nur die letzten 60 Tage: ein größerer Abstand ist keine Fahrt mehr, sondern eine Lücke.",
             "Temperaturen vom Fahrzeug (Home Assistant, MyŠkoda) bleiben unverändert der Wert beim Einstecken - ein Fahrzeugsensor kann nicht mitteln. Deshalb heißt die Herkunft solcher Werte jetzt „vom Wetterdienst (Zeitraummittel)\" und ist von einem Fahrzeugwert unterscheidbar. Die Auswertung nutzt den Unterschied: ein Zeitraummittel beschreibt die Fahrt bereits vollständig und wird nicht mehr zusätzlich mit dem Wert davor gemittelt.",
             "Am weitesten daneben lag der alte Punktwert bei von Spritmonitor importierten Ladevorgängen: die stehen alle auf 00:00, weil der Export keine Uhrzeit hat. Beim Wort genommen traf man damit das Tagesminimum - an echten Stundendaten im Mittel 3,9 °C zu kalt, in der Spitze 8,8 °C, und zwar einseitig auf genau der Hälfte der Daten.",
+            "Zwei Ladevorgänge, die nur Minuten auseinanderliegen, bekommen auch dann einen Wert: in einem so kurzen Zeitraum liegt kein voller Stundenwert, dort wird auf die Tagstunden des Ladetages zurückgegriffen.",
             "Wer den Nachtrag schon hat laufen lassen, findet beim Nachtrags-Knopf eine neue Option: „Bereits vom Wetterdienst geholte Werte neu bestimmen\". Sie holt genau diese Werte erneut - Temperaturen vom Fahrzeug oder von Hand bleiben auch dabei unangetastet. Die Vorschau zeigt dann zusätzlich den bisherigen Wert, damit man vor dem Schreiben sieht, was sich ändert.",
         ],
     },

@@ -947,3 +947,33 @@ def test_the_backfill_uses_the_previous_session_of_the_same_vehicle(
     finally:
         monkeypatch.delenv("TZ", raising=False)
         time.tzset()
+
+
+def test_two_sessions_minutes_apart_still_get_a_value(monkeypatch):
+    """Echter Fall aus den Daten: zwei Ladevorgaenge um 07:36 und 07:41. Das
+    Fenster dazwischen enthaelt Tagstunden, aber keine volle STUNDE - ohne
+    Ruecknahme auf den Ladetag kaeme gar kein Wert heraus und der Vorgang
+    bliebe stumm auf seinem alten stehen."""
+    monkeypatch.setenv("TZ", "UTC")
+    time.tzset()
+    try:
+        client, _ = make_client(
+            _series(datetime(2026, 8, 20, 0, 0), [float(i % 24) for i in range(48)])
+        )
+        query = weather.TempQuery(
+            "s1",
+            datetime(2026, 8, 20, 7, 41),
+            48.80,
+            9.01,
+            previous=datetime(2026, 8, 20, 7, 36),
+        )
+
+        result = weather.fetch_temperatures(
+            [query], client=client, today=datetime(2026, 8, 25).date()
+        )
+
+        # Tagstunden 6..20 -> 13.0, statt gar keines Werts.
+        assert result["s1"] == pytest.approx(13.0)
+    finally:
+        monkeypatch.delenv("TZ", raising=False)
+        time.tzset()
