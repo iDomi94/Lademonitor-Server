@@ -55,19 +55,21 @@ Abschnitt "Sync: Grabsteine fuer geloeschte Datensaetze".
 ```
 backend/app/
   models.py          - SQLAlchemy: Vehicle, Provider, ChargingLocation, ChargingSession,
-                          DeletedRecord (Grabsteine, siehe Abschnitt "Sync")
+                          DeletedRecord (Grabsteine, siehe Abschnitt "Sync"),
+                          TireSet (siehe Abschnitt "Reifensaetze")
   schemas.py          - Pydantic Request/Response-Schemas
   routers/
     vehicles.py, providers.py, locations.py, sessions.py, stats.py, importer.py,
     geocoding.py, backup.py, auth.py, webdav_backup.py, myskoda.py, email.py,
-    sync.py
+    sync.py, tires.py
   auth.py            - Passwort-Hashing, Token-Handling, Auth-Dependencies
   sync.py            - record_deletion(): Grabstein fuer eine geloeschte Zeile
+  tires.py           - Reifensaetze, temperaturbereinigter Vergleich
   myskoda.py         - Client fuer die offizielle MyŠkoda Public API (sync httpx)
   myskoda_poller.py  - Zustandsmaschine der automatischen Ladeerkennung + Debug-Log
   mailer.py          - SMTP-Versand, Mail-Vorlagen, Versandprotokoll
   notifications.py   - Benachrichtigungen (ereignisgetrieben + zeitgesteuert)
-  templates/          - Jinja2 Web-UI (index=Dashboard, sessions, map, settings +
+  templates/          - Jinja2 Web-UI (index=Dashboard, sessions, map, tires, settings +
                           die Unterseiten import, settings_backup, settings_api,
                           settings_email; auth_base.html fuer die Seiten ohne
                           Anmeldung; emails/ fuer die Mail-Vorlagen)
@@ -660,24 +662,16 @@ Icon/Tooltip-Logik in der SessionsList-View.
   bliebe eine von Hand korrigierte Temperatur faelschlich als "vom
   Wetterdienst" stehen. Im Local-Only-Modus setzen die Apps die Quelle selbst,
   nach derselben Regel. Android brauchte dafuer die Room-Migration 2->3.
-- **Reifen (Sommer/Winter) als eigene Dimension - noch nicht umgesetzt.** Idee:
-  Wechseldaten pflegen (normalerweise zweimal im Jahr, aber ausdruecklich MEHR
-  als zwei Eintraege moeglich - z.B. neue Sommerreifen mitten in der Saison,
-  also eher eine Liste von "ab Datum gilt Reifensatz X" als ein simples
-  Sommer/Winter-Flag). Daraus dann: Verbrauch je Reifensatz vergleichen, und
-  zwar **temperaturbereinigt** - sonst misst man nur, dass Winterreifen im
-  Winter gefahren werden. Die Trennung ist genau der Punkt: der Temperatureffekt
-  (siehe `temperature.py`) und der Reifeneffekt fallen zeitlich fast vollstaendig
-  zusammen, ein naiver Vergleich der beiden Saison-Durchschnitte schreibt den
-  gesamten Winter-Mehrverbrauch den Reifen zu. Brauchbar waere die Differenz
-  gegenueber der fuer die jeweilige Temperatur ERWARTETEN Kurve (Residuum
-  gegenueber `build_trend()`, seit v0.25.0 ggf. dem Knickmodell - eine Gerade
-  taugt dafuer ohnehin nicht, siehe Abschnitt "Knickmodell statt einer
-  Geraden"), also "dieser Satz liegt bei gleicher Temperatur um X %
-  darueber/darunter" - und das ehrlicherweise erst, wenn beide Saetze ueber
-  einen ueberlappenden Temperaturbereich gefahren wurden. Die Uebergangsmonate
-  (Wechsel meist Maerz/Oktober bei 5-15 Grad) liefern diese Ueberlappung; ohne
-  sie waere jede Aussage nur die Jahreszeit unter anderem Namen.
+- **Reifen (Sommer/Winter) als eigene Dimension - erste Fassung steht seit
+  2026-09-22 (v0.26.0)**, siehe Abschnitt "Reifensaetze". Umgesetzt sind
+  Wechseldaten als Liste ("ab Datum gilt Satz X", ausdruecklich mehr als zwei
+  Eintraege pro Jahr), der temperaturbereinigte Vergleich gegen `build_trend()`
+  und die Offenlegung der Ueberlappung. **Noch offen:** die Auswertung in den
+  beiden Apps (bisher nur Server + Web-UI, die Endpunkte sind aber regulaerer
+  Teil der REST-API), und vor allem der Praxistest - die Trennung von Reifen-
+  und Temperatureffekt ist bisher nur an synthetischen Daten verifiziert, weil
+  die echten Daten des Nutzers erst ab Maerz reichen und noch keinen Winter
+  enthalten.
 - **Xcode-Beta-Umgebung des Nutzers:** macOS 27 Beta + Xcode 27 Beta
   (Erstbeta, Stand Aug 2026). Es gab einen `dyld_shared_cache_extract_dylibs`
   Bug beim Installieren auf echtem Gerät - gelöst durch Löschen von
@@ -803,7 +797,8 @@ horizontale Ueberlaeufe mehr auf irgendeiner Seite in beiden Sprachen.
 ## Web-UI: Seitenaufbau und Navigation (ab 2026-09-08, v0.13.0)
 
 **Hauptleiste: Dashboard, Ladevorgaenge, Einstellungen** (seit v0.20.0
-zusaetzlich **Karte**, siehe eigenen Abschnitt weiter unten). Der Import ist
+zusaetzlich **Karte**, seit v0.26.0 **Reifen** - beide mit eigenem Abschnitt
+weiter unten). Der Import ist
 von dort verschwunden - er wird einmal beim Umstieg von Spritmonitor gebraucht
 und belegte dauerhaft einen von vier Plaetzen.
 
@@ -1399,8 +1394,13 @@ dieses Projekt real gestolpert ist:
 - `test_sessions_api.py` - die 200er-Grenze als Regressionstest.
 - `test_sync_deletions.py` - Grabsteine je Entitaet, `since`-Fenster (auch mit
   zeitzonenbehaftetem Cursor), Trennung pro Nutzer.
-- `test_web_pages.py` - Manifest/Service Worker/Kartenseite, inkl. der Pruefung
-  auf ausschliesslich relative Pfade (Ingress).
+- `test_web_pages.py` - Manifest/Service Worker/Karten- und Reifenseite, inkl.
+  der Pruefung auf ausschliesslich relative Pfade (Ingress).
+- `test_tires.py` - Zuordnung von Fahrten zu Reifensaetzen (inkl. der Fahrt
+  ueber einen Wechsel hinweg) und die temperaturbereinigte Rechnung: aus
+  synthetischen Daten mit bekanntem Aufschlag muss genau dieser wieder
+  herauskommen, aus Daten ohne Aufschlag trotz getrennter Temperaturbaender
+  keiner.
 
 **Was bewusst NICHT getestet wird - und deshalb weiterhin von Hand gegen eine
 Kopie der Produktiv-DB geprueft werden MUSS:**
@@ -1789,6 +1789,81 @@ kamen ueber den Vorhersage-Endpunkt an, Bedienung im Browser durchgespielt).
 **Bekannte Stolperstelle:** das freie Kontingent gilt pro IP - hinter CGNAT
 oder auf einem geteilten VPS kann das Archiv mit 429 antworten, obwohl mit dem
 eigenen Server alles stimmt.
+
+## Reifensaetze (`tires.py`, `routers/tires.py`, `templates/tires.html`, ab 2026-09-22, v0.26.0)
+
+Beantwortet "brauchen meine Winterreifen mehr?" - und zwar so, dass die
+Antwort ueber Reifen spricht und nicht ueber die Jahreszeit.
+
+**Eine Zeile ist eine MONTAGE, kein physischer Satz.** `TireSet` hat
+`installed_on`, aber bewusst kein Enddatum: der naechste Wechsel beendet den
+vorigen, ein zweites Datum waere ein Wert, der mit dem Nachbareintrag
+auseinanderlaufen kann. Vor dem ersten eingetragenen Wechsel gilt bewusst KEIN
+Satz (`set_at()` gibt `None`) - was damals montiert war, weiss niemand, und
+der aelteste Eintrag war es gerade nicht. Derselbe Satz im naechsten Winter
+faellt in der Auswertung ueber `_signature()` (Art + Marke + Modell + Groesse)
+mit seiner frueheren Montage zusammen, sonst waeren es zwei halb so grosse
+Gruppen.
+
+**Was zu welchem Satz zaehlt:** der Verbrauch eines Vorgangs N beschreibt die
+Strecke zwischen N-1 und N (siehe `consumption.py`). `sets_for_drives()` ordnet
+eine Fahrt deshalb nur zu, wenn an BEIDEN Enden derselbe Satz montiert war;
+faellt der Wechsel mitten hinein, lief sie auf beiden und gehoert zu keinem.
+Solche Fahrten werden verworfen UND gezaehlt
+(`drives_spanning_change`/`drives_without_set` stehen unter der Tabelle) - bei
+zwei Wechseln im Jahr kostet das hoechstens zwei Fahrten.
+
+**Der Kern: gegen die Kurve rechnen, nicht gegen den Saison-Durchschnitt.**
+Winterreifen werden im Winter gefahren; ein roher Vergleich der beiden
+Durchschnitte schriebe Heizung, kalten Akku und Kaelte-Rollwiderstand
+vollstaendig den Reifen zu. Stattdessen liefert `temperature.build_trend()` zu
+jeder Fahrt einen bei ihrer Temperatur erwarteten Verbrauch; verglichen wird
+die km-gewichtete RELATIVE Abweichung davon (relativ, weil "5 % ueber der
+Kurve" bei jeder Temperatur dasselbe bedeutet, ein absoluter Abstand nicht).
+`_expected()` interpoliert dafuer entlang `trend.curve` und braucht deshalb
+keine Fallunterscheidung zwischen Geraden- und Knickmodell.
+
+**Die Kurve muss selbst erst reifenneutral werden** (`_neutral_trend()`). Sie
+einmal ueber alle verglichenen Fahrten zu fitten, reicht nicht: die Saetze
+werden in verschiedenen Temperaturbaendern gefahren, also zieht ein durchweg
+durstigerer Satz die Kurve in SEINEM Band mit hoch - die Kurve enthaelt dann
+genau den Effekt, den sie herausrechnen soll. An synthetischen Daten mit 10 %
+Aufschlag kamen so nur 5,2 % heraus; der Fehler geht also direkt in die
+Kennzahl. Deshalb wechselseitig (`NEUTRALISATION_ROUNDS` = 5): Kurve fitten,
+je Satz einen Niveaufaktor schaetzen, die Fahrten damit auf ein gemeinsames
+Niveau bringen, neu fitten. Die Faktoren werden nach jeder Runde km-gewichtet
+auf 1 normiert - sonst ist nur ihr VERHAELTNIS bestimmt und das Niveau der
+Kurve triebe weg.
+
+**Die Grenze steht in der Antwort, nicht in einer Fussnote.** Reifen- und
+Temperatureffekt sind nur dort trennbar, wo die Temperaturbaender beider
+Saetze einander UEBERLAPPEN; ohne Ueberlappung ist jede Aufteilung zwischen
+beiden gleich gut und die Rechnung waehlt willkuerlich. `_overlap()` liefert
+die Spanne (sie darf negativ werden - dann klafft eine echte Luecke zwischen
+den Baendern, und genau dann ist der Wert am aussagekraeftigsten),
+`MIN_OVERLAP_SPAN_C` (5 K) entscheidet ueber `overlap_ok`, und die Web-UI setzt
+den Hinweis UEBER die Tabelle: wer die Zahlen liest, muss vorher wissen, ob es
+Messung oder Hochrechnung ist. Die Ueberlappung liefern die Uebergangsmonate
+(Wechsel meist Maerz/Oktober bei 5-15 Grad); wer punktgenau zum ersten Frost
+wechselt, bekommt sie nie.
+
+**Kein Grabstein, kein Sync.** `TireSet` steht bewusst NICHT in
+`SyncEntityType` - die Apps kennen Reifen noch gar nicht, ein Grabstein fuer
+eine Entitaet, die kein Client spiegelt, waere totes Gewicht. Dafuer raeumt
+`_purge_owned_data()` sie beim Loeschen eines Nutzers mit weg: sie haengen per
+Fremdschluessel an Nutzer UND Fahrzeug, eine verbliebene Zeile liesse das
+Loeschen des Kontos an Postgres scheitern (derselbe Fehlertyp wie 2026-09-09).
+
+**`/api/tires/comparison` hat bewusst KEINEN Datumsfilter** - ein Reifensatz
+IST bereits ein Zeitraum, ihn zusaetzlich zu beschneiden verkleinert nur die
+Gruppen. Gruppen unter `MIN_DRIVES_PER_GROUP` (3) Fahrten werden gar nicht
+erst ausgewiesen; aus zwei Fahrten liest man Streuung, keinen Reifeneffekt.
+
+**`notes` ist verschluesselt** (wie `Provider.notes`), die uebrigen Felder
+nicht: Groesse, Marke und Modell sind Produktbezeichnungen, kein
+personenbezogenes Datum, und `kind`/`installed_on` steuern die Auswertung per
+SQL bzw. Vergleich.
+
 
 ## Backup-Export/-Import (`routers/backup.py`)
 

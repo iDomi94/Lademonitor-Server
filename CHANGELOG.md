@@ -6,6 +6,34 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.26.0] — 2026-09-22
+
+### Added
+- **Reifensätze als eigene Dimension** (`models.TireSet`, `tires.py`,
+  `routers/tires.py`, neue Seite `/tires`): je Wechsel eine Zeile mit Art
+  (Sommer/Winter/Ganzjahr), Montagedatum, Größe, Marke, Modell und Notiz. Eine
+  Zeile ist eine MONTAGE, kein physischer Satz — es gibt bewusst kein Enddatum,
+  der nächste Wechsel beendet den vorigen.
+- **`GET /api/tires/comparison`**: Verbrauch je Reifenart und je Satz,
+  temperaturbereinigt. Verglichen wird nicht der rohe Saison-Durchschnitt
+  (der misst die Jahreszeit), sondern die km-gewichtete relative Abweichung von
+  der Verbrauchskurve über der Außentemperatur, zurückgerechnet auf eine
+  gemeinsame Referenztemperatur.
+- `overlap_span_c`/`overlap_ok`: gemeinsamer Temperaturbereich der Sätze. Ohne
+  ihn ist die Bereinigung eine Hochrechnung; die Web-UI weist darauf **über**
+  der Tabelle hin. `drives_without_set`/`drives_spanning_change` zählen die
+  ausgeschlossenen Fahrten.
+- `tests/test_tires.py`: Zuordnung vor dem ersten Wechsel, Fahrt über einen
+  Wechsel hinweg, Zusammenfallen wiedermontierter Sätze, Rückgewinnung eines
+  bekannten Aufschlags aus temperaturgetrennten Bändern samt Gegenprobe ohne
+  Aufschlag, fehlende Überlappung, CRUD und Fremdzugriff.
+
+### Notes
+- Reifensätze sind **nicht** Teil von `SyncEntityType` und bekommen keinen
+  Grabstein — die Apps kennen sie noch nicht.
+- `_purge_owned_data()` räumt sie beim Löschen eines Nutzers mit weg (FK auf
+  Nutzer und Fahrzeug).
+
 ## [0.25.0] — 2026-09-22
 
 ### Changed

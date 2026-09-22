@@ -10,6 +10,7 @@ from .models import (
     SmtpSecurity,
     SyncEntityType,
     TemperatureSource,
+    TireKind,
     WebdavBackupFrequency,
 )
 
@@ -214,6 +215,72 @@ class ProviderOut(ProviderBase):
     model_config = ConfigDict(from_attributes=True)
     id: str
     created_at: datetime
+
+
+# ---------- Reifen ----------
+
+class TireSetBase(BaseModel):
+    vehicle_id: str
+    kind: TireKind
+    # Montagedatum. Datum ohne Uhrzeit waere sauberer, aber die ganze App
+    # rechnet in naiven datetimes (siehe ChargingSession.start_time) - ein
+    # zweiter Typ waere nur eine weitere Umrechnungsstelle.
+    installed_on: datetime
+    size: str | None = None
+    brand: str | None = None
+    model: str | None = None
+    notes: str | None = None
+
+
+class TireSetCreate(TireSetBase):
+    pass
+
+
+class TireSetUpdate(BaseModel):
+    kind: TireKind | None = None
+    installed_on: datetime | None = None
+    size: str | None = None
+    brand: str | None = None
+    model: str | None = None
+    notes: str | None = None
+
+
+class TireSetOut(TireSetBase):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    created_at: datetime
+
+
+class TireGroupOut(BaseModel):
+    key: str
+    label: str
+    kind: str
+    drives: int
+    km: float
+    avg_consumption_kwh_per_100km: float
+    avg_temp_c: float
+    min_temp_c: float
+    max_temp_c: float
+    # Erst diese beiden Werte sind zwischen den Gruppen vergleichbar: der rohe
+    # Durchschnitt misst vor allem, bei welchen Temperaturen gefahren wurde.
+    adjusted_consumption_kwh_per_100km: float | None = None
+    delta_pct_vs_model: float | None = None
+
+
+class TireComparisonOut(BaseModel):
+    by_kind: list[TireGroupOut] = []
+    by_set: list[TireGroupOut] = []
+    # Temperatur, auf die beide Gruppen umgerechnet wurden.
+    reference_temp_c: float | None = None
+    model: str | None = None
+    r2: float | None = None
+    drives_without_set: int = 0
+    drives_spanning_change: int = 0
+    # Gemeinsamer Temperaturbereich der Arten. Ohne ihn ist die Bereinigung
+    # eine Hochrechnung - die Oberflaeche sagt das dann auch.
+    overlap_span_c: float | None = None
+    overlap_ok: bool = False
+    winter_vs_summer_pct: float | None = None
 
 
 # ---------- ChargingLocation ----------

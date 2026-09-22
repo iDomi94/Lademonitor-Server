@@ -5,6 +5,20 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.26.0",
+        "date": "2026-09-22",
+        "title": "Reifen: Sommer gegen Winter, temperaturbereinigt",
+        "changes": [
+            "Neuer Punkt in der Hauptleiste: „Reifen\". Dort trägst du jeden Reifenwechsel ein - Art (Sommer/Winter/Ganzjahr), Datum, Größe, Marke und Modell. Ab dem Datum gilt der neue Satz, bis der nächste Eintrag folgt; mehr als zwei Einträge pro Jahr sind ausdrücklich vorgesehen (neue Sommerreifen mitten in der Saison sind ein eigener Satz, kein zweiter Frühling).",
+            "Darunter der eigentliche Punkt: der Vergleich, was welcher Satz verbraucht - und zwar temperaturbereinigt. Die beiden Saison-Durchschnitte einfach gegeneinanderzustellen, würde nur messen, dass Winterreifen im Winter gefahren werden: Heizung, kalter Akku und Rollwiderstand bei Kälte landeten allesamt auf dem Konto der Reifen.",
+            "Stattdessen wird gegen die Verbrauchskurve über der Außentemperatur gerechnet (dieselbe wie im Dashboard): für jede Fahrt gibt es einen bei ihrer Temperatur erwarteten Verbrauch, verglichen wird die Abweichung davon. „Dieser Satz liegt bei gleicher Temperatur um X % darüber\" ist eine Aussage über Reifen. Die Kurve selbst wird dabei um die Niveauunterschiede der Sätze bereinigt - sonst zöge ein durstigerer Satz die Kurve in seinem Temperaturband mit hoch und der gemessene Unterschied fiele zu klein aus.",
+            "Die Grenze der Rechnung steht über der Tabelle statt in einer Fußnote: Trennen lassen sich Reifen- und Temperatureffekt nur dort, wo beide Sätze über einen gemeinsamen Temperaturbereich gefahren wurden. Den liefern die Übergangsmonate um den Wechsel herum. Fehlt er, ist die bereinigte Spalte eine Hochrechnung - und die Seite sagt das.",
+            "Eine Fahrt, in deren Zeitraum gewechselt wurde, lief auf beiden Sätzen und gehört zu keinem. Sie wird verworfen und mitgezählt, ebenso die Fahrten vor dem ersten eingetragenen Wechsel - beide Zahlen stehen unter der Tabelle, damit sichtbar bleibt, auf wie viel die Auswertung sich stützt.",
+            "Derselbe Reifensatz im nächsten Winter fällt mit seiner früheren Montage zu einer Gruppe zusammen (gleiche Art, Marke, Modell, Größe) statt als zweite, halb so große Gruppe zu erscheinen.",
+            "Vorerst nur Server und Web-Oberfläche; die Endpunkte sind regulärer Teil der REST-API, damit iOS- und Android-App später ohne Serveränderung nachziehen können.",
+        ],
+    },
+    {
         "version": "0.25.0",
         "date": "2026-09-22",
         "title": "Verbrauchskurve: zwei Geraden statt einer",

@@ -113,3 +113,18 @@ def test_session_form_offers_a_temperature_field(client):
     body = client.get("/sessions").text
 
     assert 'id="f-temp"' in body
+
+
+def test_tires_page_renders_with_only_relative_paths(client):
+    """Die Reifenseite liegt wie alle Seiten genau EINE Ebene unter der Basis
+    und holt ihre Daten relativ - sonst zeigt sie unter dem Ingress ins Leere."""
+    register(client)
+
+    response = client.get("/tires")
+
+    assert response.status_code == 200
+    assert "api/tires/comparison" in response.text
+    assert "'/api/tires" not in response.text
+    # Die Hauptleiste muss den neuen Punkt kennen, sonst ist die Seite nur
+    # ueber die Adresszeile erreichbar.
+    assert 'href="tires"' in response.text
