@@ -148,6 +148,11 @@ def allocate(
         if s.provider_id:
             by_provider.setdefault(s.provider_id, []).append(s)
 
+    # Feste Reihenfolge, damit der Rundungsrest bei gleich grossen Vorgaengen
+    # immer beim selben (dem fruehesten) landet - in den Apps genauso.
+    for group in by_provider.values():
+        group.sort(key=lambda s: (s.start_time, s.id))
+
     result = Allocation()
     for fee in fees:
         candidates = by_provider.get(fee.provider_id, [])
