@@ -1811,6 +1811,16 @@ faellt in der Auswertung ueber `_signature()` (Art + Marke + Modell + Groesse)
 mit seiner frueheren Montage zusammen, sonst waeren es zwei halb so grosse
 Gruppen.
 
+**Der erste Eintrag ist der Satz, der gerade drauf ist** - mit seinem
+tatsaechlichen, ggf. weit zurueckliegenden Montagedatum. Das ist die einzige
+Stelle, an der die Oberflaeche aktiv erklaert, was zu tun ist (Hilfetext plus
+ein Einstiegshinweis, der nur erscheint, solange kein Wechsel eingetragen
+ist): ohne ihn tippt man das heutige Datum ein, und die gesamte bisherige
+Historie faellt unter "ohne Satz". Beim Raten gilt bewusst **lieber zu spaet
+als zu frueh** - ein zu frueh gesetztes Datum schreibt diesem Satz Fahrten zu,
+die auf einem anderen liefen (falsche Zahlen), ein zu spaetes laesst nur ein
+paar Fahrten weg (weniger Zahlen).
+
 **Was zu welchem Satz zaehlt:** der Verbrauch eines Vorgangs N beschreibt die
 Strecke zwischen N-1 und N (siehe `consumption.py`). `sets_for_drives()` ordnet
 eine Fahrt deshalb nur zu, wenn an BEIDEN Enden derselbe Satz montiert war;

@@ -19,6 +19,10 @@ folgen [Semantic Versioning](https://semver.org/).
   (der misst die Jahreszeit), sondern die km-gewichtete relative Abweichung von
   der Verbrauchskurve über der Außentemperatur, zurückgerechnet auf eine
   gemeinsame Referenztemperatur.
+- Einstiegserklärung auf der Reifenseite: der erste Eintrag ist der aktuell
+  aufgezogene Satz mit seinem tatsächlichen Montagedatum. Sie steht über dem
+  Formular, solange noch kein Wechsel existiert — im zugeklappten Hilfetext
+  findet sie in genau diesem Moment niemand.
 - **`TireSet.odometer_km`**: Kilometerstand beim Wechsel, optional. Ist er an
   beiden Enden einer Montage bekannt, ist die Laufleistung die Differenz —
   exakt, und inklusive der Fahrt über den Wechsel hinweg; sonst bleibt es bei

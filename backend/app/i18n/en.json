@@ -665,5 +665,7 @@
   "tires.unit.years": "years",
   "tires.form.odometer": "Odometer",
   "tires.form.odometer_placeholder": "at the change, optional",
-  "tires.km_estimated": "Counted from the attributed drives only \u2013 the drive across the change is missing. Enter the odometer reading at the change and the figure becomes exact."
+  "tires.km_estimated": "Counted from the attributed drives only \u2013 the drive across the change is missing. Enter the odometer reading at the change and the figure becomes exact.",
+  "tires.getting_started_heading": "How to start:",
+  "tires.getting_started": "Record the set that is fitted right now \u2013 with the date it was mounted, even if that was a year ago, and the odometer reading from back then if you can still find it (garage invoice, service book). All drives BEFORE that date deliberately stay without a tire set: the app has no idea what was fitted then, and a guessed entry would be worse than none. If you no longer know the exact date, pick a slightly later one rather than one that is too early \u2013 guessing too early attributes other sets' drives to this one, guessing too late merely leaves a few drives out. The comparison only starts once the second set is recorded and both have been driven; the overview fills up before that."
 }

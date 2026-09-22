@@ -9,7 +9,10 @@
 
 <details class="help">
   <summary>{{ t('common.help') }}</summary>
-  <div class="inner">{{ t('tires.description') }}</div>
+  <div class="inner">
+    <p>{{ t('tires.description') }}</p>
+    <p><strong>{{ t('tires.getting_started_heading') }}</strong> {{ t('tires.getting_started') }}</p>
+  </div>
 </details>
 
 <div class="form-actions" style="margin-top:8px">
@@ -63,6 +66,12 @@
 <details class="panel" id="tire-list-panel" open>
   <summary>{{ t('tires.changes_heading') }} <span class="count" id="tire-count"></span></summary>
   <div class="inner">
+    <div id="tire-getting-started" hidden
+         style="margin-bottom:12px; padding:10px 12px; border-left:3px solid var(--accent2);
+                background:rgba(91,141,239,0.08); font-size:0.9em">
+      <strong>{{ t('tires.getting_started_heading') }}</strong>
+      {{ t('tires.getting_started') }}
+    </div>
     <details class="panel plain" id="tire-form-panel">
       <summary id="tire-form-heading">{{ t('tires.form.new_heading') }}</summary>
       <div class="inner">
@@ -204,6 +213,7 @@ async function loadTireSets() {
   document.getElementById('tire-count').textContent = tireSets.length;
 
   const table = document.getElementById('tire-table');
+  document.getElementById('tire-getting-started').hidden = tireSets.length > 0;
   if (!tireSets.length) { table.innerHTML = ''; return; }
   const head = `<tr><th>${T.colPeriod}</th><th>${T.colKind}</th>` +
     `<th>${T.colTire}</th><th>${T.colDaysMounted}</th><th>${T.colDrives}</th>` +
