@@ -73,6 +73,7 @@ const T = {
   backupResultProviders: {{ t('settings.backup.result.providers')|tojson }},
   backupResultLocations: {{ t('settings.backup.result.locations')|tojson }},
   backupResultSessions: {{ t('settings.backup.result.sessions')|tojson }},
+  backupResultFees: {{ t('settings.backup.result.fees')|tojson }},
   backupResultImported: {{ t('settings.backup.result.imported')|tojson }},
   backupResultSkipped: {{ t('settings.backup.result.skipped')|tojson }},
 
@@ -111,7 +112,8 @@ document.getElementById('backup-import-form').addEventListener('submit', async (
       `${T.backupResultVehicles}: ${r.vehicles_imported} ${T.backupResultImported}, ${r.vehicles_skipped} ${T.backupResultSkipped}. ` +
       `${T.backupResultProviders}: ${r.providers_imported} ${T.backupResultImported}, ${r.providers_skipped} ${T.backupResultSkipped}. ` +
       `${T.backupResultLocations}: ${r.locations_imported} ${T.backupResultImported}, ${r.locations_skipped} ${T.backupResultSkipped}. ` +
-      `${T.backupResultSessions}: ${r.sessions_imported} ${T.backupResultImported}, ${r.sessions_skipped} ${T.backupResultSkipped}.`;
+      `${T.backupResultSessions}: ${r.sessions_imported} ${T.backupResultImported}, ${r.sessions_skipped} ${T.backupResultSkipped}. ` +
+      `${T.backupResultFees}: ${r.fees_imported ?? 0} ${T.backupResultImported}, ${r.fees_skipped ?? 0} ${T.backupResultSkipped}.`;
     e.target.reset();
   } catch (err) {
     resultDiv.textContent = T.backupErrorGeneric;

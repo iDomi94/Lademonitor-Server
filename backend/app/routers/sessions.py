@@ -7,6 +7,7 @@ from .. import models, schemas
 from ..auth import get_current_user
 from ..consumption import compute_vehicle_consumptions
 from ..database import get_db
+from ..fees import load_allocation
 from ..geocode import reverse_geocode
 from ..sync import record_deletion
 from .locations import match_location
@@ -47,6 +48,13 @@ def attach_consumption(db: Session, user_id: str, sessions: list[models.Charging
             result = results.get(s.id)
             s.consumption_kwh_per_100km = result.value if result else None
             s.consumption_method = result.method if result else None
+
+    # Anteil an Grundgebuehren (fees.py) - aus demselben Grund hier und nicht
+    # gespeichert wie der Verbrauch: er haengt an ALLEN Vorgaengen der
+    # Periode, nicht nur an der (evtl. gefilterten) Ergebnismenge.
+    shares = load_allocation(db, user_id).shares if sessions else {}
+    for s in sessions:
+        s.fee_share = shares.get(s.id)
 
 
 def resolve_location(session: models.ChargingSession, user_id: str, db: Session) -> None:

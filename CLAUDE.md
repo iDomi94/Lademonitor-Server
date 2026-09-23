@@ -57,14 +57,16 @@ backend/app/
   models.py          - SQLAlchemy: Vehicle, Provider, ChargingLocation, ChargingSession,
                           DeletedRecord (Grabsteine, siehe Abschnitt "Sync"),
                           TireSet (siehe Abschnitt "Reifensaetze")
+                          ProviderFee (siehe Abschnitt "Grundgebuehren")
   schemas.py          - Pydantic Request/Response-Schemas
   routers/
     vehicles.py, providers.py, locations.py, sessions.py, stats.py, importer.py,
     geocoding.py, backup.py, auth.py, webdav_backup.py, myskoda.py, email.py,
-    sync.py, tires.py
+    sync.py, tires.py, provider_fees.py
   auth.py            - Passwort-Hashing, Token-Handling, Auth-Dependencies
   sync.py            - record_deletion(): Grabstein fuer eine geloeschte Zeile
   tires.py           - Reifensaetze, temperaturbereinigter Vergleich
+  fees.py            - Grundgebuehren/Abos: Perioden und Umlage nach kWh
   myskoda.py         - Client fuer die offizielle MyŠkoda Public API (sync httpx)
   myskoda_poller.py  - Zustandsmaschine der automatischen Ladeerkennung + Debug-Log
   mailer.py          - SMTP-Versand, Mail-Vorlagen, Versandprotokoll
@@ -678,6 +680,12 @@ Icon/Tooltip-Logik in der SessionsList-View.
   Maerz reichen und noch keinen Winter enthalten. Ausserdem sind beide Apps in
   dieser Umgebung nicht kompilierbar (kein Xcode, kein Android-SDK), der Code
   ist also ungebaut.
+- **Grundgebuehren/Abos der Anbieter - umgesetzt seit 2026-09-22 (v0.27.0)** in
+  Server, Web-UI und beiden Apps, siehe Abschnitt "Grundgebuehren". **Offen:**
+  beide Apps sind in dieser Umgebung nicht kompilierbar (kein Xcode, kein
+  Android-SDK), der App-Code ist also ungebaut; ausserdem ist die Umlage in den
+  Apps nur gegen die Regeln aus `tests/test_fees.py` von Hand nachgebaut, nicht
+  automatisch gegengeprueft.
 - **Xcode-Beta-Umgebung des Nutzers:** macOS 27 Beta + Xcode 27 Beta
   (Erstbeta, Stand Aug 2026). Es gab einen `dyld_shared_cache_extract_dylibs`
   Bug beim Installieren auf echtem Gerät - gelöst durch Löschen von
@@ -1917,6 +1925,84 @@ nicht: Groesse, Marke und Modell sind Produktbezeichnungen, kein
 personenbezogenes Datum, und `kind`/`installed_on` steuern die Auswertung per
 SQL bzw. Vergleich.
 
+
+## Grundgebuehren (`fees.py`, `routers/provider_fees.py`, ab 2026-09-22, v0.27.0)
+
+Beantwortet "was kostet mich eine kWh WIRKLICH, wenn ich ein Abo habe" -
+Beispiel Ionity Powerpass, 15 EUR im Monat ab dem 03.05.: die Periode
+03.05.-02.06. wird auf alle Ionity-Ladevorgaenge dieses Zeitraums umgelegt.
+
+**Entscheidungen des Nutzers (22.09.2026):** umgelegt wird **nach kWh**, nicht
+gleichmaessig pro Vorgang (sonst traegt ein 5-kWh-Zwischenstopp so viel wie
+eine 60-kWh-Ladung), und die Gebuehren zaehlen in **allen** Kostenkennzahlen
+mit - Gesamtkosten, Preis je kWh, Kosten je 100 km, Anbieter- und
+Monatsaufteilung.
+
+**Haengt am Anbieter, nicht am Ladevorgang.** "Anbieter" ist hier, wer
+abrechnet (Karte/Vertrag) - genau daran haengt ein Abo. Eine wiederkehrende
+Gebuehr ist EINE Zeile (`amount` je Periode, `interval` monthly/yearly/once,
+`start_date`, optional `end_date` als Kuendigung). Eine Preisaenderung ist eine
+zweite Zeile ab dem neuen Datum, wie bei den Reifensaetzen.
+
+**Der Anteil wird bei jedem Abruf frisch gerechnet und nie gespeichert** -
+dieselbe Ueberlegung wie beim Verbrauch: kommt ein Vorgang in die Periode dazu,
+verschieben sich alle Anteile mit. In `price_total` geschrieben waere ausserdem
+der echte Saeulenpreis weg, und das Preis-Gedaechtnis des Anbieters wuerde den
+Mischpreis lernen. `SessionOut.fee_share` ist deshalb nur Antwort, und die
+Oberflaechen zeigen Saeulenpreis und Anteil getrennt ("+ 1,20 EUR Grundgebuehr",
+in der Detailansicht zusaetzlich "effektiv gesamt/pro kWh").
+
+**Regeln** (`fees.py`; `tests/test_fees.py` haelt sie fest):
+
+- Perioden sind halboffen `[Beginn, naechster Beginn)` und werden immer vom
+  URSPRUENGLICHEN Ankertag aus gerechnet, aufs Monatsende gekuerzt
+  (31.01. -> 28.02. -> 31.03., nicht 28.03.).
+- Es zaehlen nur Perioden, die bis heute begonnen haben - dann aber voll (ein
+  Abo wird im Voraus bezahlt).
+- `end_date` ist inklusive: die Periode, in die es faellt, zaehlt voll, ihre
+  Ladevorgaenge aber nur bis zu diesem Tag. `once` ist genau eine Periode
+  `[start, end+1)` und verlangt ein Enddatum (422).
+- Zugeordnet wird ueber den lokalen Kalendertag von `start_time`.
+- Auf den Cent gerundet (Python `round`, also half-even), der Rundungsrest
+  landet beim ersten Vorgang mit der groessten kWh - Reihenfolge fest nach
+  (`start_time`, `id`), damit er nicht zwischen zwei Abrufen springt. Haben
+  alle Vorgaenge keine Energie, gleichmaessig.
+- **Eine Periode ganz ohne Ladevorgang ist trotzdem bezahlt** ("unallocated"):
+  sie steht an keinem Vorgang, zaehlt aber in der Statistik - in Gesamtkosten,
+  unter dem Anbieternamen (mit 0 kWh) und im Monat, in dem die Periode beginnt.
+
+**Statistik (`routers/stats.py`):** die Umlage laeuft ueber ALLE Vorgaenge des
+Nutzers, Filter greifen erst danach - sonst bekaeme der letzte Vorgang vor der
+Filtergrenze die ganze Gebuehr. Nicht umgelegte Perioden zaehlen nur OHNE
+Fahrzeugfilter (sie gehoeren zu keinem Fahrzeug), der Datumsfilter wirkt auf
+ihren Beginn. `price_per_100km` nimmt wie die kWh die Vorgaenge ab dem zweiten
+mit Kilometerstand, dazu die nicht umgelegten Perioden, die in diesem Zeitraum
+beginnen. Neu in der Antwort: `total_fees`, `unallocated_fees`, je Anbieter und
+Monat `total_fees`.
+
+**Beide Apps rechnen das lokal nach** (`LocalFeeAllocator.swift`/`.kt`), weil
+ihr Dashboard immer lokal entsteht - auch im Server-Modus. Regelaenderungen in
+`fees.py` MUESSEN dort mitgezogen werden. Die Apps vereinheitlichen vorher die
+Anbieter-Referenzen (lokale ID vs. Server-ID), sonst fielen Gebuehr und
+Vorgaenge desselben Anbieters auseinander. Rundungsgleichheit: Swift
+`.toNearestOrEven`, Kotlin `Math.rint` - bei exakt halben Cents kann die
+Binaerdarstellung trotzdem selten anders kippen als in Python; die Summe bleibt
+durch den Rundungsrest immer exakt.
+
+**Sync:** eigene Entitaet zwischen Anbietern und Ladeorten (Push und Pull in
+FK-Reihenfolge Fahrzeuge -> Anbieter -> Gebuehren -> Ladeorte -> Ladevorgaenge),
+Grabstein-Typ `provider_fee` (`ALTER TYPE syncentitytype ADD VALUE`). Gegen
+einen Server vor 0.27.0 (404 auf `/api/provider-fees`) ueberspringen die Apps
+die Gebuehren und lassen sie dirty, statt den Sync scheitern zu lassen. Der
+Payload schickt ALLE Felder inkl. `null` - sonst liesse sich eine Kuendigung
+per PATCH nie wieder entfernen. Android brauchte dafuer die Room-Migration 3->4.
+
+**Loeschen eines Anbieters** nimmt seine Gebuehren mit (inkl. Grabsteinen);
+ebenso `_purge_owned_data()` beim Loeschen eines Nutzers. **Backup:**
+`fees.csv` in der ZIP, beim Import optional (aeltere ZIPs haben sie nicht).
+**Verschluesselt** sind `label` und `notes` (Freitext wie `Provider.notes`),
+`amount` und die Daten nicht - kein personenbezogenes Datum, und die Statistik
+rechnet damit.
 
 ## Backup-Export/-Import (`routers/backup.py`)
 

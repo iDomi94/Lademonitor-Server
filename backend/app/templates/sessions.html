@@ -112,6 +112,8 @@ const T = {
   del: {{ t('common.delete')|tojson }},
   noneOption: {{ t('common.none_option')|tojson }},
   badgeManual: {{ t('sessions.badge.manual')|tojson }},
+  feeShare: {{ t('sessions.fee_share')|tojson }},
+  feeShareTooltip: {{ t('sessions.fee_share_tooltip')|tojson }},
   badgeAutomatic: {{ t('sessions.badge.automatic')|tojson }},
   badgeImport: {{ t('sessions.badge.import')|tojson }},
   tooltipFullChargeInterval: {{ t('sessions.consumption.tooltip.full_charge_interval')|tojson }},
@@ -213,6 +215,9 @@ function sessionView(s) {
     kwh: s.energy_kwh != null ? s.energy_kwh.toFixed(1) : null,
     priceTotal: s.price_total != null ? s.price_total.toFixed(2) : null,
     pricePerKwh: s.price_per_kwh != null ? s.price_per_kwh.toFixed(3) : null,
+    // Anteil an Grundgebuehren des Anbieters (fees.py) - kommt ZUSAETZLICH
+    // zum Saeulenpreis, der bleibt unveraendert stehen.
+    feeShare: s.fee_share ? T.feeShare.replace('{amount}', s.fee_share.toFixed(2) + ' €') : null,
     odometer: s.odometer_km != null ? s.odometer_km.toLocaleString(LOCALE) : null,
   };
 }
@@ -227,7 +232,8 @@ function sessionRowHtml(s) {
     <td>${s.charging_type || '–'}</td>
     <td>${v.soc || '–'}</td>
     <td>${v.kwh ?? '–'}</td>
-    <td>${v.priceTotal != null ? v.priceTotal + ' €' : '–'}</td>
+    <td>${v.priceTotal != null ? v.priceTotal + ' €' : '–'}${v.feeShare
+      ? `<div style="color:var(--muted); font-size:0.85em" title="${T.feeShareTooltip}">${v.feeShare}</div>` : ''}</td>
     <td>${v.odometer ?? '–'}</td>
     <td>${consumptionCell(s.consumption_kwh_per_100km, s.consumption_method)}</td>
     <td>${badgeFor(s.source)}</td>
@@ -271,6 +277,7 @@ function sessionCardHtml(s) {
       ${v.kwh != null ? `<span class="skwh">${v.kwh} kWh</span>` : ''}
       ${v.priceTotal != null ? `<span class="ssub">${v.priceTotal} €</span>` : ''}
       ${v.pricePerKwh != null ? `<span class="smeta">${v.pricePerKwh} €/kWh</span>` : ''}
+      ${v.feeShare ? `<span class="smeta" title="${T.feeShareTooltip}">${v.feeShare}</span>` : ''}
       <div class="sactions">
         <button type="button" title="${T.del}" aria-label="${T.del}"
                 onclick="event.stopPropagation(); deleteSession('${s.id}')">${ICON_DELETE}</button>

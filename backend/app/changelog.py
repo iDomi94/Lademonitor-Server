@@ -5,6 +5,20 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.27.0",
+        "date": "2026-09-22",
+        "title": "Grundgebühren und Abos der Anbieter",
+        "changes": [
+            "Neuer Abschnitt in den Einstellungen: „Grundgebühren & Abos\". Dort trägst du z. B. den Ionity Powerpass ein – 15 € monatlich ab dem 03.05. Die Folgemonate ergeben sich von selbst, ein Enddatum beendet das Abo. Für einen einzelnen Zeitraum gibt es „einmalig\", daneben „jährlich\".",
+            "Die Gebühr jeder Periode wird auf alle Ladevorgänge dieses Anbieters in der Periode umgelegt, im Verhältnis der geladenen kWh: bei 40, 20 und 15 kWh sind das 8, 4 und 3 €. Aus 0,39 €/kWh an der Säule werden so bei jedem Vorgang effektiv 0,59 €/kWh. Gleichmäßig je Vorgang hätte einem kurzen Zwischenstopp denselben Anteil gegeben wie einer vollen Ladung.",
+            "Der an der Säule bezahlte Preis bleibt unverändert stehen; der Anteil erscheint zusätzlich (in der Liste als „+ 8,00 € Grundgebühr\"). So bleibt auch der Preisvorschlag des Anbieters beim nächsten Ladevorgang der echte Säulenpreis. Der Anteil wird bei jedem Abruf neu berechnet – kommt ein Ladevorgang in der Periode dazu, verschieben sich die Anteile der anderen mit.",
+            "Gesamtkosten, Preis je kWh, Kosten je 100 km, die Aufteilung nach Anbietern und die Monatswerte enthalten die Gebühren jetzt. Unter den Gesamtkosten steht, wie viel davon Grundgebühren sind. Auch der Monatsbericht per Mail und die Kosten-Sensoren in Home Assistant rechnen sie mit ein.",
+            "Eine Periode ganz ohne Ladevorgang zählt trotzdem – bezahlt ist sie ja. Sie erscheint im Monat ihres Beginns, gehört aber zu keinem Fahrzeug und fällt bei einem Fahrzeugfilter deshalb weg.",
+            "Das Backup enthält die Gebühren als eigene Datei (fees.csv). Ältere Backups ohne diese Datei lassen sich weiterhin einlesen.",
+            "iOS- und Android-App kennen die Gebühren ebenfalls (eigene Versionen): sie rechnen ihr Dashboard auf dem Gerät und müssen die Umlage deshalb selbst beherrschen. Ältere App-Versionen laufen weiter, zeigen aber die Kosten ohne Gebühren.",
+        ],
+    },
+    {
         "version": "0.26.1",
         "date": "2026-09-22",
         "title": "Reifen: Mischbereifung",

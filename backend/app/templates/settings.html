@@ -58,6 +58,40 @@
   </div>
 </details>
 
+<details class="panel" id="fee-panel">
+  <summary>{{ t('settings.fee.heading') }}<span class="count" id="fee-count"></span></summary>
+  <div class="inner">
+    <details class="help"><summary>{{ t('settings.fee.help_summary') }}</summary>
+      <p>{{ t('settings.fee.help_text') }}</p></details>
+    <div class="tablewrap"><table><thead><tr><th>{{ t('settings.fee.table.provider') }}</th><th>{{ t('settings.fee.table.amount') }}</th><th>{{ t('settings.fee.table.period') }}</th><th>{{ t('settings.fee.table.charged') }}</th><th class="col-actions"></th></tr></thead>
+    <tbody id="fee-rows"></tbody></table></div>
+
+    <details class="panel plain" id="fee-form-panel">
+      <summary id="fee-form-heading">{{ t('settings.fee.add_heading') }}</summary>
+      <form class="inline-form" id="fee-form">
+        <div><label>{{ t('settings.fee.provider') }}</label><select id="f-provider" required></select></div>
+        <div><label>{{ t('settings.fee.label') }}</label><input id="f-label" placeholder="{{ t('settings.fee.label_placeholder') }}"></div>
+        <div><label>{{ t('settings.fee.amount') }}</label><input type="number" step="0.01" min="0" id="f-amount" required></div>
+        <div>
+          <label>{{ t('settings.fee.interval') }}</label>
+          <select id="f-interval">
+            <option value="monthly">{{ t('settings.fee.interval.monthly') }}</option>
+            <option value="yearly">{{ t('settings.fee.interval.yearly') }}</option>
+            <option value="once">{{ t('settings.fee.interval.once') }}</option>
+          </select>
+        </div>
+        <div><label>{{ t('settings.fee.start_date') }}</label><input type="date" id="f-start" required></div>
+        <div><label id="f-end-label">{{ t('settings.fee.end_date') }}</label><input type="date" id="f-end"></div>
+        <div class="form-actions">
+          <button type="button" id="fee-cancel-btn" style="background:var(--muted); display:none">{{ t('settings.fee.cancel') }}</button>
+          <button type="submit" id="fee-submit-btn">{{ t('settings.fee.submit_new') }}</button>
+        </div>
+        <div id="fee-status" style="font-size:0.9em"></div>
+      </form>
+    </details>
+  </div>
+</details>
+
 <details class="panel" id="location-panel">
   <summary>{{ t('settings.location.heading') }}<span class="count" id="location-count"></span></summary>
   <div class="inner">
@@ -317,6 +351,8 @@ let locations = [];
 let editingVehicleId = null;
 let editingProviderId = null;
 let editingLocationId = null;
+let fees = [];
+let editingFeeId = null;
 
 // Locale fuer Datumsformatierung an die aktive UI-Sprache gekoppelt statt
 // fest auf 'de-DE'.
@@ -341,6 +377,22 @@ const T = {
   providerSubmitNew: {{ t('settings.provider.submit_new')|tojson }},
   providerSubmitEdit: {{ t('settings.provider.submit_edit')|tojson }},
   providerConfirmDelete: {{ t('settings.provider.confirm_delete')|tojson }},
+
+  feeEditHeading: {{ t('settings.fee.edit_heading')|tojson }},
+  feeAddHeading: {{ t('settings.fee.add_heading')|tojson }},
+  feeSubmitNew: {{ t('settings.fee.submit_new')|tojson }},
+  feeSubmitEdit: {{ t('settings.fee.submit_edit')|tojson }},
+  feeConfirmDelete: {{ t('settings.fee.confirm_delete')|tojson }},
+  feeIntervals: {
+    monthly: {{ t('settings.fee.per.monthly')|tojson }},
+    yearly: {{ t('settings.fee.per.yearly')|tojson }},
+    once: {{ t('settings.fee.per.once')|tojson }},
+  },
+  feeFrom: {{ t('settings.fee.from')|tojson }},
+  feeOpenEnd: {{ t('settings.fee.open_end')|tojson }},
+  feeEndDate: {{ t('settings.fee.end_date')|tojson }},
+  feeEndDateOnce: {{ t('settings.fee.end_date_once')|tojson }},
+  feeError: {{ t('settings.fee.error')|tojson }},
 
   locationEditHeading: {{ t('settings.location.edit_heading')|tojson }},
   locationAddHeading: {{ t('settings.location.add_heading')|tojson }},
@@ -496,6 +548,8 @@ async function loadProviders() {
     <td class="col-actions">${actionButtons('Provider', p.id)}</td></tr>`).join('');
   document.getElementById('l-provider').innerHTML = `<option value="">${T.noneOption}</option>` +
     providers.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+  document.getElementById('f-provider').innerHTML =
+    providers.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
 }
 
 function startEditProvider(id) {
@@ -525,7 +579,9 @@ async function deleteItemProvider(id) {
   if (!confirm(T.providerConfirmDelete)) return;
   await fetch(`api/providers/${id}`, { method: 'DELETE' });
   if (editingProviderId === id) cancelEditProvider();
-  loadProviders();
+  await loadProviders();
+  // Grundgebuehren gehen mit dem Anbieter (siehe routers/providers.py).
+  loadFees();
 }
 
 document.getElementById('provider-form').addEventListener('submit', async (e) => {
@@ -549,6 +605,104 @@ document.getElementById('provider-form').addEventListener('submit', async (e) =>
     e.target.reset();
   }
   loadProviders();
+});
+
+// ---------- Grundgebuehren (siehe fees.py) ----------
+
+function feeDate(iso) {
+  return iso ? new Date(iso.slice(0, 10) + 'T00:00:00').toLocaleDateString(LOCALE) : '';
+}
+
+function feeMoney(value) {
+  return value.toLocaleString(LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+}
+
+async function loadFees() {
+  fees = await (await fetch('api/provider-fees')).json();
+  setCount('fee-count', fees.length);
+  document.getElementById('fee-rows').innerHTML = fees.map(f => {
+    const provider = providers.find(p => p.id === f.provider_id);
+    const period = f.interval === 'once'
+      ? `${feeDate(f.start_date)} – ${feeDate(f.end_date)}`
+      : `${T.feeFrom} ${feeDate(f.start_date)}` + (f.end_date ? ` – ${feeDate(f.end_date)}` : ` (${T.feeOpenEnd})`);
+    const label = f.label ? `<div style="color:var(--muted); font-size:0.85em">${f.label}</div>` : '';
+    return `<tr><td>${provider ? provider.name : '–'}${label}</td>
+      <td>${feeMoney(f.amount)} ${T.feeIntervals[f.interval] || ''}</td>
+      <td>${period}</td><td>${feeMoney(f.charged_to_date)}</td>
+      <td class="col-actions">${actionButtons('Fee', f.id)}</td></tr>`;
+  }).join('');
+}
+
+// Bei "einmalig" ist das Enddatum Pflicht (ein Zeitraum), sonst optional
+// (Kuendigung) - die Beschriftung sagt, welcher Fall gerade gilt.
+function syncFeeEndField() {
+  const once = document.getElementById('f-interval').value === 'once';
+  document.getElementById('f-end').required = once;
+  document.getElementById('f-end-label').textContent = once ? T.feeEndDateOnce : T.feeEndDate;
+}
+document.getElementById('f-interval').addEventListener('change', syncFeeEndField);
+
+function startEditFee(id) {
+  const f = fees.find(x => x.id === id);
+  if (!f) return;
+  editingFeeId = id;
+  document.getElementById('f-provider').value = f.provider_id;
+  document.getElementById('f-label').value = f.label ?? '';
+  document.getElementById('f-amount').value = f.amount;
+  document.getElementById('f-interval').value = f.interval;
+  document.getElementById('f-start').value = f.start_date.slice(0, 10);
+  document.getElementById('f-end').value = f.end_date ? f.end_date.slice(0, 10) : '';
+  syncFeeEndField();
+  document.getElementById('fee-form-heading').textContent = T.feeEditHeading;
+  document.getElementById('fee-submit-btn').textContent = T.feeSubmitEdit;
+  document.getElementById('fee-cancel-btn').style.display = 'inline-block';
+  openForEdit('fee-panel', 'fee-form-panel');
+  document.getElementById('fee-form').scrollIntoView({ behavior: 'smooth' });
+}
+
+function cancelEditFee() {
+  editingFeeId = null;
+  document.getElementById('fee-form').reset();
+  document.getElementById('fee-status').textContent = '';
+  syncFeeEndField();
+  document.getElementById('fee-form-heading').textContent = T.feeAddHeading;
+  document.getElementById('fee-submit-btn').textContent = T.feeSubmitNew;
+  document.getElementById('fee-cancel-btn').style.display = 'none';
+}
+document.getElementById('fee-cancel-btn').addEventListener('click', cancelEditFee);
+
+async function deleteItemFee(id) {
+  if (!confirm(T.feeConfirmDelete)) return;
+  await fetch(`api/provider-fees/${id}`, { method: 'DELETE' });
+  if (editingFeeId === id) cancelEditFee();
+  loadFees();
+}
+
+document.getElementById('fee-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const end = document.getElementById('f-end').value;
+  const payload = {
+    provider_id: document.getElementById('f-provider').value,
+    label: document.getElementById('f-label').value || null,
+    amount: parseFloat(document.getElementById('f-amount').value),
+    interval: document.getElementById('f-interval').value,
+    start_date: document.getElementById('f-start').value + 'T00:00:00',
+    end_date: end ? end + 'T00:00:00' : null,
+  };
+  const res = await fetch(editingFeeId ? `api/provider-fees/${editingFeeId}` : 'api/provider-fees', {
+    method: editingFeeId ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) {
+    let detail = '';
+    try { detail = (await res.json()).detail; } catch (_) {}
+    const status = document.getElementById('fee-status');
+    status.textContent = T.feeError + (typeof detail === 'string' && detail ? ': ' + detail : '');
+    status.style.color = 'var(--danger)';
+    return;
+  }
+  cancelEditFee();
+  loadFees();
 });
 
 // ---------- Ladeorte ----------
@@ -1056,6 +1210,7 @@ document.getElementById('language-form').addEventListener('submit', async (e) =>
   await loadWeather();
   await loadVehicles();
   await loadProviders();
+  await loadFees();
   await loadLocations();
   await loadUsers();
 })();

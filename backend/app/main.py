@@ -34,6 +34,7 @@ from .routers import (
     importer,
     locations,
     myskoda,
+    provider_fees,
     providers,
     sessions,
     stats,
@@ -173,6 +174,7 @@ async def _no_cache_html(request: Request, call_next):
 app.include_router(auth.router)
 app.include_router(vehicles.router, dependencies=[Depends(get_current_user)])
 app.include_router(providers.router, dependencies=[Depends(get_current_user)])
+app.include_router(provider_fees.router, dependencies=[Depends(get_current_user)])
 app.include_router(locations.router, dependencies=[Depends(get_current_user)])
 app.include_router(sessions.router, dependencies=[Depends(get_current_user)])
 app.include_router(stats.router, dependencies=[Depends(get_current_user)])
