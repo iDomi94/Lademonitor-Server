@@ -2004,6 +2004,58 @@ ebenso `_purge_owned_data()` beim Loeschen eines Nutzers. **Backup:**
 `amount` und die Daten nicht - kein personenbezogenes Datum, und die Statistik
 rechnet damit.
 
+## Tarifrechner "Lohnt sich der Tarif?" (nur Apps, ab 2026-09-23)
+
+Rechnet VORAUS, was eine kWh mit Grundgebuehr effektiv kostet und ob das
+guenstiger ist als ohne Tarif - das Gegenstueck zum Rueckblick, den die
+Grundgebuehren-Umlage (Abschnitt oben) schon liefert. Konzept:
+`konzept-tarifrechner.md` im Projektordner.
+
+**Bewusst nur in den Apps, dieser Server ist nicht beteiligt** - kein Endpunkt,
+kein Modell, keine Migration. Es ist eine Vorausrechnung ueber Schieberegler
+(Dreisatz plus ein gewichteter Durchschnitt), alle Vorschlagswerte liegen in
+beiden Apps lokal vor, und so funktioniert der Rechner auch im
+Local-Only-Modus. Das Muster "Auswertung nur im Server-Modus" (Temperatur,
+Reifen) gilt fuer Rechnungen mit Modellen und Schwellwerten; hier gibt es
+nichts, was zwischen App und Web auseinanderlaufen koennte, und die Web-UI hat
+ihn (noch) nicht.
+
+Wo: neuer fuenfter Reiter **Tools** in beiden Apps - eine LISTE von Tools, der
+Tarifrechner ist der erste Eintrag. Weitere Tools kommen dort als Zeilen dazu,
+nicht als weitere Reiter (iOS versteckt ab dem sechsten Reiter alles hinter
+"Mehr"). Rechnung und Vorschlaege in `TariffCalculator.swift` bzw.
+`TariffCalculator.kt`, beide Apps gleich - Aenderungen immer in beiden.
+
+Die Entscheidungen des Nutzers (23.09.2026):
+
+- **Spielwiese zuerst**: kein bekannter Anbieter noetig, "Werte uebernehmen
+  von" fuellt Preis, Grundgebuehr und Anteil nur vor.
+- Tarifpreis, Grundgebuehr, km im Monat und **Anteil beim Tarif** sind
+  Schieberegler (eigener Regler mit Markierung fuer den Vorschlagswert),
+  **live** gerechnet; ein Tipp auf den Wert erlaubt die genaue Eingabe.
+- Ergebnis oben, **nur die Ergebnisbox** gruen/rot getoent (plus Symbol und
+  Wort, nicht allein die Farbe) - nicht der ganze Hintergrund, der wuerde beim
+  Ziehen um den Break-even flackern. Die Spur des km-Reglers ist links vom
+  Break-even rot, rechts gruen.
+- **Preis ohne Tarif**: "Automatik" oder "selbst eintragen". Automatik = nach
+  kWh gewichteter Preis (Saeulenpreis plus `fee_share`) der letzten 12 Monate
+  an **oeffentlichen** Anbietern, nur dieselbe Lade-Art, ohne den gerade
+  betrachteten Anbieter. Welche Anbieter oeffentlich sind (die eigene Wallbox
+  abwaehlen), steht **lokal auf dem Geraet**, nicht synchronisiert -
+  bewusst, Entscheidung per Karte. Ein synchronisiertes Feld
+  "oeffentlich/privat" am `Provider` waere der naechste Schritt, falls es auch
+  fuer andere Auswertungen ("zu Hause vs. unterwegs") gebraucht wird.
+
+Vorschlagswerte: km/Monat je Fahrzeug aus dem Kilometerstand der letzten 90
+Tage (mit dem Vorgang davor als Anker, mindestens 14 Tage Spanne, sonst die
+ganze Historie; nur Fahrzeuge mit Ladung im letzten Jahr), Verbrauch wie das
+Dashboard aus den geladenen kWh des letzten Jahres (also inkl. Ladeverlusten -
+genau die bezahlte Energie), Anteil als kWh-Anteil der letzten 90 Tage,
+Grundgebuehr aus den aktiven `ProviderFee`s auf den Monat gerechnet.
+
+**Offen:** beide Apps sind in dieser Umgebung nicht kompilierbar (kein Xcode,
+kein Android-SDK), der Code ist ungebaut.
+
 ## Backup-Export/-Import (`routers/backup.py`)
 
 Reiner Backup/Restore-Mechanismus (z.B. Server-Neuaufsetzung), bewusst KEIN
