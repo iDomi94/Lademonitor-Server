@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..auth import get_current_user
+from .. import battery
 from ..consumption import compute_vehicle_consumptions
 from ..database import get_db
 from ..fees import load_allocation
@@ -312,3 +313,92 @@ def stats_temperature(
         sessions_without_temp=without_temp,
         bucket_width_c=BUCKET_WIDTH_C,
     )
+
+
+@router.get("/battery", response_model=schemas.BatteryStats)
+def stats_battery(
+    vehicle_id: str | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Akku-Gesundheit und Ladeverluste je Fahrzeug (siehe battery.py).
+
+    Eine Liste je Fahrzeug statt einer Gesamtzahl: scheinbare Kapazitaeten
+    zweier Autos zu mischen ergaebe nichts Sinnvolles. Der Datumsfilter wirkt
+    auf die Vorgaenge selbst - anders als beim Verbrauch gibt es hier keine
+    Kette, jeder Vorgang steht fuer sich. Der Anfangswert des Verlaufs ist dann
+    allerdings der Anfang des ZEITRAUMS, nicht der Aufzeichnung.
+    """
+    vehicles = db.query(models.Vehicle).filter(models.Vehicle.user_id == user.id).all()
+    if vehicle_id:
+        vehicles = [v for v in vehicles if v.id == vehicle_id]
+    provider_names = {
+        p.id: p.name
+        for p in db.query(models.Provider).filter(models.Provider.user_id == user.id).all()
+    }
+
+    result = []
+    for vehicle in sorted(vehicles, key=lambda v: v.name or ""):
+        q = db.query(models.ChargingSession).filter(
+            models.ChargingSession.user_id == user.id,
+            models.ChargingSession.vehicle_id == vehicle.id,
+        )
+        if start_date:
+            q = q.filter(models.ChargingSession.start_time >= datetime.combine(start_date, time.min))
+        if end_date:
+            q = q.filter(models.ChargingSession.start_time <= datetime.combine(end_date, time.max))
+        sessions = q.all()
+        if not sessions:
+            continue
+
+        nominal = vehicle.battery_capacity_kwh or None
+        points, excluded = battery.collect_points(sessions, nominal)
+        by_type, by_provider = battery.build_losses(points, nominal)
+        health = battery.build_health(points)
+
+        def out(group, name=None):
+            return schemas.BatteryLossGroupOut(
+                key=name if name is not None else group.key,
+                session_count=group.session_count,
+                energy_kwh=group.energy_kwh,
+                apparent_capacity_kwh=group.apparent_capacity_kwh,
+                loss_pct=group.loss_pct,
+            )
+
+        result.append(
+            schemas.BatteryVehicleOut(
+                vehicle_id=vehicle.id,
+                vehicle_name=vehicle.name,
+                nominal_capacity_kwh=nominal,
+                points=[
+                    schemas.BatteryPointOut(
+                        session_id=p.session_id,
+                        start_time=p.start_time,
+                        charging_type=p.charging_type,
+                        soc_delta=p.soc_delta,
+                        energy_kwh=p.energy_kwh,
+                        apparent_capacity_kwh=p.apparent_capacity_kwh,
+                        loss_pct=p.loss_pct,
+                    )
+                    for p in points
+                ],
+                losses_by_type=[out(g) for g in by_type],
+                losses_by_provider=[
+                    out(g, provider_names.get(g.key, "")) for g in by_provider
+                ],
+                health_periods=[
+                    schemas.BatteryHealthPeriodOut(
+                        period=p.period, index_pct=p.index_pct, session_count=p.session_count
+                    )
+                    for p in health.periods
+                ],
+                health_latest_index_pct=health.latest_index_pct,
+                health_trend_pct_per_year=health.trend_pct_per_year,
+                health_baselines=health.baselines,
+                excluded=schemas.BatteryExclusionsOut(**excluded.__dict__),
+                min_soc_delta=battery.MIN_SOC_DELTA,
+            )
+        )
+    return schemas.BatteryStats(vehicles=result)

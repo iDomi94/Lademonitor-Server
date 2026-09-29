@@ -72,6 +72,18 @@
   <div id="temp-seasons"></div>
 </div>
 
+<h2>{{ t('battery.heading') }}</h2>
+
+<details class="help">
+  <summary>{{ t('temp.help.summary') }}</summary>
+  <p>{{ t('battery.help.text') }}</p>
+</details>
+
+<div class="card" id="battery-card">
+  <p class="tempempty" id="battery-empty">{{ t('battery.empty') }}</p>
+  <div id="battery-vehicles"></div>
+</div>
+
 <script>
 function setText(id, value) {
   const el = document.getElementById(id);
@@ -102,6 +114,25 @@ const TEMP_T = {
   tableConsumption: {{ t('temp.table.consumption')|tojson }},
   tableSessions: {{ t('temp.table.sessions')|tojson }},
   tableKm: {{ t('temp.table.km')|tojson }},
+};
+
+const BATTERY_T = {
+  healthLabel: {{ t('battery.health.label')|tojson }},
+  healthDetail: {{ t('battery.health.detail')|tojson }},
+  healthTrend: {{ t('battery.health.trend')|tojson }},
+  healthNone: {{ t('battery.health.none')|tojson }},
+  healthChart: {{ t('battery.health.chart')|tojson }},
+  lossesHeading: {{ t('battery.losses.heading')|tojson }},
+  lossesNoNominal: {{ t('battery.losses.no_nominal')|tojson }},
+  colType: {{ t('battery.col.type')|tojson }},
+  colProvider: {{ t('battery.col.provider')|tojson }},
+  colSessions: {{ t('battery.col.sessions')|tojson }},
+  colKwh: {{ t('battery.col.kwh')|tojson }},
+  colApparent: {{ t('battery.col.apparent')|tojson }},
+  colLoss: {{ t('battery.col.loss')|tojson }},
+  withoutProvider: {{ t('battery.without_provider')|tojson }},
+  unknownType: {{ t('battery.unknown_type')|tojson }},
+  excluded: {{ t('battery.excluded')|tojson }},
 };
 
 const MONTH_NAMES = {{ t('dashboard.month_names')|tojson }}.split('|');
@@ -555,9 +586,76 @@ async function loadStats() {
     console.error('Fehler beim Laden der Statistiken:', err);
   }
 }
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function batteryLossTable(groups, label) {
+  if (!groups.length) return '';
+  const sign = v => (v > 0 ? '+' : '') + fmtNumber(v, 1) + ' %';
+  return `<div class="tablewrap" style="margin-bottom:16px"><table>
+    <thead><tr><th>${escapeHtml(label)}</th><th>${BATTERY_T.colSessions}</th><th>${BATTERY_T.colKwh}</th>
+      <th>${BATTERY_T.colApparent}</th><th>${BATTERY_T.colLoss}</th></tr></thead><tbody>`
+    + groups.map(g => `<tr>
+        <td>${escapeHtml(g.key === 'unknown' ? BATTERY_T.unknownType : (g.key || BATTERY_T.withoutProvider))}</td>
+        <td>${g.session_count}</td>
+        <td>${fmtNumber(g.energy_kwh, 1)}</td>
+        <td>${fmtNumber(g.apparent_capacity_kwh, 1)} kWh</td>
+        <td>${g.loss_pct == null ? '–' : sign(g.loss_pct)}</td>
+      </tr>`).join('')
+    + '</tbody></table></div>';
+}
+
+async function loadBattery() {
+  const res = await fetch('api/stats/battery' + filterQueryString());
+  if (!res.ok) return;
+  const data = await res.json();
+  const vehicles = data.vehicles.filter(v => v.points.length);
+  document.getElementById('battery-empty').hidden = vehicles.length > 0;
+  const container = document.getElementById('battery-vehicles');
+  container.innerHTML = vehicles.map((v, i) => {
+    const title = vehicles.length > 1 ? `<h3>${escapeHtml(v.vehicle_name)}</h3>` : '';
+    let hero = `<p class="tempempty">${BATTERY_T.healthNone}</p>`;
+    if (v.health_latest_index_pct != null) {
+      let detail = BATTERY_T.healthDetail.replace('{count}', v.points.length);
+      if (v.health_trend_pct_per_year != null) {
+        const t = v.health_trend_pct_per_year;
+        detail += ' · ' + BATTERY_T.healthTrend.replace('{value}', (t > 0 ? '+' : '') + fmtNumber(t, 1));
+      }
+      hero = `<div class="temphero"><div class="temphero-figure">${fmtNumber(v.health_latest_index_pct, 0)} %</div>
+        <div><div class="temphero-label">${BATTERY_T.healthLabel}</div>
+        <div class="temphero-detail">${detail}</div></div></div>
+        <div class="stat-label" style="margin:12px 0 4px">${BATTERY_T.healthChart}</div>
+        <div id="battery-health-${i}"></div>`;
+    }
+    const ex = v.excluded;
+    const skipped = ex.estimated_energy + ex.missing_values + ex.small_soc_delta + ex.implausible;
+    const note = skipped ? BATTERY_T.excluded
+      .replace('{count}', skipped)
+      .replace('{estimated}', ex.estimated_energy)
+      .replace('{delta}', v.min_soc_delta) : '';
+    return `<div class="batteryvehicle">${title}${hero}
+      <h3>${BATTERY_T.lossesHeading}</h3>
+      ${v.nominal_capacity_kwh ? '' : `<p class="chartnote">${BATTERY_T.lossesNoNominal}</p>`}
+      ${batteryLossTable(v.losses_by_type, BATTERY_T.colType)}
+      ${batteryLossTable(v.losses_by_provider, BATTERY_T.colProvider)}
+      <p class="chartnote">${note}</p></div>`;
+  }).join('');
+  vehicles.forEach((v, i) => {
+    if (v.health_periods.length) {
+      renderVerticalBarChart(`battery-health-${i}`,
+        v.health_periods.map(p => p.period.replace('-', ' ')),
+        v.health_periods.map(p => p.index_pct), '#2ea87f');
+    }
+  });
+}
+
 function loadAll() {
   loadStats();
   loadTemperature();
+  loadBattery();
 }
 renderFilterBar('filter-bar', loadAll);
 loadAll();

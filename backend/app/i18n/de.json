@@ -704,5 +704,25 @@
   "settings.backup.result.fees": "Grundgebühren",
   "sessions.fee_share": "+ {amount} Grundgebühr",
   "sessions.fee_share_tooltip": "Anteil an der Grundgebühr des Anbieters (nach kWh umgelegt), zusätzlich zum Säulenpreis",
-  "dashboard.stat.cost_fees": "davon {amount} Grundgebühren"
+  "dashboard.stat.cost_fees": "davon {amount} Grundgebühren",
+
+  "battery.heading": "Akku und Ladeverluste",
+  "battery.help.text": "Grundlage sind nur Ladevorgänge mit einer echten kWh-Angabe (Rechnung, Wallbox, Import) und mindestens 20 Prozentpunkten SoC-Hub. Aus kWh je Prozentpunkt ergibt sich die scheinbare Kapazität: was eine Ladung von 0 auf 100 % am Zähler kosten würde. Die Ladeverluste sind der Mehrbedarf gegenüber der hinterlegten Nennkapazität des Fahrzeugs – bei einem gealterten Akku fallen sie etwas zu klein aus, belastbar ist vor allem der Unterschied zwischen AC und DC. Der Akku-Index verfolgt die scheinbare Kapazität je Quartal, getrennt nach Lade-Art, und bezieht sie auf den Beginn der Aufzeichnung (100 %). Er ist kein absoluter Gesundheitswert (SoH), zeigt aber, ob der Akku mit der Zeit weniger aufnimmt. Automatisch erkannte Vorgänge ohne gemessene kWh zählen nicht mit, weil ihre Energie selbst aus der Nennkapazität geschätzt ist.",
+  "battery.empty": "Noch keine Ladevorgänge mit gemessener kWh-Angabe und ausreichendem SoC-Hub.",
+  "battery.health.label": "Akku-Index gegenüber Beginn der Aufzeichnung",
+  "battery.health.detail": "aus {count} Ladevorgängen, letztes Quartal",
+  "battery.health.trend": "Trend {value} % pro Jahr",
+  "battery.health.none": "Für einen Verlauf der Akku-Kapazität reichen die Daten noch nicht (mindestens drei Ladevorgänge je Lade-Art und zwei je Quartal).",
+  "battery.health.chart": "Akku-Index je Quartal (%)",
+  "battery.losses.heading": "Ladeverluste",
+  "battery.losses.no_nominal": "Ohne hinterlegte Akkukapazität am Fahrzeug lassen sich keine Verluste in Prozent angeben.",
+  "battery.col.type": "Lade-Art",
+  "battery.col.provider": "Anbieter",
+  "battery.col.sessions": "Vorgänge",
+  "battery.col.kwh": "kWh",
+  "battery.col.apparent": "Scheinbare Kapazität",
+  "battery.col.loss": "Verlust",
+  "battery.without_provider": "Ohne Anbieter",
+  "battery.unknown_type": "Lade-Art unbekannt",
+  "battery.excluded": "{count} Ladevorgänge nicht berücksichtigt, davon {estimated} mit geschätzter Energie (übrige: fehlende Werte, weniger als {delta} Prozentpunkte Hub oder unplausibel)"
 }

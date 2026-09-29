@@ -864,6 +864,62 @@ class TemperatureStats(BaseModel):
     bucket_width_c: int
 
 
+# ---------- Akku-Gesundheit und Ladeverluste (battery.py) ----------
+
+class BatteryPointOut(BaseModel):
+    session_id: str
+    start_time: datetime
+    # AC | DC | unknown
+    charging_type: str
+    soc_delta: int
+    energy_kwh: float
+    apparent_capacity_kwh: float
+    loss_pct: float | None = None
+
+
+class BatteryLossGroupOut(BaseModel):
+    # Lade-Art (AC/DC/unknown) bzw. Anbietername ("" = ohne Anbieter)
+    key: str
+    session_count: int
+    energy_kwh: float
+    apparent_capacity_kwh: float
+    # Mehrbedarf gegenueber der Nennkapazitaet in Prozent, None ohne sie
+    loss_pct: float | None = None
+
+
+class BatteryHealthPeriodOut(BaseModel):
+    period: str
+    index_pct: float
+    session_count: int
+
+
+class BatteryExclusionsOut(BaseModel):
+    estimated_energy: int
+    missing_values: int
+    small_soc_delta: int
+    implausible: int
+
+
+class BatteryVehicleOut(BaseModel):
+    vehicle_id: str
+    vehicle_name: str
+    nominal_capacity_kwh: float | None = None
+    points: list[BatteryPointOut]
+    losses_by_type: list[BatteryLossGroupOut]
+    losses_by_provider: list[BatteryLossGroupOut]
+    # Index 100 = wie zu Beginn der Aufzeichnung, je Quartal (siehe battery.py)
+    health_periods: list[BatteryHealthPeriodOut]
+    health_latest_index_pct: float | None = None
+    health_trend_pct_per_year: float | None = None
+    health_baselines: dict[str, float] = {}
+    excluded: BatteryExclusionsOut
+    min_soc_delta: int
+
+
+class BatteryStats(BaseModel):
+    vehicles: list[BatteryVehicleOut]
+
+
 # ---------- Aussentemperatur vom Wetterdienst (weather.py) ----------
 
 class WeatherSettingsUpdate(BaseModel):

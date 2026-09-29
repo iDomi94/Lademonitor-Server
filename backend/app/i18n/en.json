@@ -704,5 +704,25 @@
   "settings.backup.result.fees": "Base fees",
   "sessions.fee_share": "+ {amount} base fee",
   "sessions.fee_share_tooltip": "Share of the provider's base fee (split by kWh), on top of the charger price",
-  "dashboard.stat.cost_fees": "incl. {amount} base fees"
+  "dashboard.stat.cost_fees": "incl. {amount} base fees",
+
+  "battery.heading": "Battery and charging losses",
+  "battery.help.text": "Only charging sessions with a real kWh figure (invoice, wallbox, import) and at least 20 percentage points of SoC gain are used. kWh per percentage point gives the apparent capacity: what charging from 0 to 100 % would cost at the meter. Charging losses are the extra energy compared with the vehicle's nominal battery capacity – with an aged battery they come out slightly too low; the difference between AC and DC is the reliable part. The battery index tracks the apparent capacity per quarter, separately per charging type, relative to the start of your records (100 %). It is not an absolute state of health (SoH), but it shows whether the battery takes less energy over time. Automatically detected sessions without a measured kWh value are left out because their energy is itself estimated from the nominal capacity.",
+  "battery.empty": "No charging sessions with a measured kWh value and enough SoC gain yet.",
+  "battery.health.label": "Battery index compared with the start of your records",
+  "battery.health.detail": "from {count} charging sessions, latest quarter",
+  "battery.health.trend": "trend {value} % per year",
+  "battery.health.none": "Not enough data for a battery capacity history yet (at least three sessions per charging type and two per quarter).",
+  "battery.health.chart": "Battery index per quarter (%)",
+  "battery.losses.heading": "Charging losses",
+  "battery.losses.no_nominal": "Without a battery capacity on the vehicle, losses cannot be shown in percent.",
+  "battery.col.type": "Charging type",
+  "battery.col.provider": "Provider",
+  "battery.col.sessions": "Sessions",
+  "battery.col.kwh": "kWh",
+  "battery.col.apparent": "Apparent capacity",
+  "battery.col.loss": "Loss",
+  "battery.without_provider": "No provider",
+  "battery.unknown_type": "Charging type unknown",
+  "battery.excluded": "{count} charging sessions not included, {estimated} of them with estimated energy (others: missing values, less than {delta} percentage points gain, or implausible)"
 }

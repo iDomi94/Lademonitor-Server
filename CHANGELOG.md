@@ -6,6 +6,19 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.28.0] — 2026-09-29
+
+### Added
+- **Akku und Ladeverluste** (`battery.py`, `GET /api/stats/battery`, neuer
+  Abschnitt im Dashboard): scheinbare Kapazität je Ladevorgang
+  (kWh ÷ SoC-Hub × 100) aus Vorgängen mit gemessener Energie und mindestens
+  20 Prozentpunkten Hub. Ladeverluste als Mehrbedarf gegenüber der
+  Nennkapazität, kWh-gewichtet je Lade-Art und je Anbieter. Akku-Index je
+  Quartal relativ zum Anfang der Aufzeichnung, getrennt nach Lade-Art
+  normiert, plus Trend pro Jahr ab 180 Tagen und 8 Vorgängen. Geschätzte
+  Energie, zu kleiner Hub und Unplausibles werden gezählt statt still
+  verworfen.
+
 ## [0.27.0] — 2026-09-22
 
 ### Added
