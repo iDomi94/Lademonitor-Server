@@ -6,6 +6,30 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.30.0] — 2026-09-29
+
+### Added
+- **DOT-Alter der Reifen** (`TireSet.dot`, `TireSet.dot_rear`): vierstelliger
+  Datumscode (Woche + Jahr), geprüft und normalisiert (`tires.parse_dot()`,
+  akzeptiert auch „23/23" oder die komplette DOT-Nummer). Die Übersicht liefert
+  je Satz `produced_on`, `production_age_days` und `age_status`
+  (`ok`/`check` ab 6 Jahren/`replace` ab 10). Die DOT gehört nicht zur
+  Satz-Signatur – nachgetragen an einer Montage gilt sie für alle Montagen
+  desselben Satzes.
+- **Profiltiefe** (`TireTreadMeasurement`): Messungen je Montage mit Datum,
+  Kilometerstand, geringster Tiefe und optional vier Einzelwerten.
+  `GET /api/tires/tread`, `POST /api/tires/{id}/tread`,
+  `PATCH`/`DELETE /api/tires/tread/{id}`. Beim Anlegen eines Wechsels nehmen
+  `tread` (aufgezogener Satz) und `removed_tread` (vorherige Montage) die
+  Messungen gleich mit. Übersicht: `tread_depth_mm`, `tread_measured_on`,
+  `tread_status` (`ok`/`low`/`legal_min`) je Montage und je Satz.
+- Web-UI: DOT-Felder und Profil beim Wechsel im Formular, neue Spalten
+  „Alter (DOT)" und „Profil", eigener Abschnitt „Profiltiefe".
+
+### Fixed
+- Die Kennzahl „Mehrverbrauch Winter- gegenüber Sommerreifen" stand ohne Wert
+  sichtbar auf der Reifenseite (Inline-`display:flex` schlug `hidden`).
+
 ## [0.29.0] — 2026-09-29
 
 ### Added

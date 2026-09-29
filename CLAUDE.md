@@ -56,7 +56,7 @@ Abschnitt "Sync: Grabsteine fuer geloeschte Datensaetze".
 backend/app/
   models.py          - SQLAlchemy: Vehicle, Provider, ChargingLocation, ChargingSession,
                           DeletedRecord (Grabsteine, siehe Abschnitt "Sync"),
-                          TireSet (siehe Abschnitt "Reifensaetze")
+                          TireSet, TireTreadMeasurement (siehe Abschnitt "Reifensaetze")
                           ProviderFee (siehe Abschnitt "Grundgebuehren")
   schemas.py          - Pydantic Request/Response-Schemas
   routers/
@@ -1418,6 +1418,8 @@ dieses Projekt real gestolpert ist:
   synthetischen Daten mit bekanntem Aufschlag muss genau dieser wieder
   herauskommen, aus Daten ohne Aufschlag trotz getrennter Temperaturbaender
   keiner.
+- `test_tire_dot_tread.py` - DOT-Parsing/-Alter, Profilmessungen inkl.
+  Messung beider Saetze beim Wechsel und Minimum aus den Einzelwerten.
 
 **Was bewusst NICHT getestet wird - und deshalb weiterhin von Hand gegen eine
 Kopie der Produktiv-DB geprueft werden MUSS:**
@@ -1927,6 +1929,34 @@ erst ausgewiesen; aus zwei Fahrten liest man Streuung, keinen Reifeneffekt.
 nicht: Groesse, Marke und Modell sind Produktbezeichnungen, kein
 personenbezogenes Datum, und `kind`/`installed_on` steuern die Auswertung per
 SQL bzw. Vergleich.
+
+### DOT-Alter und Profiltiefe (ab 2026-09-29, v0.30.0)
+
+**DOT** (`TireSet.dot`, `dot_rear`): nur der vierstellige Datumscode (Woche +
+Jahr), `tires.parse_dot()` normalisiert Eingaben wie "23/23" oder die ganze
+DOT-Nummer und lehnt unmoegliche Wochen/Zukunft mit 422 ab. Zwei Felder wie bei
+der Groesse, weil die Achsen oft aus verschiedenen Chargen stammen; es zaehlt
+das AELTERE Datum. **Nicht Teil von `_signature()`** - sonst erzeugte das
+Nachtragen der DOT an einer spaeteren Montage einen "neuen" Satz. Die Uebersicht
+nimmt die DOT deshalb von irgendeiner Montage des Satzes. Schwellen
+(`TIRE_AGE_CHECK_YEARS` 6, `TIRE_AGE_REPLACE_YEARS` 10) liegen in `tires.py`,
+die Antwort liefert fertig `age_status` - die Apps rechnen nichts nach.
+
+**Profiltiefe** (`TireTreadMeasurement`, eigene Tabelle): haengt an der
+MONTAGE, nicht an einem physischen Satz (den gibt es als Zeile nicht). `depth_mm`
+ist immer die GERINGSTE Tiefe (das ist der Wert fuer Mindestprofil/Austausch);
+die vier Einzelwerte sind optional und bestimmen, wenn angegeben, das Minimum
+mit (`schemas.TreadInput.minimum()`, auch beim PATCH). Beim Anlegen eines
+Wechsels nehmen `tread`/`removed_tread` gleich beide Saetze mit - der
+abgenommene ist die letzte Montage VOR dem neuen Datum an diesem Fahrzeug
+(gleiche Regel wie `set_at()`), ohne eine solche 422. Schwellen: 1,6 mm
+gesetzlich, empfohlen 3 mm Sommer / 4 mm Winter+Ganzjahr (`tread_status`).
+Geloescht wird per ORM-Kaskade mit dem Satz; `_purge_owned_data()` loescht sie
+vor den Saetzen (Bulk-Delete kaskadiert nicht). Kein Sync, kein Backup - wie die
+Reifensaetze selbst. **Bewusst noch nicht umgesetzt:** eine Verschleissrate
+(mm je 1000 km) - dafuer muessten die km zwischen zwei Messungen nur auf DIESEM
+Satz gezaehlt werden, ueber Wiedermontagen hinweg, nicht die Differenz der
+Kilometerstaende.
 
 
 ## Grundgebuehren (`fees.py`, `routers/provider_fees.py`, ab 2026-09-22, v0.27.0)

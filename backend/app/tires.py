@@ -24,9 +24,10 @@ zum ersten Frost wechselt, bekommt sie nie.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
-from datetime import datetime
+from datetime import date, datetime
 
 from . import models
 from .consumption import ConsumptionResult
@@ -44,6 +45,97 @@ MIN_OVERLAP_SPAN_C = 5.0
 # bringen an echten Datenmengen nichts mehr - die Faktoren stehen nach drei
 # bis vier Runden auf der vierten Nachkommastelle still.
 NEUTRALISATION_ROUNDS = 5
+
+# Reifenalter ab DOT-Datum. Es gibt kein gesetzliches Hoechstalter; die
+# gaengige Empfehlung (Hersteller, ADAC) ist, ab sechs Jahren genauer
+# hinzusehen und nach spaetestens zehn Jahren zu tauschen - unabhaengig vom
+# Profil, weil der Gummi aushaertet.
+TIRE_AGE_CHECK_YEARS = 6
+TIRE_AGE_REPLACE_YEARS = 10
+
+# Profiltiefe: 1,6 mm ist in DE/AT/CH das gesetzliche Minimum. Empfohlen
+# werden 3 mm bei Sommer- und 4 mm bei Winter- und Ganzjahresreifen - darunter
+# laesst die Haftung bei Naesse bzw. Schnee deutlich nach.
+TREAD_LEGAL_MIN_MM = 1.6
+TREAD_RECOMMENDED_MM = {"summer": 3.0, "winter": 4.0, "all_season": 4.0}
+
+
+def parse_dot(value: str | None) -> str | None:
+    """DOT-Angabe auf die vier Ziffern Woche+Jahr bringen, sonst ValueError.
+
+    Akzeptiert werden auch Leerzeichen oder ein Schraegstrich ("23/23") und
+    eine komplette DOT-Nummer, deren LETZTE vier Ziffern der Datumscode sind
+    ("DOT XX1Y 2323"). Leer bleibt leer.
+    """
+    if value is None:
+        return None
+    digits = re.sub(r"\D", "", value)
+    if not digits:
+        return None
+    if len(digits) < 4:
+        raise ValueError("DOT: vier Ziffern erwartet (Woche und Jahr, z. B. 2323)")
+    code = digits[-4:]
+    dot_production_date(code)  # prueft Woche/Jahr
+    return code
+
+
+def dot_production_date(code: str | None) -> date | None:
+    """Montag der Produktionswoche - ISO-Woche, wie sie auf dem Reifen steht."""
+    if not code:
+        return None
+    week, year = int(code[:2]), 2000 + int(code[2:])
+    try:
+        produced = date.fromisocalendar(year, week, 1)
+    except ValueError as exc:
+        raise ValueError(f"DOT {code}: Woche {week} gibt es {year} nicht") from exc
+    if produced > date.today():
+        raise ValueError(f"DOT {code}: liegt in der Zukunft")
+    return produced
+
+
+def oldest_production_date(tire_set: models.TireSet) -> date | None:
+    """Das aeltere der beiden Achsen-Daten - der aelteste Reifen bestimmt, wann
+    getauscht werden sollte. Ungueltige Altwerte fallen still weg."""
+    dates = []
+    for code in (tire_set.dot, tire_set.dot_rear):
+        try:
+            produced = dot_production_date(code)
+        except ValueError:
+            produced = None
+        if produced:
+            dates.append(produced)
+    return min(dates) if dates else None
+
+
+def age_status(produced_on: date | None, today: date | None = None) -> str | None:
+    """"ok" | "check" | "replace" nach Alter ab Produktion, None ohne DOT."""
+    if produced_on is None:
+        return None
+    years = ((today or date.today()) - produced_on).days / 365.25
+    if years >= TIRE_AGE_REPLACE_YEARS:
+        return "replace"
+    if years >= TIRE_AGE_CHECK_YEARS:
+        return "check"
+    return "ok"
+
+
+def tread_status(depth_mm: float | None, kind: str) -> str | None:
+    """"ok" | "low" (unter Empfehlung) | "legal_min" (am/unter 1,6 mm)."""
+    if depth_mm is None:
+        return None
+    if depth_mm <= TREAD_LEGAL_MIN_MM:
+        return "legal_min"
+    if depth_mm < TREAD_RECOMMENDED_MM.get(kind, 3.0):
+        return "low"
+    return "ok"
+
+
+def latest_measurement(
+    measurements: list[models.TireTreadMeasurement],
+) -> models.TireTreadMeasurement | None:
+    if not measurements:
+        return None
+    return max(measurements, key=lambda m: (m.measured_on, m.created_at or datetime.min))
 
 
 @dataclass(slots=True)
@@ -263,6 +355,9 @@ class MountingStat:
     km_source: str
     energy_kwh: float
     avg_consumption: float | None = None
+    tread_depth_mm: float | None = None
+    tread_measured_on: datetime | None = None
+    tread_status: str | None = None
 
 
 @dataclass(slots=True)
@@ -292,6 +387,15 @@ class SetStat:
     energy_kwh: float
     is_current: bool
     avg_consumption: float | None = None
+    # Produktionsdatum aus der DOT (aeltere Achse), Alter ab da und die
+    # Einordnung nach TIRE_AGE_*. None, solange keine Montage eine DOT hat.
+    produced_on: date | None = None
+    production_age_days: int | None = None
+    age_status: str | None = None
+    # Juengste Messung ueber alle Montagen dieses Satzes.
+    tread_depth_mm: float | None = None
+    tread_measured_on: datetime | None = None
+    tread_status: str | None = None
 
 
 @dataclass(slots=True)
@@ -392,6 +496,7 @@ def overview(
             if measured >= 0:
                 distance = measured
                 km_source = "odometer"
+        latest = latest_measurement(list(tire_set.tread_measurements or []))
         result.mountings.append(
             MountingStat(
                 tire_set_id=tire_set.id,
@@ -407,6 +512,11 @@ def overview(
                 km_source=km_source,
                 energy_kwh=round(energy.get(tire_set.id, 0.0), 2),
                 avg_consumption=round(_weighted(pairs), 1) if pairs else None,
+                tread_depth_mm=latest.depth_mm if latest else None,
+                tread_measured_on=latest.measured_on if latest else None,
+                tread_status=(
+                    tread_status(latest.depth_mm, tire_set.kind.value) if latest else None
+                ),
             )
         )
 
@@ -416,8 +526,10 @@ def overview(
         signature = _signature(tire_set)
         labels.setdefault(signature, (set_label(tire_set), tire_set.kind.value))
     by_id = {m.tire_set_id: m for m in result.mountings}
+    rows_by_signature: dict[str, list[models.TireSet]] = {}
     for tire_set in tire_sets:
         grouped.setdefault(_signature(tire_set), []).append(by_id[tire_set.id])
+        rows_by_signature.setdefault(_signature(tire_set), []).append(tire_set)
 
     for signature, group in grouped.items():
         pairs = [
@@ -426,6 +538,15 @@ def overview(
             for pair in consumption_pairs.get(mounting.tire_set_id, [])
         ]
         first = min(m.installed_on for m in group)
+        rows = rows_by_signature[signature]
+        # Die DOT reicht an EINER Montage - wer sie erst beim zweiten Winter
+        # nachtraegt, soll sie nicht an jeder frueheren Zeile nachpflegen.
+        produced = [d for d in (oldest_production_date(row) for row in rows) if d]
+        produced_on = min(produced) if produced else None
+        latest = latest_measurement(
+            [m for row in rows for m in (row.tread_measurements or [])]
+        )
+        kind = labels[signature][1]
         result.sets.append(
             SetStat(
                 key=signature,
@@ -445,6 +566,14 @@ def overview(
                 energy_kwh=round(sum(m.energy_kwh for m in group), 2),
                 is_current=any(m.is_current for m in group),
                 avg_consumption=round(_weighted(pairs), 1) if pairs else None,
+                produced_on=produced_on,
+                production_age_days=(
+                    max((now.date() - produced_on).days, 0) if produced_on else None
+                ),
+                age_status=age_status(produced_on, now.date()),
+                tread_depth_mm=latest.depth_mm if latest else None,
+                tread_measured_on=latest.measured_on if latest else None,
+                tread_status=tread_status(latest.depth_mm, kind) if latest else None,
             )
         )
     # Montierte zuerst, danach nach Laufleistung - die Frage ist meistens

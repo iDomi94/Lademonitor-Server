@@ -1,4 +1,23 @@
 {% extends "base.html" %}
+{% macro tread_inputs(prefix, label) %}
+  {# Ein Gesamtwert ODER die vier Raeder - gespeichert wird immer der
+     geringste (siehe schemas.TreadInput). Die Einzelwerte liegen zugeklappt,
+     weil meist ein Wert reicht. #}
+  <div class="tread-input" id="{{ prefix }}-group">
+    <label>{{ label }}</label>
+    <input type="number" step="0.1" min="0" max="20" id="{{ prefix }}-min"
+           placeholder="{{ t('tires.tread.min_placeholder') }}">
+    <details class="tread-wheels">
+      <summary>{{ t('tires.tread.per_wheel') }}</summary>
+      <div class="tread-wheel-grid">
+        {% for wheel in ['fl', 'fr', 'rl', 'rr'] %}
+        <input type="number" step="0.1" min="0" max="20" id="{{ prefix }}-{{ wheel }}"
+               placeholder="{{ t('tires.tread.' ~ wheel) }}" aria-label="{{ t('tires.tread.' ~ wheel) }}">
+        {% endfor %}
+      </div>
+    </details>
+  </div>
+{% endmacro %}
 {% block content %}
 {# Eigene Hauptleisten-Seite statt eines weiteren Klappabschnitts in den
    Einstellungen: hier stehen Stammdaten UND eine Auswertung nebeneinander,
@@ -116,11 +135,28 @@
             <input type="text" id="tire-model" placeholder="{{ t('tires.form.model_placeholder') }}">
           </div>
           <div>
+            <label>{{ t('tires.form.dot') }}</label>
+            <input type="text" inputmode="numeric" id="tire-dot" maxlength="20"
+                   placeholder="{{ t('tires.form.dot_placeholder') }}">
+          </div>
+          <div>
+            <label>{{ t('tires.form.dot_rear') }}</label>
+            <input type="text" inputmode="numeric" id="tire-dot-rear" maxlength="20"
+                   placeholder="{{ t('tires.form.dot_rear_placeholder') }}">
+          </div>
+          <div>
             <label>{{ t('tires.form.notes') }}</label>
             <input type="text" id="tire-notes">
           </div>
           <div style="grid-column:1/-1; color:var(--muted); font-size:0.85em">
-            {{ t('tires.form.size_hint') }}
+            {{ t('tires.form.size_hint') }} {{ t('tires.form.dot_hint') }}
+          </div>
+          {# Nur beim Anlegen: beim Wechsel wird gemessen, danach ueber den
+             Abschnitt "Profiltiefe". #}
+          <div class="tread-on-change">{{ tread_inputs('tire-tread-new', t('tires.form.tread_new')) }}</div>
+          <div class="tread-on-change">{{ tread_inputs('tire-tread-removed', t('tires.form.tread_removed')) }}</div>
+          <div class="tread-on-change" style="grid-column:1/-1; color:var(--muted); font-size:0.85em">
+            {{ t('tires.form.tread_hint') }}
           </div>
           <div class="form-actions">
             <button type="submit" id="tire-submit">{{ t('tires.form.submit_new') }}</button>
@@ -131,6 +167,40 @@
     </details>
 
     <div class="tablewrap"><table id="tire-table"></table></div>
+  </div>
+</details>
+
+<h2>{{ t('tires.tread_heading') }}</h2>
+<details class="panel" id="tread-panel">
+  <summary>{{ t('tires.tread_heading') }} <span class="count" id="tread-count"></span></summary>
+  <div class="inner">
+    <div style="margin-bottom:10px; color:var(--muted); font-size:0.85em">{{ t('tires.tread.hint') }}</div>
+    <details class="panel plain" id="tread-form-panel">
+      <summary>{{ t('tires.tread.form_heading') }}</summary>
+      <div class="inner">
+        <form class="inline-form" id="tread-form">
+          <div>
+            <label>{{ t('tires.tread.mounting') }}</label>
+            <select id="tread-mounting" required></select>
+          </div>
+          <div>
+            <label>{{ t('tires.tread.measured_on') }}</label>
+            <input type="date" id="tread-date" required>
+          </div>
+          <div>
+            <label>{{ t('tires.form.odometer') }}</label>
+            <input type="number" step="1" min="0" id="tread-odometer"
+                   placeholder="{{ t('tires.form.odometer_placeholder') }}">
+          </div>
+          {{ tread_inputs('tread-value', t('tires.tread.depth')) }}
+          <div class="form-actions">
+            <button type="submit">{{ t('tires.tread.submit') }}</button>
+          </div>
+        </form>
+      </div>
+    </details>
+    <div id="tread-empty" style="color:var(--muted); font-size:0.9em"></div>
+    <div class="tablewrap"><table id="tread-table"></table></div>
   </div>
 </details>
 
@@ -179,7 +249,29 @@ const T = {
   formEdit: {{ t('tires.form.edit_heading')|tojson }},
   submitNew: {{ t('tires.form.submit_new')|tojson }},
   submitEdit: {{ t('tires.form.submit_edit')|tojson }},
+  colDotAge: {{ t('tires.col.dot_age')|tojson }},
+  colTread: {{ t('tires.col.tread')|tojson }},
+  colDate: {{ t('tires.col.date')|tojson }},
+  ageCheck: {{ t('tires.age.check')|tojson }},
+  ageCheckTitle: {{ t('tires.age.check_title')|tojson }},
+  ageReplace: {{ t('tires.age.replace')|tojson }},
+  ageReplaceTitle: {{ t('tires.age.replace_title')|tojson }},
+  treadLow: {{ t('tires.tread_status.low')|tojson }},
+  treadLegalMin: {{ t('tires.tread_status.legal_min')|tojson }},
+  treadEmpty: {{ t('tires.tread.empty')|tojson }},
+  treadConfirmDelete: {{ t('tires.tread.confirm_delete')|tojson }},
+  treadMeasure: {{ t('tires.tread.measure_action')|tojson }},
+  treadFrom: {{ t('tires.tread.from')|tojson }},
+  wheels: [
+    {{ t('tires.tread.fl')|tojson }}, {{ t('tires.tread.fr')|tojson }},
+    {{ t('tires.tread.rl')|tojson }}, {{ t('tires.tread.rr')|tojson }},
+  ],
 };
+// Lineal (Profiltiefenmesser) fuer "Profil messen" in der Wechsel-Tabelle.
+const ICON_TREAD = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" ' +
+  'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+  '<rect x="3" y="8" width="18" height="8" rx="1.5"/><path d="M7 8v3"/><path d="M11 8v4"/>' +
+  '<path d="M15 8v3"/><path d="M19 8v4"/></svg>';
 
 let vehicles = [];
 let tireSets = [];
@@ -230,7 +322,7 @@ async function loadTireSets() {
   if (!tireSets.length) { table.innerHTML = ''; return; }
   const head = `<tr><th>${T.colPeriod}</th><th>${T.colKind}</th>` +
     `<th>${T.colTire}</th><th>${T.colDaysMounted}</th><th>${T.colDrives}</th>` +
-    `<th>${T.colKm}</th><th>${T.colNotes}</th><th></th></tr>`;
+    `<th>${T.colKm}</th><th>${T.colTread}</th><th>${T.colNotes}</th><th></th></tr>`;
   table.innerHTML = head + tireSets.map(set => {
     const label = [set.brand, set.model, sizeLabel(set)].filter(Boolean).join(' ') || '–';
     // Die Montage endet erst mit dem naechsten Wechsel - das Enddatum steht
@@ -243,8 +335,10 @@ async function loadTireSets() {
       `<td>${stats ? duration(stats.days) : '–'}</td>` +
       `<td>${stats ? stats.drives : '–'}</td>` +
       `<td>${stats ? kmCell(stats.km, stats.km_source) : '–'}</td>` +
+      `<td>${stats ? treadCell(stats.tread_depth_mm, stats.tread_status) : '–'}</td>` +
       `<td>${set.notes || ''}</td>` +
-      `<td>${editDeleteButtons(`startEditTire('${set.id}')`, `deleteTire('${set.id}')`, T.edit, T.del)}</td></tr>`;
+      `<td><div class="row-actions">${iconButton(ICON_TREAD, T.treadMeasure, `startTread('${set.id}')`, 'edit')}` +
+      `${editDeleteButtons(`startEditTire('${set.id}')`, `deleteTire('${set.id}')`, T.edit, T.del)}</div></td></tr>`;
   }).join('');
 }
 
@@ -289,6 +383,8 @@ async function loadComparison() {
     (tireSets.length ? T.emptyTooFew : T.emptyNoSets);
 
   hero.hidden = data.winter_vs_summer_pct === null || data.winter_vs_summer_pct === undefined;
+  // Das Inline-display:flex schlaegt das hidden-Attribut - also mitschalten.
+  hero.style.display = hero.hidden ? 'none' : 'flex';
   if (!hero.hidden) {
     const value = data.winter_vs_summer_pct;
     document.getElementById('tire-hero-figure').textContent =
@@ -321,6 +417,115 @@ const kmCell = (value, source) => source === 'odometer'
   ? fmt(value, 0)
   : `<span title="${T.kmEstimated}">${fmt(value, 0)} *</span>`;
 
+// Warnfarben: orange = genauer hinsehen, rot = handeln. Neben der Farbe
+// steht immer ein Wort, sie allein waere nicht barrierefrei.
+const flag = (text, color, title) =>
+  `<div style="color:${color}; font-size:0.85em"${title ? ` title="${title}"` : ''}>${text}</div>`;
+
+function dotAgeCell(set) {
+  if (!set.produced_on) return '–';
+  const produced = new Date(set.produced_on);
+  const code = produced.toLocaleDateString(window.LADEMONITOR_LANG, { month: '2-digit', year: 'numeric' });
+  let out = `${duration(set.production_age_days)}<div style="color:var(--muted); font-size:0.85em">${code}</div>`;
+  if (set.age_status === 'check') out += flag(T.ageCheck, 'var(--warn)', T.ageCheckTitle);
+  if (set.age_status === 'replace') out += flag(T.ageReplace, 'var(--danger)', T.ageReplaceTitle);
+  return out;
+}
+
+function treadCell(depth, status, measuredOn) {
+  if (depth === null || depth === undefined) return '–';
+  let out = `${fmt(depth, 1)} mm`;
+  if (measuredOn) out += `<div style="color:var(--muted); font-size:0.85em">${shortDate(measuredOn)}</div>`;
+  if (status === 'low') out += flag(T.treadLow, 'var(--warn)');
+  if (status === 'legal_min') out += flag(T.treadLegalMin, 'var(--danger)');
+  return out;
+}
+
+// Liest eine Gruppe aus tread_inputs(); null, wenn gar nichts eingetragen ist.
+function readTread(prefix) {
+  const value = id => {
+    const raw = document.getElementById(`${prefix}-${id}`).value;
+    return raw === '' ? null : parseFloat(raw.replace(',', '.'));
+  };
+  const tread = {
+    depth_mm: value('min'),
+    front_left_mm: value('fl'), front_right_mm: value('fr'),
+    rear_left_mm: value('rl'), rear_right_mm: value('rr'),
+  };
+  return Object.values(tread).some(v => v !== null) ? tread : null;
+}
+
+function mountingLabel(set) {
+  const label = [set.brand, set.model].filter(Boolean).join(' ');
+  return `${T.kind[set.kind] || set.kind}${label ? ' · ' + label : ''} · ` +
+    `${T.treadFrom} ${shortDate(set.installed_on)}` +
+    (vehicles.length > 1 ? ` · ${vehicleName(set.vehicle_id)}` : '');
+}
+
+async function loadTread() {
+  const filter = currentFilter();
+  const res = await fetch('api/tires/tread' + (filter ? `?vehicle_id=${filter}` : ''));
+  const rows = res.ok ? await res.json() : [];
+  document.getElementById('tread-count').textContent = rows.length;
+  document.getElementById('tread-empty').textContent = rows.length ? '' : T.treadEmpty;
+
+  const select = document.getElementById('tread-mounting');
+  const selected = select.value;
+  select.innerHTML = tireSets.map(set => `<option value="${set.id}">${mountingLabel(set)}</option>`).join('');
+  if (tireSets.some(set => set.id === selected)) select.value = selected;
+
+  const table = document.getElementById('tread-table');
+  if (!rows.length) { table.innerHTML = ''; return; }
+  const byId = Object.fromEntries(tireSets.map(set => [set.id, set]));
+  const head = `<tr><th>${T.colDate}</th><th>${T.colTire}</th><th>${T.colTread}</th>` +
+    `<th>${T.wheels.join(' / ')}</th><th>${T.colKm}</th><th></th></tr>`;
+  table.innerHTML = head + rows.map(row => {
+    const set = byId[row.tire_set_id];
+    const wheels = [row.front_left_mm, row.front_right_mm, row.rear_left_mm, row.rear_right_mm];
+    return `<tr><td>${shortDate(row.measured_on)}</td>` +
+      `<td>${set ? mountingLabel(set) : '–'}</td>` +
+      `<td>${treadCell(row.depth_mm)}</td>` +
+      `<td>${wheels.some(v => v !== null) ? wheels.map(v => fmt(v, 1)).join(' / ') : '–'}</td>` +
+      `<td>${fmt(row.odometer_km, 0)}</td>` +
+      `<td>${iconButton(ICON_DELETE, T.del, `deleteTread('${row.id}')`, 'danger')}</td></tr>`;
+  }).join('');
+}
+
+function startTread(id) {
+  document.getElementById('tread-mounting').value = id;
+  document.getElementById('tread-date').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('tread-panel').open = true;
+  document.getElementById('tread-form-panel').open = true;
+  document.getElementById('tread-form-panel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+async function deleteTread(id) {
+  if (!confirm(T.treadConfirmDelete)) return;
+  const res = await fetch(`api/tires/tread/${id}`, { method: 'DELETE' });
+  if (!res.ok) { alert(T.errorPrefix + await res.text()); return; }
+  await reloadAll();
+}
+
+document.getElementById('tread-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const tread = readTread('tread-value');
+  if (!tread) { document.getElementById('tread-value-min').focus(); return; }
+  const id = document.getElementById('tread-mounting').value;
+  const res = await fetch(`api/tires/${id}/tread`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ...tread,
+      measured_on: document.getElementById('tread-date').value + 'T00:00:00',
+      odometer_km: parseFloat(document.getElementById('tread-odometer').value) || null,
+    }),
+  });
+  if (!res.ok) { alert(T.errorPrefix + await res.text()); return; }
+  document.getElementById('tread-form').reset();
+  document.getElementById('tread-mounting').value = id;
+  await reloadAll();
+});
+
 async function loadOverview() {
   const filter = currentFilter();
   const res = await fetch('api/tires/overview' + (filter ? `?vehicle_id=${filter}` : ''));
@@ -334,8 +539,8 @@ async function loadOverview() {
   if (!data.sets.length) { table.innerHTML = ''; return; }
 
   const head = `<tr><th>${T.colTire}</th><th>${T.colStatus}</th>` +
-    `<th>${T.colMountings}</th><th>${T.colAge}</th><th>${T.colDaysMounted}</th>` +
-    `<th>${T.colDrives}</th><th>${T.colKm}</th><th>${T.colEnergy}</th>` +
+    `<th>${T.colMountings}</th><th>${T.colDotAge}</th><th>${T.colAge}</th><th>${T.colDaysMounted}</th>` +
+    `<th>${T.colDrives}</th><th>${T.colKm}</th><th>${T.colTread}</th><th>${T.colEnergy}</th>` +
     `<th>${T.colAvg}</th></tr>`;
   table.innerHTML = head + data.sets.map(set => {
     const status = set.is_current
@@ -344,10 +549,13 @@ async function loadOverview() {
     return `<tr><td>${set.label || T.kind[set.kind] || set.kind}` +
       `<div style="color:var(--muted); font-size:0.85em">${T.kind[set.kind] || set.kind}</div></td>` +
       `<td>${status}</td><td>${set.mountings}</td>` +
+      `<td>${dotAgeCell(set)}</td>` +
       `<td>${duration(set.age_days)}<div style="color:var(--muted); font-size:0.85em">` +
       `${shortDate(set.first_installed_on)}</div></td>` +
       `<td>${duration(set.days_mounted)}</td><td>${set.drives}</td>` +
-      `<td>${kmCell(set.km, set.km_source)}</td><td>${fmt(set.energy_kwh, 1)} kWh</td>` +
+      `<td>${kmCell(set.km, set.km_source)}</td>` +
+      `<td>${treadCell(set.tread_depth_mm, set.tread_status, set.tread_measured_on)}</td>` +
+      `<td>${fmt(set.energy_kwh, 1)} kWh</td>` +
       `<td>${fmt(set.avg_consumption_kwh_per_100km, 1)}</td></tr>`;
   }).join('');
 }
@@ -358,6 +566,7 @@ function resetTireForm() {
   document.getElementById('tire-form-heading').textContent = T.formNew;
   document.getElementById('tire-submit').textContent = T.submitNew;
   document.getElementById('tire-cancel').hidden = true;
+  document.querySelectorAll('.tread-on-change').forEach(el => { el.hidden = false; });
 }
 
 function startEditTire(id) {
@@ -373,6 +582,10 @@ function startEditTire(id) {
   document.getElementById('tire-brand').value = set.brand || '';
   document.getElementById('tire-model').value = set.model || '';
   document.getElementById('tire-notes').value = set.notes || '';
+  document.getElementById('tire-dot').value = set.dot || '';
+  document.getElementById('tire-dot-rear').value = set.dot_rear || '';
+  // Gemessen wird beim Anlegen des Wechsels; spaeter ueber "Profiltiefe".
+  document.querySelectorAll('.tread-on-change').forEach(el => { el.hidden = true; });
   document.getElementById('tire-form-heading').textContent = T.formEdit;
   document.getElementById('tire-submit').textContent = T.submitEdit;
   document.getElementById('tire-cancel').hidden = false;
@@ -407,7 +620,13 @@ document.getElementById('tire-form').addEventListener('submit', async (event) =>
     brand: document.getElementById('tire-brand').value.trim() || null,
     model: document.getElementById('tire-model').value.trim() || null,
     notes: document.getElementById('tire-notes').value.trim() || null,
+    dot: document.getElementById('tire-dot').value.trim() || null,
+    dot_rear: document.getElementById('tire-dot-rear').value.trim() || null,
   };
+  if (!id) {
+    payload.tread = readTread('tire-tread-new');
+    payload.removed_tread = readTread('tire-tread-removed');
+  }
   const res = await fetch(id ? `api/tires/${id}` : 'api/tires', {
     method: id ? 'PATCH' : 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -425,6 +644,7 @@ async function reloadAll() {
   // Zuerst die Uebersicht: die Wechsel-Tabelle zeigt deren Kennzahlen mit.
   await loadOverview();
   await loadTireSets();
+  await loadTread();
   await loadComparison();
 }
 

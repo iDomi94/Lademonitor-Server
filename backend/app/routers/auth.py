@@ -74,7 +74,11 @@ def _purge_owned_data(db: Session, user_id: str) -> None:
     db.query(models.ChargingLocation).filter(
         models.ChargingLocation.user_id == user_id
     ).delete(synchronize_session=False)
-    # Reifensaetze haengen am Fahrzeug - muessen also vor ihm weg.
+    # Reifensaetze haengen am Fahrzeug - muessen also vor ihm weg, und ihre
+    # Profilmessungen wiederum vor ihnen (Bulk-Delete kaskadiert nicht).
+    db.query(models.TireTreadMeasurement).filter(
+        models.TireTreadMeasurement.user_id == user_id
+    ).delete(synchronize_session=False)
     db.query(models.TireSet).filter(
         models.TireSet.user_id == user_id
     ).delete(synchronize_session=False)

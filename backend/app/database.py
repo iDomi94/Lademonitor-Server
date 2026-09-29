@@ -199,6 +199,11 @@ def run_light_migrations() -> None:
             text("ALTER TABLE tire_sets ADD COLUMN IF NOT EXISTS size_rear VARCHAR")
         )
 
+        # DOT-Code je Achse (siehe models.TireSet). Die Messungen der
+        # Profiltiefe sind eine eigene Tabelle und entstehen per create_all().
+        conn.execute(text("ALTER TABLE tire_sets ADD COLUMN IF NOT EXISTS dot VARCHAR"))
+        conn.execute(text("ALTER TABLE tire_sets ADD COLUMN IF NOT EXISTS dot_rear VARCHAR"))
+
         # Messort der kWh (siehe models.Provider.energy_meter und battery.py):
         # Bestandsanbieter gelten als "Ladesaeule" - so wurde bisher auch
         # gerechnet. Die Ausnahme am Ladevorgang bleibt NULL ("wie Anbieter").
