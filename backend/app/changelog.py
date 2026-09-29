@@ -5,6 +5,18 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.28.0",
+        "date": "2026-09-29",
+        "title": "Akku und Ladeverluste",
+        "changes": [
+            "Neuer Abschnitt im Dashboard: „Akku und Ladeverluste\". Grundlage sind Ladevorgänge mit einer echten kWh-Angabe (Rechnung, Wallbox, Import) und mindestens 20 Prozentpunkten SoC-Hub. Aus den kWh je Prozentpunkt ergibt sich die scheinbare Kapazität: was eine Ladung von 0 auf 100 % am Zähler kosten würde.",
+            "Ladeverluste: der Mehrbedarf gegenüber der Akkukapazität des Fahrzeugs, getrennt nach AC/DC und nach Anbieter und nach geladenen kWh gewichtet. Bei 10 % braucht eine Ladung also ein Zehntel mehr Strom, als im Akku ankommt.",
+            "Akku-Index: die scheinbare Kapazität je Quartal, bezogen auf den Beginn der Aufzeichnung (100 %), dazu ab einem halben Jahr Daten der Trend pro Jahr. AC und DC werden getrennt auf ihren eigenen Anfang bezogen – sonst sähe ein Wechsel von der Wallbox zur Schnellladesäule wie Alterung aus. Das ist bewusst kein absoluter Gesundheitswert (SoH): Verluste und Kapazität stecken in derselben Zahl und lassen sich nicht trennen. Ob der Akku mit der Zeit weniger aufnimmt, zeigt der Index aber.",
+            "Automatisch erkannte Ladevorgänge ohne gemessene kWh zählen nicht mit: ihre Energie ist selbst aus der Akkukapazität geschätzt und ergäbe immer genau 0 % Verlust. Wie viele Vorgänge deshalb (oder wegen zu kleinem Hub) wegfallen, steht unter der Tabelle.",
+            "Neuer Endpunkt GET /api/stats/battery, den auch die Apps nutzen.",
+        ],
+    },
+    {
         "version": "0.27.0",
         "date": "2026-09-22",
         "title": "Grundgebühren und Abos der Anbieter",

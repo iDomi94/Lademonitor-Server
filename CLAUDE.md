@@ -67,6 +67,7 @@ backend/app/
   sync.py            - record_deletion(): Grabstein fuer eine geloeschte Zeile
   tires.py           - Reifensaetze, temperaturbereinigter Vergleich
   fees.py            - Grundgebuehren/Abos: Perioden und Umlage nach kWh
+  battery.py         - Akku-Index und Ladeverluste (siehe Abschnitt "Akku und Ladeverluste")
   myskoda.py         - Client fuer die offizielle MyŠkoda Public API (sync httpx)
   myskoda_poller.py  - Zustandsmaschine der automatischen Ladeerkennung + Debug-Log
   mailer.py          - SMTP-Versand, Mail-Vorlagen, Versandprotokoll
@@ -1410,6 +1411,8 @@ dieses Projekt real gestolpert ist:
   zeitzonenbehaftetem Cursor), Trennung pro Nutzer.
 - `test_web_pages.py` - Manifest/Service Worker/Karten- und Reifenseite, inkl.
   der Pruefung auf ausschliesslich relative Pfade (Ingress).
+- `test_battery.py` - scheinbare Kapazitaet/Verlust, Ausschluss geschaetzter
+  Energie, Akku-Index unabhaengig vom AC/DC-Mix.
 - `test_tires.py` - Zuordnung von Fahrten zu Reifensaetzen (inkl. der Fahrt
   ueber einen Wechsel hinweg) und die temperaturbereinigte Rechnung: aus
   synthetischen Daten mit bekanntem Aufschlag muss genau dieser wieder
@@ -2055,6 +2058,78 @@ Grundgebuehr aus den aktiven `ProviderFee`s auf den Monat gerechnet.
 
 **Offen:** beide Apps sind in dieser Umgebung nicht kompilierbar (kein Xcode,
 kein Android-SDK), der Code ist ungebaut.
+
+## Akku und Ladeverluste (`battery.py`, `GET /api/stats/battery`, ab 2026-09-29, v0.28.0)
+
+Beide Fragen haengen an EINER Zahl: der **scheinbaren Kapazitaet** eines
+Vorgangs, `energy_kwh / (soc_end - soc_start) * 100` - was eine Ladung von 0
+auf 100 % am Zaehler kosten wuerde. Darin stecken nutzbare Kapazitaet UND
+Ladeverluste, aus einer Zahl nicht trennbar. Deshalb zwei Auswertungen, die je
+nur behaupten, was sie zeigen koennen:
+
+- **Ladeverluste** = scheinbare Kapazitaet gegen `Vehicle.battery_capacity_kwh`,
+  nach Energie gewichtet (Summe kWh / Summe SoC-Punkte, nicht Mittel der
+  Einzelquoten), je Lade-Art und je Anbieter. Bei gealtertem Akku faellt der
+  Wert etwas zu KLEIN aus; belastbar ist vor allem der Unterschied AC/DC.
+  Ohne Nennkapazitaet keine Prozentangabe.
+- **Akku-Index** = scheinbare Kapazitaet ueber die Zeit, **je Lade-Art auf
+  ihren eigenen Anfang normiert** (Median der ersten `BASELINE_SESSIONS` = 5),
+  als Quartalsmedian, dazu ein Trend in %/Jahr. Getrennt, weil AC mehr verliert
+  als DC - gemischt saehe ein Wechsel der Ladegewohnheiten wie Alterung aus
+  (`tests/test_battery.py` haelt genau das fest). Bewusst **kein absoluter
+  SoH**: dafuer muesste man die Verluste kennen, die in derselben Zahl stecken.
+
+**Was herausfaellt, wird gezaehlt** (`excluded`), nicht still verworfen: vor
+allem **geschaetzte Energie** - die ist selbst aus SoC-Hub x Nennkapazitaet
+gerechnet und ergaebe immer exakt die Nennkapazitaet, also einen verlustfreien
+neuen Akku. Damit fallen HA-Push und MyŠkoda-Poller fast komplett heraus; die
+Auswertung lebt von echten kWh (Rechnung, Wallbox, Spritmonitor-Import).
+Ausserdem SoC-Hub unter `MIN_SOC_DELTA` (20, der SoC ist ganzzahlig) und
+Unplausibles ausserhalb `PLAUSIBLE_RANGE` (0,70-1,40 x Nennkapazitaet bzw.
+Median). Trend erst ab `MIN_POINTS_FOR_TREND` (8) Punkten ueber
+`MIN_DAYS_FOR_TREND` (180) Tage, Quartal erst ab 2 Vorgaengen.
+
+Anzeige: Dashboard-Abschnitt "Akku und Ladeverluste" (`index.html`,
+`loadBattery()`), in beiden Apps als Tool - **nur im Server-Modus**, aus
+demselben Grund wie Temperatur und Reifen (Schwellwerte und Normierung liegen
+allein hier; lokal nachgebaut liefen die Zahlen auseinander). Die Anbieter
+kommen in der Antwort als NAME, nicht als ID, damit die Apps nichts aufloesen
+muessen.
+
+**Offen:** nur an synthetischen Daten verifiziert. Ob die echten Daten des
+Nutzers genug Vorgaenge mit gemessener Energie haben, ist nicht geprueft.
+
+## Verbrenner-Vergleich und Homescreen-Widget (nur Apps, ab 2026-09-29)
+
+Beides ohne Beteiligung dieses Servers, wie der Tarifrechner.
+
+**Vergleich mit Verbrenner** (Tools, `CombustionComparison.swift`/`.kt`,
+Regeln in beiden Apps gleich halten): Umschalter oben im Tool (Entscheidung des
+Nutzers 29.09.2026) zwischen **Zeitraum** (Kosten/CO2 der gefahrenen km),
+**Pro 100 km** und **Lebenszyklus**. Grundlage wie `price_per_100km`: km aus dem
+Kilometerstand je Fahrzeug mit dem letzten Vorgang VOR dem Zeitraum als Anker,
+Kosten inkl. `fee_share`. CO2 im Betrieb nur Tank-to-Wheel (Benzin 2,37 /
+Diesel 2,65 kg/l) gegen den Strommix (0,36 kg/kWh, Regler) - faellt also eher
+zugunsten des Verbrenners aus, weil beim Strom die Vorkette schon im Faktor
+steckt. Im **Lebenszyklus** kommt die Kraftstoff-Vorkette dazu (0,52 / 0,60
+kg/l) sowie die Herstellung: Fahrzeug ohne Akku fuer beide gleich 7 t, beim
+E-Auto zusaetzlich Akku-kWh x 75 kg/kWh (Regler 40-150, Akkugroesse vorbelegt
+aus `battery_capacity_kwh`), Laufleistung 200.000 km (Regler). Ausgewiesen
+werden Gesamt-CO2, CO2 je 100 km inkl. Herstellung, Energiekosten ueber die
+Laufleistung und der km-Stand, ab dem der Herstellungs-Rucksack eingeholt ist.
+
+**Homescreen-Widget:** zeigt Kosten und kWh des laufenden Monats, mittelgross
+zusaetzlich den letzten Ladevorgang. Das Widget rechnet nicht selbst, die App
+schreibt einen Stand (iOS: JSON in der App Group
+`group.com.dominiqueherbrigpersonalteam.Lademonitor`; Android:
+SharedPreferences `widget_snapshot`) nach jedem Speichern/Loeschen eines
+Vorgangs, beim Laden des Dashboards und beim Wechsel in den Hintergrund. Monat
+ohne die Grundgebuehr-Perioden ohne Vorgang (wie das Dashboard mit
+Monatsfilter). iOS braucht dafuer ein eigenes Widget-Target samt App Group
+(automatisches Signieren).
+
+**Offen:** beide Apps sind hier nicht kompilierbar; das iOS-Projekt
+(`project.pbxproj`) wurde fuer das Widget-Target von Hand erweitert.
 
 ## Backup-Export/-Import (`routers/backup.py`)
 
