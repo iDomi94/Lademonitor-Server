@@ -6,6 +6,24 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.29.0] — 2026-09-29
+
+### Added
+- **Messort der kWh** (`Provider.energy_meter`, `ChargingSession.energy_meter`):
+  Ladesäule oder Fahrzeug. Der Anbieter legt den Standard fest, der
+  Ladevorgang kann davon abweichen; gespeichert wird nur die Abweichung (leer =
+  wie der Anbieter), sodass eine Änderung am Anbieter auf alle folgenden
+  Vorgänge durchschlägt. `SessionOut.energy_meter_effective` liefert den
+  geltenden Wert. Web-UI: Häkchen beim Anbieter, Auswahl im Ladevorgang
+  (vorbefüllt vom Anbieter).
+
+### Changed
+- **Akku und Ladeverluste:** im Fahrzeug abgelesene Vorgänge fehlen in der
+  Verlustrechnung (`excluded.vehicle_measured`), im Akku-Index bilden sie eine
+  eigene Gruppe mit eigenem Anfangswert (`AC/vehicle`, `DC/vehicle`).
+- Backup-CSV um die Spalte `energy_meter` in `providers.csv` und
+  `sessions.csv` erweitert, beim Import optional.
+
 ## [0.28.0] — 2026-09-29
 
 ### Added

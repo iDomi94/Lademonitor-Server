@@ -133,6 +133,7 @@ const BATTERY_T = {
   withoutProvider: {{ t('battery.without_provider')|tojson }},
   unknownType: {{ t('battery.unknown_type')|tojson }},
   excluded: {{ t('battery.excluded')|tojson }},
+  vehicleMeasured: {{ t('battery.vehicle_measured')|tojson }},
 };
 
 const MONTH_NAMES = {{ t('dashboard.month_names')|tojson }}.split('|');
@@ -636,12 +637,14 @@ async function loadBattery() {
       .replace('{count}', skipped)
       .replace('{estimated}', ex.estimated_energy)
       .replace('{delta}', v.min_soc_delta) : '';
+    const vehicleNote = ex.vehicle_measured
+      ? `<p class="chartnote">${BATTERY_T.vehicleMeasured.replace('{count}', ex.vehicle_measured)}</p>` : '';
     return `<div class="batteryvehicle">${title}${hero}
       <h3>${BATTERY_T.lossesHeading}</h3>
       ${v.nominal_capacity_kwh ? '' : `<p class="chartnote">${BATTERY_T.lossesNoNominal}</p>`}
       ${batteryLossTable(v.losses_by_type, BATTERY_T.colType)}
       ${batteryLossTable(v.losses_by_provider, BATTERY_T.colProvider)}
-      <p class="chartnote">${note}</p></div>`;
+      ${vehicleNote}<p class="chartnote">${note}</p></div>`;
   }).join('');
   vehicles.forEach((v, i) => {
     if (v.health_periods.length) {

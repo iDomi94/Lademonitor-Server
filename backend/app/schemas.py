@@ -1,6 +1,8 @@
 import re
 from datetime import datetime
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .models import (
@@ -194,11 +196,16 @@ class VehicleOut(VehicleBase):
 
 # ---------- Provider ----------
 
+# Wo die kWh abgelesen werden (siehe models.Provider.energy_meter, battery.py):
+# Ladesaeule/Rechnung (inkl. Ladeverluste) oder Anzeige im Fahrzeug.
+EnergyMeter = Literal["charger", "vehicle"]
+
 class ProviderBase(BaseModel):
     name: str
     last_price_ac_per_kwh: float | None = None
     last_price_dc_per_kwh: float | None = None
     notes: str | None = None
+    energy_meter: EnergyMeter = "charger"
 
 
 class ProviderCreate(ProviderBase):
@@ -210,6 +217,7 @@ class ProviderUpdate(BaseModel):
     last_price_ac_per_kwh: float | None = None
     last_price_dc_per_kwh: float | None = None
     notes: str | None = None
+    energy_meter: EnergyMeter | None = None
 
 
 class ProviderOut(ProviderBase):
@@ -424,6 +432,11 @@ class SessionBase(BaseModel):
     soc_end: int | None = None
     energy_kwh: float | None = None
     energy_is_estimated: bool = False
+    # Messort der kWh fuer DIESEN Vorgang. Leer = wie der Anbieter. Clients
+    # duerfen auch den Anbieterwert selbst schicken - der Server speichert eine
+    # Angabe, die dem Anbieter entspricht, als leer (routers/sessions.py), damit
+    # eine spaetere Aenderung am Anbieter auf den Vorgang durchschlaegt.
+    energy_meter: EnergyMeter | None = None
     odometer_km: int | None = None
     # Aussentemperatur in Grad Celsius beim Ladebeginn. Grenzen bewusst weit
     # (-60..60): sie sollen einen vertauschten Wert oder eine Fahrenheit-Angabe
@@ -460,6 +473,7 @@ class SessionUpdate(BaseModel):
     soc_end: int | None = None
     energy_kwh: float | None = None
     energy_is_estimated: bool | None = None
+    energy_meter: EnergyMeter | None = None
     odometer_km: int | None = None
     outside_temp_c: float | None = Field(default=None, ge=-60, le=60)
     outside_temp_source: TemperatureSource | None = None
@@ -485,6 +499,9 @@ class SessionOut(SessionBase):
     # `price_total` bleibt der an der Saeule bezahlte Betrag; die Kosten des
     # Vorgangs insgesamt sind price_total + fee_share.
     fee_share: float | None = None
+    # Tatsaechlich geltender Messort (Ausnahme am Vorgang, sonst Anbieter,
+    # sonst Ladesaeule) - damit Clients nicht selbst nachschlagen muessen.
+    energy_meter_effective: EnergyMeter = "charger"
     created_at: datetime
     updated_at: datetime
 
@@ -875,6 +892,7 @@ class BatteryPointOut(BaseModel):
     energy_kwh: float
     apparent_capacity_kwh: float
     loss_pct: float | None = None
+    energy_meter: EnergyMeter = "charger"
 
 
 class BatteryLossGroupOut(BaseModel):
@@ -898,6 +916,8 @@ class BatteryExclusionsOut(BaseModel):
     missing_values: int
     small_soc_delta: int
     implausible: int
+    # Im Fahrzeug gemessen: im Akku-Index enthalten, nur nicht bei den Verlusten
+    vehicle_measured: int = 0
 
 
 class BatteryVehicleOut(BaseModel):

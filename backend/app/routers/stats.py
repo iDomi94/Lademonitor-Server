@@ -334,10 +334,9 @@ def stats_battery(
     vehicles = db.query(models.Vehicle).filter(models.Vehicle.user_id == user.id).all()
     if vehicle_id:
         vehicles = [v for v in vehicles if v.id == vehicle_id]
-    provider_names = {
-        p.id: p.name
-        for p in db.query(models.Provider).filter(models.Provider.user_id == user.id).all()
-    }
+    providers = db.query(models.Provider).filter(models.Provider.user_id == user.id).all()
+    provider_names = {p.id: p.name for p in providers}
+    provider_meters = {p.id: p.energy_meter for p in providers}
 
     result = []
     for vehicle in sorted(vehicles, key=lambda v: v.name or ""):
@@ -354,7 +353,7 @@ def stats_battery(
             continue
 
         nominal = vehicle.battery_capacity_kwh or None
-        points, excluded = battery.collect_points(sessions, nominal)
+        points, excluded = battery.collect_points(sessions, nominal, provider_meters)
         by_type, by_provider = battery.build_losses(points, nominal)
         health = battery.build_health(points)
 
@@ -381,6 +380,7 @@ def stats_battery(
                         energy_kwh=p.energy_kwh,
                         apparent_capacity_kwh=p.apparent_capacity_kwh,
                         loss_pct=p.loss_pct,
+                        energy_meter=p.energy_meter,
                     )
                     for p in points
                 ],

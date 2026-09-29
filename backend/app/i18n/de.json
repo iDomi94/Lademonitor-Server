@@ -70,6 +70,10 @@
   "sessions.form.soc_start": "SoC Start (%)",
   "sessions.form.soc_end": "SoC Ende (%)",
   "sessions.form.kwh": "kWh (leer = automatisch)",
+  "sessions.form.meter": "kWh abgelesen an",
+  "sessions.form.meter_charger": "Ladesäule",
+  "sessions.form.meter_vehicle": "Fahrzeug",
+  "sessions.form.meter_hint": "Vorbefüllt vom Anbieter. Im Fahrzeug abgelesene kWh enthalten keine Ladeverluste und zählen deshalb nicht bei den Ladeverlusten.",
   "sessions.form.price_kwh": "Preis/kWh (€)",
   "sessions.form.price_total": "Gesamtpreis (€)",
   "sessions.form.odometer": "Kilometerstand",
@@ -163,6 +167,9 @@
   "settings.provider.table.ac_price": "AC-Preis",
   "settings.provider.table.dc_price": "DC-Preis",
   "settings.provider.confirm_delete": "Anbieter wirklich löschen?",
+  "settings.provider.vehicle_meter": "kWh werden im Fahrzeug abgelesen",
+  "settings.provider.vehicle_meter_hint": "Gilt für alle Ladevorgänge dieses Anbieters, einzelne lassen sich im Ladevorgang umstellen. Im Fahrzeug abgelesene kWh enthalten keine Ladeverluste – sie zählen deshalb im Akku-Index, aber nicht bei den Ladeverlusten.",
+  "settings.provider.vehicle_meter_badge": "Fahrzeug",
 
   "settings.location.heading": "Bekannte Ladeorte",
   "settings.location.add_heading": "Ladeort anlegen",
@@ -707,7 +714,7 @@
   "dashboard.stat.cost_fees": "davon {amount} Grundgebühren",
 
   "battery.heading": "Akku und Ladeverluste",
-  "battery.help.text": "Grundlage sind nur Ladevorgänge mit einer echten kWh-Angabe (Rechnung, Wallbox, Import) und mindestens 20 Prozentpunkten SoC-Hub. Aus kWh je Prozentpunkt ergibt sich die scheinbare Kapazität: was eine Ladung von 0 auf 100 % am Zähler kosten würde. Die Ladeverluste sind der Mehrbedarf gegenüber der hinterlegten Nennkapazität des Fahrzeugs – bei einem gealterten Akku fallen sie etwas zu klein aus, belastbar ist vor allem der Unterschied zwischen AC und DC. Der Akku-Index verfolgt die scheinbare Kapazität je Quartal, getrennt nach Lade-Art, und bezieht sie auf den Beginn der Aufzeichnung (100 %). Er ist kein absoluter Gesundheitswert (SoH), zeigt aber, ob der Akku mit der Zeit weniger aufnimmt. Automatisch erkannte Vorgänge ohne gemessene kWh zählen nicht mit, weil ihre Energie selbst aus der Nennkapazität geschätzt ist.",
+  "battery.help.text": "Grundlage sind nur Ladevorgänge mit einer echten kWh-Angabe (Rechnung, Wallbox, Import) und mindestens 20 Prozentpunkten SoC-Hub. Aus kWh je Prozentpunkt ergibt sich die scheinbare Kapazität: was eine Ladung von 0 auf 100 % am Zähler kosten würde. Die Ladeverluste sind der Mehrbedarf gegenüber der hinterlegten Nennkapazität des Fahrzeugs – bei einem gealterten Akku fallen sie etwas zu klein aus, belastbar ist vor allem der Unterschied zwischen AC und DC. Der Akku-Index verfolgt die scheinbare Kapazität je Quartal, getrennt nach Lade-Art, und bezieht sie auf den Beginn der Aufzeichnung (100 %). Er ist kein absoluter Gesundheitswert (SoH), zeigt aber, ob der Akku mit der Zeit weniger aufnimmt. Automatisch erkannte Vorgänge ohne gemessene kWh zählen nicht mit, weil ihre Energie selbst aus der Nennkapazität geschätzt ist. Ladeverluste lassen sich nur aus kWh berechnen, die an der Ladesäule gemessen wurden; ob ein Anbieter oder einzelner Ladevorgang im Fahrzeug abgelesen wurde, stellst du beim Anbieter bzw. im Ladevorgang ein.",
   "battery.empty": "Noch keine Ladevorgänge mit gemessener kWh-Angabe und ausreichendem SoC-Hub.",
   "battery.health.label": "Akku-Index gegenüber Beginn der Aufzeichnung",
   "battery.health.detail": "aus {count} Ladevorgängen, letztes Quartal",
@@ -724,5 +731,6 @@
   "battery.col.loss": "Verlust",
   "battery.without_provider": "Ohne Anbieter",
   "battery.unknown_type": "Lade-Art unbekannt",
-  "battery.excluded": "{count} Ladevorgänge nicht berücksichtigt, davon {estimated} mit geschätzter Energie (übrige: fehlende Werte, weniger als {delta} Prozentpunkte Hub oder unplausibel)"
+  "battery.excluded": "{count} Ladevorgänge nicht berücksichtigt, davon {estimated} mit geschätzter Energie (übrige: fehlende Werte, weniger als {delta} Prozentpunkte Hub oder unplausibel)",
+  "battery.vehicle_measured": "{count} Ladevorgänge wurden im Fahrzeug abgelesen – sie zählen im Akku-Index (mit eigenem Anfangswert), aber nicht bei den Ladeverlusten. Welche Anbieter im Fahrzeug ablesen, stellst du in den Einstellungen beim Anbieter ein."
 }

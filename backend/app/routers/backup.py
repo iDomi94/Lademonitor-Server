@@ -42,6 +42,8 @@ VEHICLE_FIELDS = [
 ]
 PROVIDER_FIELDS = [
     "id", "name", "last_price_ac_per_kwh", "last_price_dc_per_kwh", "notes", "created_at",
+    # Seit v0.29.0, beim Import optional (fehlt -> Ladesaeule, wie vorher).
+    "energy_meter",
 ]
 LOCATION_FIELDS = [
     "id", "name", "latitude", "longitude", "radius_m",
@@ -62,6 +64,8 @@ SESSION_FIELDS = [
     # jedes Backup vor v0.24.0 - bleibt importierbar, die Herkunft ist dann
     # eben unbekannt.
     "outside_temp_source",
+    # Seit v0.29.0 (Messort-Ausnahme, leer = wie der Anbieter).
+    "energy_meter",
 ]
 
 # Seit v0.27.0 (Grundgebuehren, siehe models.ProviderFee). Beim Import
@@ -197,6 +201,7 @@ def build_backup_zip(db: Session, user: models.User) -> bytes:
             "last_price_ac_per_kwh": _c(p.last_price_ac_per_kwh),
             "last_price_dc_per_kwh": _c(p.last_price_dc_per_kwh),
             "notes": _c(p.notes), "created_at": _c(p.created_at),
+            "energy_meter": _c(p.energy_meter),
         }
         for p in providers
     ]
@@ -233,6 +238,7 @@ def build_backup_zip(db: Session, user: models.User) -> bytes:
             "created_at": _c(s.created_at), "updated_at": _c(s.updated_at),
             "outside_temp_c": _c(s.outside_temp_c),
             "outside_temp_source": _c(s.outside_temp_source),
+            "energy_meter": _c(s.energy_meter),
         }
         for s in sessions
     ]
@@ -300,6 +306,12 @@ def _parse_int(v: str | None) -> int | None:
 def _parse_str(v: str | None) -> str | None:
     v = (v or "").strip()
     return v or None
+
+
+def _parse_meter(v: str | None) -> str | None:
+    """Messort der kWh; unbekannte Werte werden verworfen statt gespeichert."""
+    v = _parse_str(v)
+    return v if v in ("charger", "vehicle") else None
 
 
 def _parse_dt(v: str | None) -> datetime | None:
@@ -486,6 +498,7 @@ async def import_backup(
                 last_price_dc_per_kwh=_parse_float(row.get("last_price_dc_per_kwh")),
                 notes=_parse_str(row.get("notes")),
                 created_at=_parse_dt(row.get("created_at")),
+                energy_meter=_parse_meter(row.get("energy_meter")) or "charger",
             )
         )
         existing_provider_owners[new_id] = user.id
@@ -605,6 +618,7 @@ async def import_backup(
                 notes=_parse_str(row.get("notes")),
                 created_at=_parse_dt(row.get("created_at")),
                 updated_at=_parse_dt(row.get("updated_at")),
+                energy_meter=_parse_meter(row.get("energy_meter")),
             )
         )
         existing_session_owners[new_id] = user.id

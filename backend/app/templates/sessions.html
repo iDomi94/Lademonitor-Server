@@ -58,6 +58,13 @@
     <input type="number" step="0.01" id="f-kwh">
   </div>
   <div>
+    <label title="{{ t('sessions.form.meter_hint') }}">{{ t('sessions.form.meter') }}</label>
+    <select id="f-meter" title="{{ t('sessions.form.meter_hint') }}">
+      <option value="charger">{{ t('sessions.form.meter_charger') }}</option>
+      <option value="vehicle">{{ t('sessions.form.meter_vehicle') }}</option>
+    </select>
+  </div>
+  <div>
     <label>{{ t('sessions.form.price_kwh') }}</label>
     <input type="number" step="0.0001" id="f-price-kwh">
   </div>
@@ -159,6 +166,17 @@ function suggestPrice() {
   if (price != null) priceField.value = price;
 }
 document.getElementById('f-provider').addEventListener('change', suggestPrice);
+
+// Messort der kWh: vorbefuellt vom Anbieter. Ein Anbieterwechsel im Formular
+// setzt ihn auf dessen Standard zurueck; eine Angabe, die dem Anbieter
+// entspricht, speichert der Server als "wie Anbieter" (routers/sessions.py).
+function providerMeter(providerId) {
+  const provider = providers.find(p => p.id === providerId);
+  return (provider && provider.energy_meter) || 'charger';
+}
+document.getElementById('f-provider').addEventListener('change', () => {
+  document.getElementById('f-meter').value = providerMeter(document.getElementById('f-provider').value);
+});
 document.getElementById('f-type').addEventListener('change', suggestPrice);
 
 function badgeFor(source) {
@@ -338,6 +356,8 @@ function startEdit(id) {
   document.getElementById('f-soc-start').value = s.soc_start ?? '';
   document.getElementById('f-soc-end').value = s.soc_end ?? '';
   document.getElementById('f-kwh').value = s.energy_kwh ?? '';
+  document.getElementById('f-meter').value =
+    s.energy_meter || s.energy_meter_effective || providerMeter(s.provider_id);
   document.getElementById('f-price-kwh').value = s.price_per_kwh ?? '';
   document.getElementById('f-price-total').value = s.price_total ?? '';
   document.getElementById('f-odo').value = s.odometer_km ?? '';
@@ -377,6 +397,7 @@ document.getElementById('session-form').addEventListener('submit', async (e) => 
     soc_start: document.getElementById('f-soc-start').value || null,
     soc_end: document.getElementById('f-soc-end').value || null,
     energy_kwh: document.getElementById('f-kwh').value || null,
+    energy_meter: document.getElementById('f-meter').value,
     price_per_kwh: document.getElementById('f-price-kwh').value || null,
     price_total: document.getElementById('f-price-total').value || null,
     odometer_km: document.getElementById('f-odo').value || null,

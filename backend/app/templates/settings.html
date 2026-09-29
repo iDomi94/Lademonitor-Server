@@ -49,6 +49,10 @@
         <div><label>{{ t('settings.provider.name') }}</label><input id="p-name" required></div>
         <div><label>{{ t('settings.provider.ac_price') }}</label><input type="number" step="0.0001" id="p-ac"></div>
         <div><label>{{ t('settings.provider.dc_price') }}</label><input type="number" step="0.0001" id="p-dc"></div>
+        <div class="form-row-wide">
+          <label><input type="checkbox" id="p-vehicle-meter" style="width:auto; display:inline-block; margin-right:6px">{{ t('settings.provider.vehicle_meter') }}</label>
+          <small style="color:var(--muted)">{{ t('settings.provider.vehicle_meter_hint') }}</small>
+        </div>
         <div class="form-actions">
           <button type="button" id="provider-cancel-btn" style="background:var(--muted); display:none">{{ t('settings.provider.cancel') }}</button>
           <button type="submit" id="provider-submit-btn">{{ t('settings.provider.submit_new') }}</button>
@@ -377,6 +381,7 @@ const T = {
   providerSubmitNew: {{ t('settings.provider.submit_new')|tojson }},
   providerSubmitEdit: {{ t('settings.provider.submit_edit')|tojson }},
   providerConfirmDelete: {{ t('settings.provider.confirm_delete')|tojson }},
+  providerVehicleMeterBadge: {{ t('settings.provider.vehicle_meter_badge')|tojson }},
 
   feeEditHeading: {{ t('settings.fee.edit_heading')|tojson }},
   feeAddHeading: {{ t('settings.fee.add_heading')|tojson }},
@@ -544,7 +549,7 @@ async function loadProviders() {
   providers = await (await fetch('api/providers')).json();
   setCount('provider-count', providers.length);
   document.getElementById('provider-rows').innerHTML = providers.map(p => `
-    <tr><td>${p.name}</td><td>${p.last_price_ac_per_kwh ?? '–'}</td><td>${p.last_price_dc_per_kwh ?? '–'}</td>
+    <tr><td>${p.name}${p.energy_meter === 'vehicle' ? ` <span class="badge badge-import">${T.providerVehicleMeterBadge}</span>` : ''}</td><td>${p.last_price_ac_per_kwh ?? '–'}</td><td>${p.last_price_dc_per_kwh ?? '–'}</td>
     <td class="col-actions">${actionButtons('Provider', p.id)}</td></tr>`).join('');
   document.getElementById('l-provider').innerHTML = `<option value="">${T.noneOption}</option>` +
     providers.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
@@ -559,6 +564,7 @@ function startEditProvider(id) {
   document.getElementById('p-name').value = p.name;
   document.getElementById('p-ac').value = p.last_price_ac_per_kwh ?? '';
   document.getElementById('p-dc').value = p.last_price_dc_per_kwh ?? '';
+  document.getElementById('p-vehicle-meter').checked = p.energy_meter === 'vehicle';
   document.getElementById('provider-form-heading').textContent = T.providerEditHeading;
   document.getElementById('provider-submit-btn').textContent = T.providerSubmitEdit;
   document.getElementById('provider-cancel-btn').style.display = 'inline-block';
@@ -590,6 +596,7 @@ document.getElementById('provider-form').addEventListener('submit', async (e) =>
     name: document.getElementById('p-name').value,
     last_price_ac_per_kwh: document.getElementById('p-ac').value || null,
     last_price_dc_per_kwh: document.getElementById('p-dc').value || null,
+    energy_meter: document.getElementById('p-vehicle-meter').checked ? 'vehicle' : 'charger',
   };
   if (editingProviderId) {
     await fetch(`api/providers/${editingProviderId}`, {

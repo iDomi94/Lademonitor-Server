@@ -70,6 +70,10 @@
   "sessions.form.soc_start": "SoC start (%)",
   "sessions.form.soc_end": "SoC end (%)",
   "sessions.form.kwh": "kWh (blank = automatic)",
+  "sessions.form.meter": "kWh read at",
+  "sessions.form.meter_charger": "Charger",
+  "sessions.form.meter_vehicle": "Vehicle",
+  "sessions.form.meter_hint": "Prefilled from the provider. kWh read in the vehicle contain no charging losses and are therefore left out of the charging losses.",
   "sessions.form.price_kwh": "Price/kWh (€)",
   "sessions.form.price_total": "Total price (€)",
   "sessions.form.odometer": "Odometer reading",
@@ -163,6 +167,9 @@
   "settings.provider.table.ac_price": "AC price",
   "settings.provider.table.dc_price": "DC price",
   "settings.provider.confirm_delete": "Really delete this provider?",
+  "settings.provider.vehicle_meter": "kWh are read in the vehicle",
+  "settings.provider.vehicle_meter_hint": "Applies to all charging sessions of this provider; individual sessions can be switched in the session form. kWh read in the vehicle contain no charging losses, so they count for the battery index but not for the charging losses.",
+  "settings.provider.vehicle_meter_badge": "Vehicle",
 
   "settings.location.heading": "Known Charging Locations",
   "settings.location.add_heading": "Add charging location",
@@ -707,7 +714,7 @@
   "dashboard.stat.cost_fees": "incl. {amount} base fees",
 
   "battery.heading": "Battery and charging losses",
-  "battery.help.text": "Only charging sessions with a real kWh figure (invoice, wallbox, import) and at least 20 percentage points of SoC gain are used. kWh per percentage point gives the apparent capacity: what charging from 0 to 100 % would cost at the meter. Charging losses are the extra energy compared with the vehicle's nominal battery capacity – with an aged battery they come out slightly too low; the difference between AC and DC is the reliable part. The battery index tracks the apparent capacity per quarter, separately per charging type, relative to the start of your records (100 %). It is not an absolute state of health (SoH), but it shows whether the battery takes less energy over time. Automatically detected sessions without a measured kWh value are left out because their energy is itself estimated from the nominal capacity.",
+  "battery.help.text": "Only charging sessions with a real kWh figure (invoice, wallbox, import) and at least 20 percentage points of SoC gain are used. kWh per percentage point gives the apparent capacity: what charging from 0 to 100 % would cost at the meter. Charging losses are the extra energy compared with the vehicle's nominal battery capacity – with an aged battery they come out slightly too low; the difference between AC and DC is the reliable part. The battery index tracks the apparent capacity per quarter, separately per charging type, relative to the start of your records (100 %). It is not an absolute state of health (SoH), but it shows whether the battery takes less energy over time. Automatically detected sessions without a measured kWh value are left out because their energy is itself estimated from the nominal capacity. Charging losses can only be derived from kWh measured at the charger; whether a provider or a single session was read in the vehicle is set on the provider or in the session form.",
   "battery.empty": "No charging sessions with a measured kWh value and enough SoC gain yet.",
   "battery.health.label": "Battery index compared with the start of your records",
   "battery.health.detail": "from {count} charging sessions, latest quarter",
@@ -724,5 +731,6 @@
   "battery.col.loss": "Loss",
   "battery.without_provider": "No provider",
   "battery.unknown_type": "Charging type unknown",
-  "battery.excluded": "{count} charging sessions not included, {estimated} of them with estimated energy (others: missing values, less than {delta} percentage points gain, or implausible)"
+  "battery.excluded": "{count} charging sessions not included, {estimated} of them with estimated energy (others: missing values, less than {delta} percentage points gain, or implausible)",
+  "battery.vehicle_measured": "{count} charging sessions were read in the vehicle – they count for the battery index (with their own baseline) but not for the charging losses. Which providers are read in the vehicle is set per provider in the settings."
 }

@@ -40,6 +40,16 @@ Was herausfaellt (und gezaehlt wird, statt still zu verschwinden):
 * **Unplausibles** (ausserhalb `PLAUSIBLE_RANGE` um die Nennkapazitaet bzw.
   ohne Nennkapazitaet um den Median): Tippfehler, eine Ladung, bei der das
   Fahrzeug nebenher vorklimatisiert hat, ein vertauschter SoC.
+
+**Messort** (`energy_meter`, ab v0.29.0): wurden die kWh im FAHRZEUG
+abgelesen statt an der Ladesaeule, fehlen die Ladeverluste bereits in der
+Zahl. Solche Vorgaenge gehen nicht in die Verlustrechnung ein (gezaehlt als
+`vehicle_measured`) - sie wuerden den Verlust nach unten ziehen, bis hin zu
+einem scheinbar verlustfreien Laden. Fuer den Akku-Index taugen sie dagegen
+sogar besser; dort bekommen sie eine eigene Gruppe mit eigenem Anfangswert
+("AC/vehicle"), aus demselben Grund, aus dem AC und DC getrennt sind.
+Ermittelt wird der Messort ueber `effective_meter()`: Ausnahme am Vorgang,
+sonst die Einstellung des Anbieters, sonst Ladesaeule.
 """
 
 from collections import defaultdict
@@ -77,6 +87,28 @@ MIN_DAYS_FOR_TREND = 180
 
 UNKNOWN_TYPE = "unknown"
 
+METER_CHARGER = "charger"
+METER_VEHICLE = "vehicle"
+ENERGY_METERS = (METER_CHARGER, METER_VEHICLE)
+
+
+def effective_meter(
+    session: models.ChargingSession, provider_meters: dict[str, str] | None = None
+) -> str:
+    """Wo die kWh dieses Vorgangs abgelesen wurden: Ausnahme am Vorgang, sonst
+    der Standard seines Anbieters, sonst die Ladesaeule (so wurde vor v0.29.0
+    alles gerechnet)."""
+    if session.energy_meter in ENERGY_METERS:
+        return session.energy_meter
+    if session.provider_id and provider_meters:
+        meter = provider_meters.get(session.provider_id)
+        if meter in ENERGY_METERS:
+            return meter
+    if session.provider_id and session.provider is not None:
+        if session.provider.energy_meter in ENERGY_METERS:
+            return session.provider.energy_meter
+    return METER_CHARGER
+
 
 @dataclass
 class BatteryPoint:
@@ -87,8 +119,18 @@ class BatteryPoint:
     soc_delta: int
     energy_kwh: float
     apparent_capacity_kwh: float
-    # (scheinbar / nenn - 1) * 100, None ohne Nennkapazitaet
+    # (scheinbar / nenn - 1) * 100, None ohne Nennkapazitaet und bei im
+    # Fahrzeug gemessenen kWh (dort steckt kein Verlust in der Zahl)
     loss_pct: float | None
+    energy_meter: str = METER_CHARGER
+
+    @property
+    def health_key(self) -> str:
+        """Gruppe fuer den Akku-Index: Lade-Art, bei Fahrzeugmessung mit
+        eigenem Anfangswert."""
+        if self.energy_meter == METER_VEHICLE:
+            return f"{self.charging_type}/{METER_VEHICLE}"
+        return self.charging_type
 
 
 @dataclass
@@ -97,6 +139,9 @@ class Exclusions:
     missing_values: int = 0
     small_soc_delta: int = 0
     implausible: int = 0
+    # Nicht AUSGESCHLOSSEN, nur nicht in der Verlustrechnung: im Fahrzeug
+    # gemessen, zaehlt aber im Akku-Index mit.
+    vehicle_measured: int = 0
 
 
 @dataclass
@@ -129,7 +174,9 @@ def _type_of(session: models.ChargingSession) -> str:
 
 
 def collect_points(
-    sessions: list[models.ChargingSession], nominal_kwh: float | None
+    sessions: list[models.ChargingSession],
+    nominal_kwh: float | None,
+    provider_meters: dict[str, str] | None = None,
 ) -> tuple[list[BatteryPoint], Exclusions]:
     """Alle verwertbaren Vorgaenge EINES Fahrzeugs, chronologisch."""
     excluded = Exclusions()
@@ -146,6 +193,7 @@ def collect_points(
             excluded.small_soc_delta += 1
             continue
         apparent = s.energy_kwh / delta * 100
+        meter = effective_meter(s, provider_meters)
         candidates.append(
             BatteryPoint(
                 session_id=s.id,
@@ -155,7 +203,12 @@ def collect_points(
                 soc_delta=delta,
                 energy_kwh=s.energy_kwh,
                 apparent_capacity_kwh=round(apparent, 2),
-                loss_pct=round((apparent / nominal_kwh - 1) * 100, 1) if nominal_kwh else None,
+                loss_pct=(
+                    round((apparent / nominal_kwh - 1) * 100, 1)
+                    if nominal_kwh and meter == METER_CHARGER
+                    else None
+                ),
+                energy_meter=meter,
             )
         )
 
@@ -168,6 +221,8 @@ def collect_points(
         if reference and not (low <= p.apparent_capacity_kwh / reference <= high):
             excluded.implausible += 1
             continue
+        if p.energy_meter == METER_VEHICLE:
+            excluded.vehicle_measured += 1
         points.append(p)
     return points, excluded
 
@@ -197,7 +252,11 @@ def _group(points: list[BatteryPoint], key, nominal_kwh: float | None) -> list[L
 
 
 def build_losses(points: list[BatteryPoint], nominal_kwh: float | None):
-    """(nach Lade-Art, nach Anbieter-ID) - jeweils absteigend nach Energie."""
+    """(nach Lade-Art, nach Anbieter-ID) - jeweils absteigend nach Energie.
+
+    Nur an der Ladesaeule gemessene Vorgaenge: bei im Fahrzeug abgelesenen
+    kWh sind die Verluste schon heraus, sie wuerden den Wert nur verduennen."""
+    points = [p for p in points if p.energy_meter == METER_CHARGER]
     return (
         _group(points, lambda p: p.charging_type, nominal_kwh),
         _group(points, lambda p: p.provider_id or "", nominal_kwh),
@@ -211,7 +270,7 @@ def _quarter(ts: datetime) -> str:
 def build_health(points: list[BatteryPoint]) -> Health:
     by_type: dict[str, list[BatteryPoint]] = defaultdict(list)
     for p in points:
-        by_type[p.charging_type].append(p)
+        by_type[p.health_key].append(p)
 
     baselines = {
         t: median(p.apparent_capacity_kwh for p in items[:BASELINE_SESSIONS])
@@ -221,9 +280,9 @@ def build_health(points: list[BatteryPoint]) -> Health:
 
     normalized = sorted(
         (
-            (p.start_time, p.apparent_capacity_kwh / baselines[p.charging_type] * 100)
+            (p.start_time, p.apparent_capacity_kwh / baselines[p.health_key] * 100)
             for p in points
-            if p.charging_type in baselines
+            if p.health_key in baselines
         ),
         key=lambda x: x[0],
     )

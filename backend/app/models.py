@@ -315,6 +315,12 @@ class Provider(Base):
     last_price_dc_per_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Verschluesselt (siehe crypto.py) - Freitext, keine SQL-Filterung darauf.
     notes: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    # Wo die kWh dieses Anbieters abgelesen werden: "charger" (Ladesaeule/
+    # Rechnung, inkl. Ladeverluste) oder "vehicle" (Anzeige im Auto, ohne
+    # Verluste). Standard fuer alle seine Ladevorgaenge, siehe
+    # ChargingSession.energy_meter und battery.py. String statt Enum, damit
+    # ein spaeterer dritter Wert keine ALTER TYPE-Migration braucht.
+    energy_meter: Mapped[str] = mapped_column(String, default="charger")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     sessions: Mapped[list["ChargingSession"]] = relationship(back_populates="provider")
@@ -422,6 +428,11 @@ class ChargingSession(Base):
     # energy_kwh: entweder direkt gemessen (manuell/Wallbox) oder aus SoC-Delta berechnet
     energy_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
     energy_is_estimated: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Ausnahme vom Messort des Anbieters (Provider.energy_meter). NULL heisst
+    # "wie der Anbieter" - so wirkt eine spaetere Aenderung am Anbieter auf
+    # alle seine Vorgaenge zurueck. Gesetzt ist der Wert nur, wenn er vom
+    # Anbieter ABWEICHT (normalisiert in routers/sessions.py).
+    energy_meter: Mapped[str | None] = mapped_column(String, nullable=True)
 
     odometer_km: Mapped[int | None] = mapped_column(Integer, nullable=True)
 

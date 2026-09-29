@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
+from ..battery import METER_CHARGER, effective_meter
 from ..auth import get_current_user
 from ..consumption import compute_vehicle_consumptions
 from ..database import get_db
@@ -55,6 +56,31 @@ def attach_consumption(db: Session, user_id: str, sessions: list[models.Charging
     shares = load_allocation(db, user_id).shares if sessions else {}
     for s in sessions:
         s.fee_share = shares.get(s.id)
+
+    # Messort der kWh (battery.py) - wie der Verbrauch nur Antwort: haengt am
+    # Anbieter, dessen Einstellung sich jederzeit aendern kann.
+    provider_meters = {
+        p.id: p.energy_meter
+        for p in db.query(models.Provider).filter(models.Provider.user_id == user_id).all()
+    } if sessions else {}
+    for s in sessions:
+        s.energy_meter_effective = effective_meter(s, provider_meters)
+
+
+def normalize_energy_meter(session: models.ChargingSession, db: Session) -> None:
+    """Speichert den Messort nur als AUSNAHME: entspricht er dem Anbieter (bzw.
+    ohne Anbieter der Ladesaeule), bleibt die Spalte leer. So wirkt eine
+    spaetere Aenderung am Anbieter auf alle Vorgaenge zurueck, die ihm nur
+    folgen - auch wenn ein Client den vorbefuellten Wert einfach mitschickt."""
+    if session.energy_meter is None:
+        return
+    default = METER_CHARGER
+    if session.provider_id:
+        provider = db.get(models.Provider, session.provider_id)
+        if provider is not None and provider.energy_meter:
+            default = provider.energy_meter
+    if session.energy_meter == default:
+        session.energy_meter = None
 
 
 def resolve_location(session: models.ChargingSession, user_id: str, db: Session) -> None:
@@ -189,6 +215,7 @@ def create_session(
         session.outside_temp_source = models.TemperatureSource.MANUAL
     if not session.location_id:
         resolve_location(session, user.id, db)
+    normalize_energy_meter(session, db)
     estimate_energy_kwh(session, vehicle)
     if session.price_total and session.energy_kwh and not session.price_per_kwh:
         session.price_per_kwh = round(session.price_total / session.energy_kwh, 4)
@@ -251,6 +278,10 @@ def update_session(
             session.energy_is_estimated = False
         elif previous_energy is None or abs(session.energy_kwh - previous_energy) > 1e-6:
             session.energy_is_estimated = False
+
+    # Auch bei einem Anbieterwechsel ohne mitgeschickten Messort: eine
+    # Ausnahme, die dem neuen Anbieter entspricht, ist keine mehr.
+    normalize_energy_meter(session, db)
 
     vehicle = db.get(models.Vehicle, session.vehicle_id)
     estimate_energy_kwh(session, vehicle)

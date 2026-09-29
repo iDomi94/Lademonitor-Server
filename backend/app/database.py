@@ -199,6 +199,22 @@ def run_light_migrations() -> None:
             text("ALTER TABLE tire_sets ADD COLUMN IF NOT EXISTS size_rear VARCHAR")
         )
 
+        # Messort der kWh (siehe models.Provider.energy_meter und battery.py):
+        # Bestandsanbieter gelten als "Ladesaeule" - so wurde bisher auch
+        # gerechnet. Die Ausnahme am Ladevorgang bleibt NULL ("wie Anbieter").
+        conn.execute(
+            text(
+                "ALTER TABLE providers ADD COLUMN IF NOT EXISTS energy_meter VARCHAR "
+                "DEFAULT 'charger'"
+            )
+        )
+        conn.execute(
+            text("UPDATE providers SET energy_meter = 'charger' WHERE energy_meter IS NULL")
+        )
+        conn.execute(
+            text("ALTER TABLE charging_sessions ADD COLUMN IF NOT EXISTS energy_meter VARCHAR")
+        )
+
         # i18n: UI-Sprache pro Nutzer (siehe models.User.language). DEFAULT 'de'
         # deckt sowohl neue Zeilen als auch - via UPDATE - bereits bestehende
         # Nutzer ab, die die Spalte noch nicht hatten (Postgres setzt den
