@@ -1,5 +1,5 @@
 import re
-from datetime import datetime
+from datetime import date, datetime
 
 from typing import Literal
 
@@ -270,6 +270,39 @@ class ProviderFeeOut(ProviderFeeBase):
 
 # ---------- Reifen ----------
 
+def _clean_dot(value: str | None) -> str | None:
+    # Import hier, nicht oben: tires.py zieht consumption/temperature nach,
+    # die Schemas sollen davon unabhaengig laden.
+    from .tires import parse_dot
+
+    return parse_dot(value)
+
+
+class TreadInput(BaseModel):
+    """Profiltiefe in mm - ein Gesamtwert und/oder vier Einzelwerte.
+
+    Gespeichert wird als `depth_mm` immer die GERINGSTE Angabe; wer nur die
+    vier Raeder eintraegt, bekommt deren Minimum.
+    """
+
+    depth_mm: float | None = Field(default=None, ge=0, le=20)
+    front_left_mm: float | None = Field(default=None, ge=0, le=20)
+    front_right_mm: float | None = Field(default=None, ge=0, le=20)
+    rear_left_mm: float | None = Field(default=None, ge=0, le=20)
+    rear_right_mm: float | None = Field(default=None, ge=0, le=20)
+
+    def wheels(self) -> list[float]:
+        return [
+            v
+            for v in (self.front_left_mm, self.front_right_mm, self.rear_left_mm, self.rear_right_mm)
+            if v is not None
+        ]
+
+    def minimum(self) -> float | None:
+        values = self.wheels() + ([self.depth_mm] if self.depth_mm is not None else [])
+        return min(values) if values else None
+
+
 class TireSetBase(BaseModel):
     vehicle_id: str
     kind: TireKind
@@ -287,10 +320,20 @@ class TireSetBase(BaseModel):
     brand: str | None = None
     model: str | None = None
     notes: str | None = None
+    # DOT-Datumscode (Woche+Jahr, "2323") je Achse; siehe models.TireSet.
+    dot: str | None = None
+    dot_rear: str | None = None
+
+    _v_dot = field_validator("dot", "dot_rear")(lambda cls, v: _clean_dot(v))
 
 
 class TireSetCreate(TireSetBase):
-    pass
+    # Beim Wechsel gleich mitmessen: `tread` gilt fuer den aufgezogenen Satz,
+    # `removed_tread` fuer den abgenommenen (die vorherige Montage an diesem
+    # Fahrzeug). Beide landen als Messung mit dem Wechseldatum und dem
+    # Kilometerstand des Wechsels.
+    tread: TreadInput | None = None
+    removed_tread: TreadInput | None = None
 
 
 class TireSetUpdate(BaseModel):
@@ -302,11 +345,43 @@ class TireSetUpdate(BaseModel):
     brand: str | None = None
     model: str | None = None
     notes: str | None = None
+    dot: str | None = None
+    dot_rear: str | None = None
+
+    _v_dot = field_validator("dot", "dot_rear")(lambda cls, v: _clean_dot(v))
 
 
 class TireSetOut(TireSetBase):
     model_config = ConfigDict(from_attributes=True)
     id: str
+    created_at: datetime
+
+    # Beim Ausliefern nicht erneut pruefen - ein Altwert, der heute nicht mehr
+    # durchginge, darf die Liste nicht mit 500 scheitern lassen.
+    _v_dot = field_validator("dot", "dot_rear")(lambda cls, v: v)
+
+
+class TreadMeasurementCreate(TreadInput):
+    measured_on: datetime
+    odometer_km: float | None = None
+
+
+class TreadMeasurementUpdate(TreadInput):
+    measured_on: datetime | None = None
+    odometer_km: float | None = None
+
+
+class TreadMeasurementOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    tire_set_id: str
+    measured_on: datetime
+    odometer_km: float | None = None
+    depth_mm: float
+    front_left_mm: float | None = None
+    front_right_mm: float | None = None
+    rear_left_mm: float | None = None
+    rear_right_mm: float | None = None
     created_at: datetime
 
 
@@ -330,6 +405,11 @@ class TireMountingOut(BaseModel):
     km_source: str
     energy_kwh: float
     avg_consumption_kwh_per_100km: float | None = None
+    # Juengste Profilmessung dieser Montage; Status "ok" | "low" | "legal_min"
+    # (Schwellen in tires.py).
+    tread_depth_mm: float | None = None
+    tread_measured_on: datetime | None = None
+    tread_status: str | None = None
 
 
 class TireSetSummaryOut(BaseModel):
@@ -350,6 +430,14 @@ class TireSetSummaryOut(BaseModel):
     energy_kwh: float
     is_current: bool
     avg_consumption_kwh_per_100km: float | None = None
+    # Aus der DOT (aeltere Achse): Produktionsdatum, Alter ab da und
+    # "ok" | "check" (ab 6 Jahren) | "replace" (ab 10). None ohne DOT.
+    produced_on: date | None = None
+    production_age_days: int | None = None
+    age_status: str | None = None
+    tread_depth_mm: float | None = None
+    tread_measured_on: datetime | None = None
+    tread_status: str | None = None
 
 
 class TireOverviewOut(BaseModel):

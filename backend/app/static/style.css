@@ -990,3 +990,14 @@ details.panel > summary .count {
 @media (max-width: 720px) {
   .temphero-figure { font-size: 38px; }
 }
+
+/* Profiltiefe je Rad (Reifenseite): 2x2 wie die Raeder am Fahrzeug, vorne
+   oben. Die Zusammenfassung bleibt klein - meist reicht der eine Wert. */
+.tread-wheels { margin-top: 4px; }
+.tread-wheels > summary { cursor: pointer; font-size: 0.85em; color: var(--muted); }
+.tread-wheel-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 6px;
+}

@@ -5,6 +5,18 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.30.0",
+        "date": "2026-09-29",
+        "title": "Reifen: DOT-Alter und Profiltiefe",
+        "changes": [
+            "Beim Reifenwechsel lässt sich die DOT eintragen – die letzten vier Ziffern der DOT-Nummer an der Flanke (2323 = KW 23/2023), bei Mischbereifung getrennt für hinten. In der Übersicht steht daraus das Reifenalter ab Produktion, ab 6 Jahren mit „prüfen\", ab 10 Jahren mit „tauschen\". Wird derselbe Satz wieder aufgezogen, reicht die DOT an einem seiner Einträge.",
+            "Neuer Abschnitt „Profiltiefe\": Messungen mit Datum, Kilometerstand und der geringsten Tiefe, auf Wunsch je Rad (VL/VR/HL/HR – gezählt wird dann der geringste Wert). Über das Lineal-Symbol in der Wechsel-Tabelle geht es direkt zur Messung für diesen Satz.",
+            "Beim Eintragen eines Reifenwechsels können beide Sätze gleich mitgemessen werden: der aufgezogene und der abgenommene. Beide Messungen bekommen Datum und Kilometerstand des Wechsels.",
+            "Die Übersicht zeigt je Satz die jüngste Messung, orange unter der Empfehlung (3 mm Sommer, 4 mm Winter/Ganzjahr) und rot ab dem gesetzlichen Minimum von 1,6 mm.",
+            "API: DOT-Felder an /api/tires, neue Endpunkte /api/tires/tread und /api/tires/{id}/tread; die Apps kennen beides ebenfalls.",
+        ],
+    },
+    {
         "version": "0.29.0",
         "date": "2026-09-29",
         "title": "Messort der kWh: Ladesäule oder Fahrzeug",

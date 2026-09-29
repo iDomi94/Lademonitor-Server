@@ -538,9 +538,52 @@ class TireSet(Base):
     # Verschluesselt (siehe crypto.py) - Freitext, keine SQL-Filterung darauf,
     # gleiche Behandlung wie Provider.notes.
     notes: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    # DOT-Code: die vier Ziffern am Ende der DOT-Nummer, Produktionswoche und
+    # -jahr ("2323" = KW 23/2023). Daraus rechnet tires.py das Reifenalter -
+    # Gummi altert auch ungefahren. Wie bei der Groesse ein zweites Feld fuer
+    # die Hinterachse, weil die Achsen oft aus verschiedenen Chargen stammen;
+    # innerhalb einer Achse genuegt ein Wert (der aeltere zaehlt). Bewusst
+    # NICHT Teil von tires._signature(): wer die DOT erst beim zweiten Winter
+    # nachtraegt, soll damit keinen neuen Satz erzeugen.
+    dot: Mapped[str | None] = mapped_column(String, nullable=True)
+    dot_rear: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     vehicle: Mapped["Vehicle"] = relationship(back_populates="tire_sets")
+    tread_measurements: Mapped[list["TireTreadMeasurement"]] = relationship(
+        back_populates="tire_set", cascade="all, delete-orphan"
+    )
+
+
+class TireTreadMeasurement(Base):
+    """Eine Profiltiefen-Messung an einer Montage.
+
+    Haengt an der MONTAGE (TireSet-Zeile), nicht an einem physischen Satz -
+    den gibt es als Zeile nicht (siehe TireSet). Die Uebersicht fasst die
+    Messungen aller Montagen desselben Satzes zusammen. Typischer Fall: beim
+    Wechsel wird der abgenommene Satz gemessen (Messung an der ALTEN Montage,
+    Datum = Wechseldatum) und der aufgezogene (Messung an der neuen).
+
+    `depth_mm` ist immer die GERINGSTE gemessene Tiefe - das ist der Wert,
+    der fuer Mindestprofil und Austausch zaehlt. Die vier Einzelwerte sind
+    optional; sind sie angegeben, ergibt sich `depth_mm` daraus.
+    """
+
+    __tablename__ = "tire_tread_measurements"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_uuid)
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    tire_set_id: Mapped[str] = mapped_column(ForeignKey("tire_sets.id"), index=True)
+    measured_on: Mapped[datetime] = mapped_column(DateTime, index=True)
+    odometer_km: Mapped[float | None] = mapped_column(Float, nullable=True)
+    depth_mm: Mapped[float] = mapped_column(Float)
+    front_left_mm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    front_right_mm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    rear_left_mm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    rear_right_mm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    tire_set: Mapped["TireSet"] = relationship(back_populates="tread_measurements")
 
 
 class SyncEntityType(str, enum.Enum):
