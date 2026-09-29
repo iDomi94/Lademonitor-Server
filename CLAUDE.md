@@ -2096,6 +2096,30 @@ allein hier; lokal nachgebaut liefen die Zahlen auseinander). Die Anbieter
 kommen in der Antwort als NAME, nicht als ID, damit die Apps nichts aufloesen
 muessen.
 
+### Messort der kWh (ab 2026-09-29, v0.29.0)
+
+Wer an der eigenen Wallbox ohne Zaehler laedt, liest die kWh im FAHRZEUG ab -
+dort fehlen die Ladeverluste bereits. In der Verlustrechnung zoegen solche
+Vorgaenge den Wert Richtung 0 %. Deshalb `Provider.energy_meter`
+(`charger`|`vehicle`, nie NULL, Standard `charger`) und
+`ChargingSession.energy_meter` als **Ausnahme** (NULL = wie der Anbieter).
+
+**Entscheidung des Nutzers (29.09.2026):** Anbieter UND Vorgang; im Vorgang
+nur die zwei Werte Ladesaeule/Fahrzeug, vorbefuellt vom Anbieter. Daraus
+folgt die Normalisierung in `routers/sessions.py::normalize_energy_meter()`:
+eine Angabe, die dem Anbieter entspricht, wird als NULL gespeichert - sonst
+wuerde jedes Oeffnen-und-Speichern den vorbefuellten Wert festschreiben und
+eine spaetere Aenderung am Anbieter ("Privat: immer Fahrzeug") erreichte die
+Bestandsvorgaenge nicht mehr. Laeuft auch bei einem Anbieterwechsel ohne
+mitgeschickten Messort. Der geltende Wert steht als
+`SessionOut.energy_meter_effective` in der Antwort (`battery.effective_meter()`).
+
+Auswertung: Vorgaenge mit Fahrzeugmessung fehlen in `build_losses` (gezaehlt
+als `excluded.vehicle_measured`), im Akku-Index bilden sie eine eigene Gruppe
+(`AC/vehicle`) mit eigenem Anfangswert - aus demselben Grund, aus dem AC und
+DC getrennt sind. String statt Postgres-Enum, damit ein dritter Wert keine
+`ALTER TYPE`-Migration braucht; Werte prueft `schemas.EnergyMeter`.
+
 **Offen:** nur an synthetischen Daten verifiziert. Ob die echten Daten des
 Nutzers genug Vorgaenge mit gemessener Energie haben, ist nicht geprueft.
 

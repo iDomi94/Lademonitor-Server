@@ -20,7 +20,7 @@ BASE = datetime(2025, 1, 1, 8, 0, 0)
 
 
 def session(idx, *, kwh, soc_start=20, soc_end=80, kind="AC", days=None,
-            estimated=False, provider=None):
+            estimated=False, provider=None, meter=None):
     return models.ChargingSession(
         id=f"s{idx}",
         vehicle_id="v1",
@@ -31,6 +31,7 @@ def session(idx, *, kwh, soc_start=20, soc_end=80, kind="AC", days=None,
         soc_end=soc_end,
         energy_kwh=kwh,
         energy_is_estimated=estimated,
+        energy_meter=meter,
     )
 
 
@@ -144,3 +145,105 @@ def test_endpoint_groups_by_vehicle_and_provider(client):
     assert entry["excluded"]["estimated_energy"] == 1
     assert entry["losses_by_provider"][0]["key"] == "Ionity"
     assert entry["losses_by_type"][0]["loss_pct"] == 4.0
+
+
+# ---------- Messort der kWh (Ladesaeule oder Fahrzeug, ab v0.29.0) ----------
+
+
+def test_vehicle_measured_sessions_stay_out_of_the_losses():
+    """Im Fahrzeug abgelesene kWh enthalten keine Ladeverluste - in der
+    Verlustrechnung zoegen sie den Wert Richtung 0."""
+    points, excluded = collect_points(
+        [
+            session(0, kwh=77 * 0.6 * 1.10),
+            session(1, kwh=77 * 0.6 * 1.00, provider="home"),
+        ],
+        77.0,
+        {"home": "vehicle"},
+    )
+    assert [p.energy_meter for p in points] == ["charger", "vehicle"]
+    assert points[1].loss_pct is None
+    assert excluded.vehicle_measured == 1
+    by_type, by_provider = build_losses(points, 77.0)
+    assert [(g.key, g.session_count, g.loss_pct) for g in by_type] == [("AC", 1, 10.0)]
+    assert [g.key for g in by_provider] == [""]
+
+
+def test_session_override_beats_the_provider():
+    points, _ = collect_points(
+        [
+            session(0, kwh=50.0, provider="home", meter="charger"),
+            session(1, kwh=50.0, provider="ionity", meter="vehicle"),
+            session(2, kwh=50.0, provider="ionity"),
+        ],
+        77.0,
+        {"home": "vehicle", "ionity": "charger"},
+    )
+    assert [p.energy_meter for p in points] == ["charger", "vehicle", "charger"]
+
+
+def test_health_gets_its_own_baseline_for_vehicle_measured_sessions():
+    """Gleicher Akku, einmal an der Wallbox (10 % Verlust), einmal im Auto
+    abgelesen: ohne getrennte Anfangswerte saehe ein Wechsel des Messorts wie
+    ein Kapazitaetssprung aus."""
+    sessions = [session(i, kwh=77 * 0.6 * 1.10) for i in range(5)]
+    sessions += [session(i, kwh=77 * 0.6, provider="home") for i in range(5, 10)]
+    points, _ = collect_points(sessions, 77.0, {"home": "vehicle"})
+    health = build_health(points)
+    assert set(health.baselines) == {"AC", "AC/vehicle"}
+    assert all(p.index_pct == 100.0 for p in health.periods)
+
+
+def test_meter_follows_the_provider_and_only_stores_exceptions(client):
+    register(client)
+    vehicle = create_vehicle(client)
+    home = client.post("/api/providers", json={"name": "Privat"}).json()
+    assert home["energy_meter"] == "charger"
+
+    def create(meter=None):
+        body = {
+            "vehicle_id": vehicle["id"],
+            "provider_id": home["id"],
+            "start_time": BASE.isoformat(),
+            "soc_start": 20, "soc_end": 80, "energy_kwh": 46.2,
+        }
+        if meter:
+            body["energy_meter"] = meter
+        response = client.post("/api/sessions", json=body)
+        assert response.status_code == 201, response.text
+        return response.json()
+
+    follows = create()
+    prefilled = create("charger")  # vorbefuellter Wert = keine Ausnahme
+    exception = create("vehicle")
+    assert prefilled["energy_meter"] is None
+    assert exception["energy_meter"] == "vehicle"
+
+    # Anbieter umstellen wirkt auf alle, die ihm folgen
+    client.patch(f"/api/providers/{home['id']}", json={"energy_meter": "vehicle"})
+    by_id = {s["id"]: s for s in client.get("/api/sessions").json()}
+    assert by_id[follows["id"]]["energy_meter_effective"] == "vehicle"
+    assert by_id[prefilled["id"]]["energy_meter_effective"] == "vehicle"
+    assert by_id[exception["id"]]["energy_meter_effective"] == "vehicle"
+
+    # Eine Ausnahme ist wieder moeglich und bleibt stehen
+    patched = client.patch(
+        f"/api/sessions/{follows['id']}", json={"energy_meter": "charger"}
+    ).json()
+    assert patched["energy_meter"] == "charger"
+    assert patched["energy_meter_effective"] == "charger"
+    # ... und eine, die jetzt dem Anbieter entspricht, faellt beim Speichern weg
+    patched = client.patch(
+        f"/api/sessions/{exception['id']}", json={"notes": "x"}
+    ).json()
+    assert patched["energy_meter"] is None
+
+    # null am Anbieter leert den Messort nicht
+    provider = client.patch(
+        f"/api/providers/{home['id']}", json={"energy_meter": None}
+    ).json()
+    assert provider["energy_meter"] == "vehicle"
+
+    entry = client.get("/api/stats/battery").json()["vehicles"][0]
+    assert entry["excluded"]["vehicle_measured"] == 2
+    assert {p["energy_meter"] for p in entry["points"]} == {"charger", "vehicle"}

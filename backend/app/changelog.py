@@ -5,6 +5,17 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.29.0",
+        "date": "2026-09-29",
+        "title": "Messort der kWh: Ladesäule oder Fahrzeug",
+        "changes": [
+            "Beim Anbieter lässt sich einstellen, dass seine kWh im Fahrzeug abgelesen werden (z. B. „Privat\", wenn die Wallbox keinen Zähler hat). Das gilt für alle seine Ladevorgänge – auch rückwirkend.",
+            "Im Ladevorgang gibt es das Feld „kWh abgelesen an\" mit Ladesäule oder Fahrzeug, vorbefüllt vom Anbieter. Wer es für einen einzelnen Vorgang umstellt, behält diese Ausnahme auch dann, wenn der Anbieter später geändert wird.",
+            "Akku und Ladeverluste: im Fahrzeug abgelesene kWh enthalten keine Ladeverluste. Sie zählen deshalb nicht mehr bei den Ladeverlusten (sonst drückten sie den Wert Richtung 0 %), im Akku-Index aber weiterhin – mit eigenem Anfangswert, damit ein Wechsel des Messorts nicht wie ein Kapazitätssprung aussieht. Wie viele Vorgänge das betrifft, steht unter der Tabelle.",
+            "Backup, API und die Apps kennen das Feld ebenfalls. Ältere Backups und App-Versionen funktionieren weiter; alles ohne Angabe gilt als an der Ladesäule gemessen.",
+        ],
+    },
+    {
         "version": "0.28.0",
         "date": "2026-09-29",
         "title": "Akku und Ladeverluste",
