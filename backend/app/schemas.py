@@ -71,6 +71,7 @@ class UserOut(BaseModel):
     notify_myskoda_error: bool = True
     notify_monthly_report: bool = False
     notify_new_registration: bool = True
+    notify_reminders: bool = True
     review_digest: ReviewDigestFrequency = ReviewDigestFrequency.OFF
     weather_autofill_enabled: bool = False
     weather_api_url: str | None = None
@@ -101,6 +102,9 @@ class NotificationSettingsUpdate(BaseModel):
     notify_monthly_report: bool
     notify_new_registration: bool
     review_digest: ReviewDigestFrequency
+    # Seit v0.33.0. Optional, damit aeltere Clients den Schalter nicht
+    # versehentlich zuruecksetzen: fehlt er, bleibt der gespeicherte Wert.
+    notify_reminders: bool | None = None
 
 
 class AdminUserUpdate(BaseModel):
@@ -268,6 +272,71 @@ class VehicleCostOut(VehicleCostBase):
     updated_at: datetime
     # Nur lesend: Summe aller Zahlungen bis heute.
     paid_to_date: float = 0
+
+
+# ---------- Erinnerungen (siehe models.Reminder, reminders.py) ----------
+
+ReminderKind = Literal[
+    "hu", "inspection", "brake_fluid", "tire_winter", "tire_summer",
+    "insurance", "tax", "thg", "custom",
+]
+ReminderStatus = Literal["ok", "due_soon", "overdue", "done"]
+
+
+class ReminderBase(BaseModel):
+    vehicle_id: str
+    kind: ReminderKind = "custom"
+    title: str | None = None
+    due_date: datetime | None = None
+    due_km: int | None = Field(default=None, ge=0)
+    repeat_months: int | None = Field(default=None, ge=1, le=240)
+    repeat_km: int | None = Field(default=None, ge=1)
+    lead_days: int = Field(default=30, ge=0, le=365)
+    lead_km: int = Field(default=1000, ge=0)
+    notes: str | None = None
+    last_done_date: datetime | None = None
+    last_done_km: int | None = Field(default=None, ge=0)
+
+
+class ReminderCreate(ReminderBase):
+    pass
+
+
+class ReminderUpdate(BaseModel):
+    vehicle_id: str | None = None
+    kind: ReminderKind | None = None
+    title: str | None = None
+    due_date: datetime | None = None
+    due_km: int | None = Field(default=None, ge=0)
+    repeat_months: int | None = Field(default=None, ge=1, le=240)
+    repeat_km: int | None = Field(default=None, ge=1)
+    lead_days: int | None = Field(default=None, ge=0, le=365)
+    lead_km: int | None = Field(default=None, ge=0)
+    notes: str | None = None
+    last_done_date: datetime | None = None
+    last_done_km: int | None = Field(default=None, ge=0)
+
+
+class ReminderComplete(BaseModel):
+    # Standard: heute bzw. der juengste km-Stand aus den Ladevorgaengen.
+    done_date: datetime | None = None
+    done_km: int | None = Field(default=None, ge=0)
+
+
+class ReminderOut(ReminderBase):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    created_at: datetime
+    updated_at: datetime
+    # Nur lesend, berechnet in reminders.evaluate().
+    status: ReminderStatus = "ok"
+    current_km: int | None = None
+    km_remaining: int | None = None
+    km_forecast_date: date | None = None
+    days_remaining: int | None = None
+    next_due_date: date | None = None
+    # Kategorie, die "Erledigt" fuer einen Kosteneintrag vorschlaegt.
+    cost_category: str | None = None
 
 
 # ---------- Provider ----------

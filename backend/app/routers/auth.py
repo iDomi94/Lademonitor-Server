@@ -86,6 +86,9 @@ def _purge_owned_data(db: Session, user_id: str) -> None:
     db.query(models.VehicleCost).filter(
         models.VehicleCost.user_id == user_id
     ).delete(synchronize_session=False)
+    db.query(models.Reminder).filter(
+        models.Reminder.user_id == user_id
+    ).delete(synchronize_session=False)
     db.query(models.Vehicle).filter(
         models.Vehicle.user_id == user_id
     ).delete(synchronize_session=False)
@@ -529,6 +532,8 @@ def set_notifications(
     user.notify_monthly_report = payload.notify_monthly_report
     user.notify_new_registration = payload.notify_new_registration
     user.review_digest = payload.review_digest
+    if payload.notify_reminders is not None:
+        user.notify_reminders = payload.notify_reminders
     db.commit()
     db.refresh(user)
     return user

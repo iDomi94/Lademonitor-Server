@@ -1,7 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-{# Eigene Hauptleisten-Seite wie die Reifen: Kosten (und ab Runde B die
-   Erinnerungen) sind Stammdaten plus Auswertung - fuer einen Klappabschnitt
+{# Eigene Hauptleisten-Seite wie die Reifen: Kosten und Erinnerungen sind Stammdaten plus Auswertung - fuer einen Klappabschnitt
    in den Einstellungen zu viel. Pfad genau EINE Ebene unter der Basis
    (/vehicle), damit die relativen fetch()-Aufrufe unter dem HA-Ingress
    aufloesen. Kauf/Leasing wird im Fahrzeug-Formular der Einstellungen
@@ -13,6 +12,7 @@
   <div class="inner">
     <p>{{ t('vehicle_page.description') }}</p>
     <p>{{ t('vehicle_page.ownership_help') }}</p>
+    <p>{{ t('reminder_page.help') }}</p>
   </div>
 </details>
 
@@ -94,6 +94,103 @@
   </div>
 </details>
 
+<h2 id="reminders">{{ t('reminder_page.heading') }}</h2>
+<details class="panel" id="rm-list-panel" open>
+  <summary>{{ t('reminder_page.heading') }} <span class="count" id="rm-count"></span></summary>
+  <div class="inner">
+    <details class="panel plain" id="rm-form-panel">
+      <summary id="rm-form-heading">{{ t('reminder_page.form.new_heading') }}</summary>
+      <div class="inner">
+        <form class="inline-form" id="rm-form">
+          <div>
+            <label>{{ t('vehicle_page.form.vehicle') }}</label>
+            <select id="rm-vehicle" required></select>
+          </div>
+          <div>
+            <label>{{ t('reminder_page.form.kind') }}</label>
+            <select id="rm-kind">
+              {% for k in ['hu', 'inspection', 'brake_fluid', 'tire_winter', 'tire_summer', 'insurance', 'tax', 'thg', 'custom'] %}
+              <option value="{{ k }}">{{ reminder_kind_labels[k] }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label>{{ t('reminder_page.form.title') }}</label>
+            <input type="text" id="rm-title" placeholder="{{ t('reminder_page.form.title_placeholder') }}">
+          </div>
+          <div>
+            <label>{{ t('reminder_page.form.due_date') }}</label>
+            <input type="date" id="rm-due-date">
+          </div>
+          <div>
+            <label>{{ t('reminder_page.form.due_km') }}</label>
+            <input type="number" step="1" min="0" id="rm-due-km">
+          </div>
+          <div>
+            <label>{{ t('reminder_page.form.repeat_months') }}</label>
+            <input type="number" step="1" min="1" max="240" id="rm-repeat-months">
+          </div>
+          <div>
+            <label>{{ t('reminder_page.form.repeat_km') }}</label>
+            <input type="number" step="1" min="1" id="rm-repeat-km">
+          </div>
+          <div>
+            <label>{{ t('reminder_page.form.lead_days') }}</label>
+            <input type="number" step="1" min="0" max="365" id="rm-lead-days" value="30">
+          </div>
+          <div>
+            <label>{{ t('reminder_page.form.lead_km') }}</label>
+            <input type="number" step="1" min="0" id="rm-lead-km" value="1000">
+          </div>
+          <div>
+            <label>{{ t('vehicle_page.form.notes') }}</label>
+            <input type="text" id="rm-notes">
+          </div>
+          <div style="grid-column:1/-1; color:var(--muted); font-size:0.85em">
+            {{ t('reminder_page.form.hint') }}
+          </div>
+          <div class="form-actions">
+            <button type="submit" id="rm-submit">{{ t('reminder_page.form.submit_new') }}</button>
+            <button type="button" class="ghost" id="rm-cancel" hidden>{{ t('tires.form.cancel') }}</button>
+          </div>
+        </form>
+      </div>
+    </details>
+    <div id="rm-empty" style="color:var(--muted); font-size:0.9em"></div>
+    <div class="tablewrap"><table id="rm-table"></table></div>
+  </div>
+</details>
+
+<!-- "Erledigt": Datum und km-Stand, vorbelegt mit heute bzw. dem juengsten
+     km-Stand aus den Ladevorgaengen. -->
+<div class="modal" id="rm-done-modal" onclick="event.target === this && closeDone()">
+  <div class="box">
+    <div class="mtop">
+      <h3 id="rm-done-title"></h3>
+      <button class="close" type="button" onclick="closeDone()">✕</button>
+    </div>
+    <div class="mbody">
+      <form class="inline-form" id="rm-done-form">
+        <div>
+          <label>{{ t('reminder_page.done.date') }}</label>
+          <input type="date" id="rm-done-date" required>
+        </div>
+        <div>
+          <label>{{ t('reminder_page.done.km') }}</label>
+          <input type="number" step="1" min="0" id="rm-done-km">
+        </div>
+        <div class="form-row-wide" id="rm-done-cost-row">
+          <label><input type="checkbox" id="rm-done-cost" checked
+            style="width:auto; display:inline-block; margin-right:6px">{{ t('reminder_page.done.add_cost') }}</label>
+        </div>
+        <div class="form-actions">
+          <button type="submit">{{ t('reminder_page.done.submit') }}</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
 <script>
 const T = {
   categories: {{ cost_category_labels|tojson }},
@@ -138,6 +235,42 @@ const T = {
   submitNew: {{ t('vehicle_page.form.submit_new')|tojson }},
   submitEdit: {{ t('vehicle_page.form.submit_edit')|tojson }},
 };
+const RT = {
+  kinds: {{ reminder_kind_labels|tojson }},
+  // Vorlagen wie reminders.TEMPLATES - nur zum Vorbelegen beim Anlegen.
+  templates: {
+    hu: { months: 24 }, inspection: { months: 12, km: 30000 }, brake_fluid: { months: 24 },
+    tire_winter: { months: 12, day: [10, 15] }, tire_summer: { months: 12, day: [4, 15] },
+    insurance: { months: 12 }, tax: { months: 12 }, thg: { months: 12 }, custom: {},
+  },
+  status: {
+    ok: {{ t('reminder.status.ok')|tojson }},
+    due_soon: {{ t('reminder.status.due_soon')|tojson }},
+    overdue: {{ t('reminder.status.overdue')|tojson }},
+    done: {{ t('reminder.status.done')|tojson }},
+  },
+  empty: {{ t('reminder_page.empty')|tojson }},
+  colTitle: {{ t('reminder_page.col.title')|tojson }},
+  colStatus: {{ t('reminder_page.col.status')|tojson }},
+  colDue: {{ t('reminder_page.col.due')|tojson }},
+  colRepeat: {{ t('reminder_page.col.repeat')|tojson }},
+  everyMonths: {{ t('reminder_page.every_months')|tojson }},
+  everyKm: {{ t('reminder_page.every_km')|tojson }},
+  inDays: {{ t('reminder_page.in_days')|tojson }},
+  daysAgo: {{ t('reminder_page.days_ago')|tojson }},
+  today: {{ t('reminder_page.today')|tojson }},
+  kmLeft: {{ t('reminder_page.km_left')|tojson }},
+  kmOver: {{ t('reminder_page.km_over')|tojson }},
+  forecast: {{ t('reminder_page.forecast')|tojson }},
+  lastDone: {{ t('reminder_page.last_done')|tojson }},
+  done: {{ t('reminder_page.done.button')|tojson }},
+  confirmDelete: {{ t('reminder_page.confirm_delete')|tojson }},
+  formNew: {{ t('reminder_page.form.new_heading')|tojson }},
+  formEdit: {{ t('reminder_page.form.edit_heading')|tojson }},
+  submitNew: {{ t('reminder_page.form.submit_new')|tojson }},
+  submitEdit: {{ t('vehicle_page.form.submit_edit')|tojson }},
+  needsDue: {{ t('reminder_page.form.needs_due')|tojson }},
+};
 
 let vehicles = [];
 let costs = [];
@@ -155,6 +288,7 @@ async function loadVehicles() {
   vehicles = res.ok ? await res.json() : [];
   const options = vehicles.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
   document.getElementById('vc-vehicle').innerHTML = options;
+  document.getElementById('rm-vehicle').innerHTML = options;
   document.getElementById('vc-vehicle-filter').innerHTML =
     (vehicles.length > 1 ? `<option value="">${T.allVehicles}</option>` : '') + options;
 }
@@ -301,17 +435,207 @@ document.getElementById('vc-form').addEventListener('submit', async e => {
   refresh();
 });
 
+
+// ---------- Erinnerungen ----------
+
+let reminders = [];
+let editingReminderId = null;
+let doneReminder = null;
+
+const reminderTitle = r => r.title || RT.kinds[r.kind] || r.kind;
+const km = n => Number(n).toLocaleString(window.LADEMONITOR_LANG) + ' km';
+const ICON_CHECK = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" ' +
+  'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+
+function statusBadge(status) {
+  return `<span class="badge reminder-${status}">${RT.status[status]}</span>`;
+}
+
+function dueText(r) {
+  const parts = [];
+  if (r.due_date) {
+    const d = r.days_remaining;
+    const rel = d === 0 ? RT.today : d > 0 ? RT.inDays.replace('{n}', d) : RT.daysAgo.replace('{n}', -d);
+    parts.push(`${shortDate(r.due_date)} ${muted(rel)}`);
+  }
+  if (r.due_km != null) {
+    let rel = '';
+    if (r.km_remaining != null) {
+      rel = r.km_remaining > 0 ? RT.kmLeft.replace('{km}', km(r.km_remaining))
+        : RT.kmOver.replace('{km}', km(-r.km_remaining));
+      if (r.km_forecast_date && r.km_remaining > 0)
+        rel += ' · ' + RT.forecast.replace('{date}', shortDate(r.km_forecast_date));
+    }
+    parts.push(`${km(r.due_km)}${rel ? muted(rel) : ''}`);
+  }
+  if (!parts.length && r.last_done_date) parts.push(muted(RT.lastDone.replace('{date}', shortDate(r.last_done_date))));
+  return parts.join('') || '–';
+}
+
+async function loadReminders() {
+  const filter = currentFilter();
+  const res = await fetch('api/reminders' + (filter ? `?vehicle_id=${filter}` : ''));
+  reminders = res.ok ? await res.json() : [];
+  document.getElementById('rm-count').textContent = reminders.length;
+  document.getElementById('rm-empty').textContent = reminders.length ? '' : RT.empty;
+  const table = document.getElementById('rm-table');
+  if (!reminders.length) { table.innerHTML = ''; return; }
+  const withVehicle = vehicles.length > 1;
+  table.innerHTML = `<tr><th>${RT.colTitle}</th><th>${RT.colStatus}</th><th>${RT.colDue}</th>` +
+    `<th>${RT.colRepeat}</th>${withVehicle ? `<th>${T.colVehicle}</th>` : ''}<th></th></tr>` +
+    reminders.map(r => {
+      const repeat = [r.repeat_months ? RT.everyMonths.replace('{n}', r.repeat_months) : null,
+        r.repeat_km ? RT.everyKm.replace('{km}', km(r.repeat_km)) : null].filter(Boolean).join(' / ') || '–';
+      const sub = [r.title ? RT.kinds[r.kind] : null, r.notes].filter(Boolean).join(' · ');
+      return `<tr><td>${reminderTitle(r)}${sub ? muted(sub) : ''}</td>` +
+        `<td>${statusBadge(r.status)}</td><td>${dueText(r)}</td><td>${repeat}</td>` +
+        (withVehicle ? `<td>${vehicleName(r.vehicle_id)}</td>` : '') +
+        `<td><div class="row-actions">` +
+        iconButton(ICON_CHECK, RT.done, `openDone('${r.id}')`, 'edit') +
+        iconButton(ICON_EDIT, T.edit, `startEditReminder('${r.id}')`, 'edit') +
+        iconButton(ICON_DELETE, T.del, `deleteReminder('${r.id}')`, 'danger') +
+        `</div></td></tr>`;
+    }).join('');
+}
+
+function nextFixedDay(day) {
+  const now = new Date();
+  const iso = y => `${y}-${String(day[0]).padStart(2, '0')}-${String(day[1]).padStart(2, '0')}`;
+  const candidate = iso(now.getFullYear());
+  return candidate >= now.toISOString().slice(0, 10) ? candidate : iso(now.getFullYear() + 1);
+}
+
+function applyTemplate() {
+  if (editingReminderId) return;
+  const tpl = RT.templates[document.getElementById('rm-kind').value] || {};
+  document.getElementById('rm-repeat-months').value = tpl.months ?? '';
+  document.getElementById('rm-repeat-km').value = tpl.km ?? '';
+  document.getElementById('rm-due-date').value = tpl.day ? nextFixedDay(tpl.day) : '';
+}
+document.getElementById('rm-kind').addEventListener('change', applyTemplate);
+
+function resetReminderForm() {
+  editingReminderId = null;
+  document.getElementById('rm-form').reset();
+  if (currentFilter()) document.getElementById('rm-vehicle').value = currentFilter();
+  document.getElementById('rm-form-heading').textContent = RT.formNew;
+  document.getElementById('rm-submit').textContent = RT.submitNew;
+  document.getElementById('rm-cancel').hidden = true;
+  applyTemplate();
+}
+document.getElementById('rm-cancel').addEventListener('click', resetReminderForm);
+
+function startEditReminder(id) {
+  const r = reminders.find(x => x.id === id);
+  if (!r) return;
+  editingReminderId = id;
+  const set = (el, v) => document.getElementById(el).value = v ?? '';
+  set('rm-vehicle', r.vehicle_id);
+  set('rm-kind', r.kind);
+  set('rm-title', r.title);
+  set('rm-due-date', r.due_date ? r.due_date.slice(0, 10) : '');
+  set('rm-due-km', r.due_km);
+  set('rm-repeat-months', r.repeat_months);
+  set('rm-repeat-km', r.repeat_km);
+  set('rm-lead-days', r.lead_days);
+  set('rm-lead-km', r.lead_km);
+  set('rm-notes', r.notes);
+  document.getElementById('rm-form-heading').textContent = RT.formEdit;
+  document.getElementById('rm-submit').textContent = RT.submitEdit;
+  document.getElementById('rm-cancel').hidden = false;
+  document.getElementById('rm-list-panel').open = true;
+  document.getElementById('rm-form-panel').open = true;
+  document.getElementById('rm-form').scrollIntoView({ behavior: 'smooth' });
+}
+
+async function deleteReminder(id) {
+  if (!confirm(RT.confirmDelete)) return;
+  await fetch(`api/reminders/${id}`, { method: 'DELETE' });
+  if (editingReminderId === id) resetReminderForm();
+  loadReminders();
+}
+
+document.getElementById('rm-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const value = id => document.getElementById(id).value;
+  const payload = {
+    vehicle_id: value('rm-vehicle'),
+    kind: value('rm-kind'),
+    title: value('rm-title') || null,
+    due_date: value('rm-due-date') || null,
+    due_km: value('rm-due-km') || null,
+    repeat_months: value('rm-repeat-months') || null,
+    repeat_km: value('rm-repeat-km') || null,
+    lead_days: value('rm-lead-days') || 0,
+    lead_km: value('rm-lead-km') || 0,
+    notes: value('rm-notes') || null,
+  };
+  if (!payload.due_date && !payload.due_km) { alert(RT.needsDue); return; }
+  const res = await fetch(editingReminderId ? `api/reminders/${editingReminderId}` : 'api/reminders', {
+    method: editingReminderId ? 'PATCH' : 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    alert(T.errorPrefix + ' ' + (typeof body.detail === 'string' ? body.detail : res.status));
+    return;
+  }
+  resetReminderForm();
+  loadReminders();
+});
+
+function openDone(id) {
+  doneReminder = reminders.find(x => x.id === id);
+  if (!doneReminder) return;
+  document.getElementById('rm-done-title').textContent = `${RT.done}: ${reminderTitle(doneReminder)}`;
+  document.getElementById('rm-done-date').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('rm-done-km').value = doneReminder.current_km ?? '';
+  document.getElementById('rm-done-cost-row').hidden = !doneReminder.cost_category;
+  document.getElementById('rm-done-modal').classList.add('open');
+}
+function closeDone() { document.getElementById('rm-done-modal').classList.remove('open'); }
+
+document.getElementById('rm-done-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const r = doneReminder;
+  const date = document.getElementById('rm-done-date').value;
+  const doneKm = document.getElementById('rm-done-km').value;
+  const res = await fetch(`api/reminders/${r.id}/complete`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ done_date: date, done_km: doneKm || null }),
+  });
+  if (!res.ok) { alert(T.errorPrefix + ' ' + res.status); return; }
+  closeDone();
+  loadReminders();
+  // Kosteneintrag gleich vorbelegen - Betrag traegt der Nutzer selbst ein.
+  if (r.cost_category && document.getElementById('rm-done-cost').checked) {
+    resetForm();
+    document.getElementById('vc-vehicle').value = r.vehicle_id;
+    document.getElementById('vc-category').value = r.cost_category;
+    document.getElementById('vc-start').value = date;
+    document.getElementById('vc-odometer').value = doneKm;
+    document.getElementById('vc-label').value = reminderTitle(r);
+    document.getElementById('vc-list-panel').open = true;
+    document.getElementById('vc-form-panel').open = true;
+    document.getElementById('vc-form').scrollIntoView({ behavior: 'smooth' });
+    document.getElementById('vc-amount').focus({ preventScroll: true });
+  }
+});
+
 function refresh() {
   renderOwnership();
   loadYears();
   loadCosts();
+  loadReminders();
 }
 
 document.getElementById('vc-vehicle-filter').addEventListener('change', () => {
   if (!editingId && currentFilter()) document.getElementById('vc-vehicle').value = currentFilter();
+  if (!editingReminderId && currentFilter()) document.getElementById('rm-vehicle').value = currentFilter();
   refresh();
 });
 
-loadVehicles().then(() => { resetForm(); refresh(); });
+loadVehicles().then(() => { resetForm(); resetReminderForm(); refresh(); });
 </script>
 {% endblock %}

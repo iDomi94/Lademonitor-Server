@@ -302,6 +302,9 @@
       <div class="form-row-wide">
         <label><input type="checkbox" id="n-monthly" style="width:auto; display:inline-block; margin-right:6px">{{ t('settings.notifications.monthly_report') }}</label>
       </div>
+      <div class="form-row-wide">
+        <label><input type="checkbox" id="n-reminders" style="width:auto; display:inline-block; margin-right:6px">{{ t('settings.notifications.reminders') }}</label>
+      </div>
       {% if user.is_admin %}
       <div class="form-row-wide">
         <label><input type="checkbox" id="n-registration" style="width:auto; display:inline-block; margin-right:6px">{{ t('settings.notifications.new_registration') }}</label>
@@ -1084,6 +1087,7 @@ function renderNotifications() {
   document.getElementById('n-backup').checked = me.notify_backup_failed;
   document.getElementById('n-myskoda').checked = me.notify_myskoda_error;
   document.getElementById('n-monthly').checked = me.notify_monthly_report;
+  document.getElementById('n-reminders').checked = me.notify_reminders !== false;
   const reg = document.getElementById('n-registration');
   if (reg) reg.checked = me.notify_new_registration;
   document.getElementById('n-review').value = me.review_digest;
@@ -1275,6 +1279,7 @@ document.getElementById('notifications-form').addEventListener('submit', async (
       notify_backup_failed: document.getElementById('n-backup').checked,
       notify_myskoda_error: document.getElementById('n-myskoda').checked,
       notify_monthly_report: document.getElementById('n-monthly').checked,
+      notify_reminders: document.getElementById('n-reminders').checked,
       // Nicht-Admins bekommen den Schalter gar nicht zu sehen - der
       // gespeicherte Wert bleibt dann unveraendert.
       notify_new_registration: reg ? reg.checked : me.notify_new_registration,

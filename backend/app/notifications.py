@@ -10,7 +10,7 @@ Zwei Ausloeserarten, bewusst getrennt:
 * **Zeitgesteuert** - `run_due_notifications()` laeuft im Scheduler und
   entscheidet anhand von Zeitstempeln in der DB, was faellig ist
   (Ablaufwarnung des API-Keys, Sammelmeldung zu pruefender Ladevorgaenge,
-  Monatsbericht).
+  Monatsbericht, faellige Erinnerungen).
 
 Warum die Merkerspalten (`last_failure_notified_at`,
 `api_key_expiry_notified_days`, `last_review_digest_at`,
@@ -363,6 +363,73 @@ def _run_monthly_reports(db: Session) -> None:
         db.commit()
 
 
+def _run_reminders(db: Session) -> None:
+    """Erinnerungen (reminders.py), die in den Vorlauf kommen oder
+    ueberfaellig werden. Je Stufe genau eine Mail: `notified_stage` haelt die
+    zuletzt gemeldete fest und wird bei jeder Aenderung der Faelligkeit
+    geleert (routers/reminders.py). Mehrere Erinnerungen eines Nutzers gehen
+    in EINER Mail raus."""
+    from datetime import date
+
+    from .reminders import STATUS_RANK
+    from .routers.reminders import list_with_state  # lokal: vermeidet einen Importzyklus
+
+    users = (
+        db.query(models.User)
+        .filter(models.User.email.isnot(None), models.User.notify_reminders.is_(True))
+        .all()
+    )
+    today = date.today()
+    for user in users:
+        states = list_with_state(db, user, today=today)
+        if not states:
+            continue
+        rows_by_id = {r.id: r for r in db.query(models.Reminder).filter(models.Reminder.user_id == user.id)}
+        vehicles = {v.id: v.name for v in db.query(models.Vehicle).filter(models.Vehicle.user_id == user.id)}
+        fresh = []
+        for state in states:
+            row = rows_by_id.get(state.id)
+            if row is None:
+                continue
+            notified = STATUS_RANK.get(row.notified_stage or "ok", 0)
+            if STATUS_RANK[state.status] > notified:
+                fresh.append((state, row))
+        if not fresh:
+            continue
+
+        config = mailer.get_config(db)
+        with language_context(user.language):
+            rows = []
+            for state, row in fresh:
+                title = row.title or translate(f"reminder.kind.{row.kind}")
+                if len(vehicles) > 1:
+                    title = f"{title} · {vehicles.get(row.vehicle_id, '')}"
+                parts = [translate(f"reminder.status.{state.status}")]
+                if row.due_date:
+                    parts.append(row.due_date.strftime("%d.%m.%Y"))
+                if row.due_km is not None:
+                    parts.append(f"{row.due_km} km")
+                if state.km_forecast_date and state.status != "overdue":
+                    parts.append(translate(
+                        "email.reminders.forecast", date=state.km_forecast_date.strftime("%d.%m.%Y")
+                    ))
+                rows.append((title, " · ".join(parts)))
+            mail = mailer.Mail(
+                subject=translate("email.reminders.subject", count=len(fresh)),
+                heading=translate("email.reminders.heading"),
+                intro=[translate("email.reminders.intro")],
+                button=(
+                    mailer.MailButton(translate("email.reminders.button"), mailer.build_url(config, "vehicle"))
+                    if mailer.are_links_available(config) else None
+                ),
+                rows=rows,
+            )
+        _send(db, user, mail, "reminders")
+        for state, row in fresh:
+            row.notified_stage = state.status
+        db.commit()
+
+
 def run_due_notifications() -> None:
     """Einstiegspunkt des Scheduler-Tasks (siehe main.py). Faengt pro Bereich
     ab, damit ein Fehler in einem die uebrigen nicht mitreisst."""
@@ -370,7 +437,7 @@ def run_due_notifications() -> None:
     try:
         if not mailer.is_sending_enabled(mailer.get_config(db)):
             return
-        for step in (_run_key_expiry_warnings, _run_review_digests, _run_monthly_reports):
+        for step in (_run_key_expiry_warnings, _run_review_digests, _run_monthly_reports, _run_reminders):
             try:
                 step(db)
             except Exception:  # noqa: BLE001

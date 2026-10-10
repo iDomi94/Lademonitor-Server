@@ -26,6 +26,7 @@ from .myskoda_poller import SCHEDULER_INTERVAL_SECONDS as MYSKODA_SCHEDULER_INTE
 from .myskoda_poller import run_due_polls
 from .notifications import SCHEDULER_INTERVAL_SECONDS as NOTIFICATION_SCHEDULER_INTERVAL_SECONDS
 from .notifications import run_due_notifications
+from .reminders import KINDS as REMINDER_KINDS
 from .vehicle_costs import CATEGORIES as COST_CATEGORIES
 from .routers import (
     auth,
@@ -37,6 +38,7 @@ from .routers import (
     myskoda,
     provider_fees,
     providers,
+    reminders,
     sessions,
     stats,
     sync,
@@ -176,6 +178,7 @@ async def _no_cache_html(request: Request, call_next):
 app.include_router(auth.router)
 app.include_router(vehicles.router, dependencies=[Depends(get_current_user)])
 app.include_router(vehicle_costs.router, dependencies=[Depends(get_current_user)])
+app.include_router(reminders.router, dependencies=[Depends(get_current_user)])
 app.include_router(providers.router, dependencies=[Depends(get_current_user)])
 app.include_router(provider_fees.router, dependencies=[Depends(get_current_user)])
 app.include_router(locations.router, dependencies=[Depends(get_current_user)])
@@ -240,6 +243,8 @@ def _page(request: Request, db: Session, template_name: str, **extra):
             # Namen der Kostenkategorien fuer ui.js::renderCostBars (Dashboard
             # und Seite "Fahrzeug").
             "cost_category_labels": {c: translate(f"cost.category.{c}") for c in COST_LABEL_KEYS},
+            # Namen der Erinnerungsarten (Dashboard und Seite "Fahrzeug").
+            "reminder_kind_labels": {k: translate(f"reminder.kind.{k}") for k in REMINDER_KINDS},
             **extra,
         },
     )

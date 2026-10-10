@@ -65,6 +65,8 @@ _ENCRYPTABLE_TEXT_COLUMNS = (
     ("provider_fees", "notes"),
     ("vehicle_costs", "label"),
     ("vehicle_costs", "notes"),
+    ("reminders", "title"),
+    ("reminders", "notes"),
 )
 
 
@@ -342,6 +344,10 @@ def run_light_migrations() -> None:
         conn.execute(
             text("ALTER TYPE syncentitytype ADD VALUE IF NOT EXISTS 'VEHICLE_COST'")
         )
+        # v0.33.0: dasselbe fuer die Erinnerungen (models.Reminder).
+        conn.execute(
+            text("ALTER TYPE syncentitytype ADD VALUE IF NOT EXISTS 'REMINDER'")
+        )
 
         # Multi-User-Umstellung: user_id auf allen vier Kern-Tabellen ergaenzen.
         # Bestehende Zeilen (aus der Zeit vor Multi-User) werden dem ERSTEN
@@ -423,6 +429,8 @@ def run_light_migrations() -> None:
             ("notify_myskoda_error", "BOOLEAN", "TRUE"),
             ("notify_monthly_report", "BOOLEAN", "FALSE"),
             ("notify_new_registration", "BOOLEAN", "TRUE"),
+            # v0.33.0: faellige Erinnerungen (reminders.py), Standard an.
+            ("notify_reminders", "BOOLEAN", "TRUE"),
             ("review_digest", "reviewdigestfrequency", "'OFF'"),
             ("last_review_digest_at", "TIMESTAMP", None),
             ("last_monthly_report_at", "TIMESTAMP", None),

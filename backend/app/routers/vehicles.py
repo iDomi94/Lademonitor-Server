@@ -115,10 +115,12 @@ def delete_vehicle(
     user: models.User = Depends(get_current_user),
 ):
     vehicle = _get_owned(db, user, vehicle_id)
-    # Die Fahrzeugkosten gehen per Kaskade mit - je ein eigener Grabstein,
-    # sonst behielten die Apps sie als Waisen.
+    # Fahrzeugkosten und Erinnerungen gehen per Kaskade mit - je ein eigener
+    # Grabstein, sonst behielten die Apps sie als Waisen.
     for cost in vehicle.costs:
         record_deletion(db, user.id, models.SyncEntityType.VEHICLE_COST, cost.id)
+    for reminder in vehicle.reminders:
+        record_deletion(db, user.id, models.SyncEntityType.REMINDER, reminder.id)
     # Grabstein VOR dem Loeschen, im selben Commit - siehe sync.record_deletion().
     record_deletion(db, user.id, models.SyncEntityType.VEHICLE, vehicle.id)
     db.delete(vehicle)

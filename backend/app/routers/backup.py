@@ -3,7 +3,8 @@
 Gedacht als Backup/Restore-Mechanismus (z.B. Neuaufsetzen des Servers), nicht
 als flexibles Datenaustauschformat - Reimport erwartet exakt die vom Export
 erzeugte ZIP-Struktur mit den vier festen Dateinamen (plus optional
-`fees.csv` seit v0.27.0 und `costs.csv` seit v0.32.0 - aeltere ZIPs haben
+`fees.csv` seit v0.27.0, `costs.csv` seit v0.32.0 und `reminders.csv` seit
+v0.33.0 - aeltere ZIPs haben
 sie nicht und bleiben importierbar).
 
 Zwei Faelle, die der Import auseinanderhalten muss (siehe `_target_id`):
@@ -33,6 +34,7 @@ from sqlalchemy.orm import Session
 from .. import models
 from ..auth import get_current_user
 from ..database import get_db
+from ..reminders import KINDS as REMINDER_KINDS
 
 router = APIRouter(prefix="/api/backup", tags=["backup"])
 
@@ -92,6 +94,13 @@ COST_FIELDS = [
     "start_date", "end_date", "odometer_km", "label", "notes", "created_at",
 ]
 
+# Seit v0.33.0 (Erinnerungen, siehe models.Reminder), beim Import optional.
+REMINDER_FIELDS = [
+    "id", "vehicle_id", "vehicle_name", "kind", "title", "due_date", "due_km",
+    "repeat_months", "repeat_km", "lead_days", "lead_km", "notes",
+    "last_done_date", "last_done_km", "created_at",
+]
+
 README_TEMPLATE = """Lademonitor Backup
 ===================
 
@@ -104,6 +113,7 @@ Inhalt dieser ZIP-Datei:
 - sessions.csv    - alle Ladevorgaenge
 - fees.csv        - Grundgebuehren/Abos der Anbieter (seit v0.27.0)
 - costs.csv       - sonstige Fahrzeugkosten (seit v0.32.0)
+- reminders.csv   - Erinnerungen (HU, Inspektion, ...; seit v0.33.0)
 
 Format:
 - Trennzeichen: Komma, UTF-8, Kopfzeile in der ersten Zeile
@@ -132,8 +142,9 @@ Reimport:
   von einem anderen Server stammt und alle IDs abweichen.
 - Die Reihenfolge (Fahrzeuge vor Anbietern vor Grundgebuehren, Ladeorten und
   Ladevorgaengen, wegen Fremdschluesseln) uebernimmt der Importer automatisch.
-- fees.csv und costs.csv sind optional: ZIPs aus Versionen vor 0.27.0 bzw.
-  0.32.0 enthalten sie nicht und lassen sich trotzdem einlesen.
+- fees.csv, costs.csv und reminders.csv sind optional: ZIPs aus Versionen
+  vor 0.27.0, 0.32.0 bzw. 0.33.0 enthalten sie nicht und lassen sich
+  trotzdem einlesen.
 
 Nicht enthalten:
 - Zugangsdaten. Insbesondere der MyŠkoda-API-Key und das WebDAV-Passwort sind
@@ -203,6 +214,12 @@ def build_backup_zip(db: Session, user: models.User) -> bytes:
         db.query(models.VehicleCost)
         .filter(models.VehicleCost.user_id == user.id)
         .order_by(models.VehicleCost.start_date)
+        .all()
+    )
+    reminders = (
+        db.query(models.Reminder)
+        .filter(models.Reminder.user_id == user.id)
+        .order_by(models.Reminder.created_at)
         .all()
     )
 
@@ -293,6 +310,20 @@ def build_backup_zip(db: Session, user: models.User) -> bytes:
         }
         for c in costs
     ]
+    reminder_rows = [
+        {
+            "id": _c(r.id),
+            "vehicle_id": _c(r.vehicle_id),
+            "vehicle_name": _c(vehicles_by_id[r.vehicle_id].name) if r.vehicle_id in vehicles_by_id else "",
+            "kind": _c(r.kind), "title": _c(r.title),
+            "due_date": _c(r.due_date), "due_km": _c(r.due_km),
+            "repeat_months": _c(r.repeat_months), "repeat_km": _c(r.repeat_km),
+            "lead_days": _c(r.lead_days), "lead_km": _c(r.lead_km), "notes": _c(r.notes),
+            "last_done_date": _c(r.last_done_date), "last_done_km": _c(r.last_done_km),
+            "created_at": _c(r.created_at),
+        }
+        for r in reminders
+    ]
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -303,6 +334,7 @@ def build_backup_zip(db: Session, user: models.User) -> bytes:
         zf.writestr("sessions.csv", _write_csv(SESSION_FIELDS, session_rows))
         zf.writestr("fees.csv", _write_csv(FEE_FIELDS, fee_rows))
         zf.writestr("costs.csv", _write_csv(COST_FIELDS, cost_rows))
+        zf.writestr("reminders.csv", _write_csv(REMINDER_FIELDS, reminder_rows))
     return buf.getvalue()
 
 
@@ -330,6 +362,8 @@ class BackupImportResult(BaseModel):
     fees_skipped: int = 0
     costs_imported: int = 0
     costs_skipped: int = 0
+    reminders_imported: int = 0
+    reminders_skipped: int = 0
 
 
 def _parse_bool(v: str | None) -> bool:
@@ -388,6 +422,12 @@ def _fee_key(provider_id: str, start_date: datetime, interval, amount: float) ->
 def _cost_key(vehicle_id: str, start_date: datetime, category: str, interval: str, amount: float) -> tuple:
     """Fachlicher Schluessel eines Kosteneintrags, wie _fee_key()."""
     return (vehicle_id, start_date, category, interval, round(amount, 2))
+
+
+def _reminder_key(vehicle_id: str, kind: str, title: str | None, due_date, due_km) -> tuple:
+    """Fachlicher Schluessel einer Erinnerung: dieselbe Art mit derselben
+    Bezeichnung und Faelligkeit am selben Fahrzeug."""
+    return (vehicle_id, kind, title or "", due_date, due_km)
 
 
 def _parse_ownership(v: str | None) -> str:
@@ -804,6 +844,60 @@ async def import_backup(
             costs_imported += 1
         db.commit()
 
+    reminders_imported = reminders_skipped = 0
+    if "reminders.csv" in names:
+        existing_reminder_owners = {
+            row[0]: row[1] for row in db.query(models.Reminder.id, models.Reminder.user_id).all()
+        }
+        own_reminder_keys = {
+            _reminder_key(r.vehicle_id, r.kind, r.title, r.due_date, r.due_km)
+            for r in db.query(models.Reminder).filter(models.Reminder.user_id == user.id).all()
+        }
+        for row in _read_csv(zf.read("reminders.csv")):
+            old_id = row["id"]
+            new_id = _target_id(old_id, existing_reminder_owners.get(old_id), user.id)
+            vehicle_id = _parse_str(row.get("vehicle_id"))
+            if vehicle_id:
+                vehicle_id = vehicle_id_map.get(vehicle_id, vehicle_id)
+            kind = _parse_str(row.get("kind")) or "custom"
+            if kind not in REMINDER_KINDS:
+                kind = "custom"
+            title = _parse_str(row.get("title"))
+            due_date = _parse_dt(row.get("due_date"))
+            due_km = _parse_int(row.get("due_km"))
+            if new_id is None or not vehicle_id or existing_vehicle_owners.get(vehicle_id) != user.id:
+                reminders_skipped += 1
+                continue
+            key = _reminder_key(vehicle_id, kind, title, due_date, due_km)
+            if key in own_reminder_keys:
+                reminders_skipped += 1
+                continue
+            lead_days = _parse_int(row.get("lead_days"))
+            lead_km = _parse_int(row.get("lead_km"))
+            db.add(
+                models.Reminder(
+                    id=new_id,
+                    user_id=user.id,
+                    vehicle_id=vehicle_id,
+                    kind=kind,
+                    title=title,
+                    due_date=due_date,
+                    due_km=due_km,
+                    repeat_months=_parse_int(row.get("repeat_months")),
+                    repeat_km=_parse_int(row.get("repeat_km")),
+                    lead_days=30 if lead_days is None else lead_days,
+                    lead_km=1000 if lead_km is None else lead_km,
+                    notes=_parse_str(row.get("notes")),
+                    last_done_date=_parse_dt(row.get("last_done_date")),
+                    last_done_km=_parse_int(row.get("last_done_km")),
+                    created_at=_parse_dt(row.get("created_at")),
+                )
+            )
+            existing_reminder_owners[new_id] = user.id
+            own_reminder_keys.add(key)
+            reminders_imported += 1
+        db.commit()
+
     return BackupImportResult(
         vehicles_imported=vehicles_imported,
         vehicles_skipped=vehicles_skipped,
@@ -817,4 +911,6 @@ async def import_backup(
         fees_skipped=fees_skipped,
         costs_imported=costs_imported,
         costs_skipped=costs_skipped,
+        reminders_imported=reminders_imported,
+        reminders_skipped=reminders_skipped,
     )

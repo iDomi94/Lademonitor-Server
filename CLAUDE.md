@@ -59,16 +59,18 @@ backend/app/
                           TireSet, TireTreadMeasurement (siehe Abschnitt "Reifensaetze")
                           ProviderFee (siehe Abschnitt "Grundgebuehren"),
                           VehicleCost (siehe Abschnitt "Fahrzeugkosten")
+                          Reminder (siehe Abschnitt "Erinnerungen")
   schemas.py          - Pydantic Request/Response-Schemas
   routers/
     vehicles.py, providers.py, locations.py, sessions.py, stats.py, importer.py,
     geocoding.py, backup.py, auth.py, webdav_backup.py, myskoda.py, email.py,
-    sync.py, tires.py, provider_fees.py, vehicle_costs.py
+    sync.py, tires.py, provider_fees.py, vehicle_costs.py, reminders.py
   auth.py            - Passwort-Hashing, Token-Handling, Auth-Dependencies
   sync.py            - record_deletion(): Grabstein fuer eine geloeschte Zeile
   tires.py           - Reifensaetze, temperaturbereinigter Vergleich
   fees.py            - Grundgebuehren/Abos: Perioden und Umlage nach kWh
   vehicle_costs.py   - Fahrzeugkosten, Wertverlust (Restwertkurve), Leasing
+  reminders.py       - Erinnerungen: Status, km-Prognose, naechste Faelligkeit
   battery.py         - Akku-Index und Ladeverluste (siehe Abschnitt "Akku und Ladeverluste")
   myskoda.py         - Client fuer die offizielle MyŠkoda Public API (sync httpx)
   myskoda_poller.py  - Zustandsmaschine der automatischen Ladeerkennung + Debug-Log
@@ -2249,8 +2251,52 @@ Dashboard lokal entsteht - Regelaenderungen hier dort mitziehen;
 `tests/test_vehicle_costs.py` haelt die Faelle fest. Backup: Kauf/Leasing-
 Spalten in `vehicles.csv`, `costs.csv` (beides beim Import optional).
 
-**Offen:** Runde B (Erinnerungen) aus demselben Plan; echte Kosten im
-Verbrenner-Vergleich bewusst spaeter.
+**Offen:** echte Kosten im Verbrenner-Vergleich bewusst spaeter.
+
+## Erinnerungen (`reminders.py`, `routers/reminders.py`, ab 2026-10-10, v0.33.0)
+
+Runde B aus `ideen/plan-schritt-3-4.md`. Je Fahrzeug eine Zeile
+`models.Reminder`: Art (Vorlage, String statt Enum), optionale Bezeichnung und
+Notiz (verschluesselt), faellig am Datum und/oder bei km, Wiederholung in
+Monaten und/oder km, Vorlauf (Standard 30 Tage / 1.000 km). **Gespeichert wird
+nur die naechste Faelligkeit**; Status, km-Prognose und "naechstes Datum"
+rechnet jede Antwort frisch (`reminders.evaluate()`).
+
+**Regeln** (`tests/test_reminders.py` haelt sie fest, die Apps rechnen sie in
+`LocalReminderCalculator` nach - Aenderungen dort mitziehen):
+
+- Status `overdue`, sobald das Datum VERSTRICHEN ist (der Tag selbst ist noch
+  `due_soon`) oder der km-Stand erreicht ist; `due_soon` im Vorlauf; ohne
+  jede Faelligkeit `done` (schon erledigt) bzw. `ok`. Sind Datum und km
+  gesetzt, zaehlt, was zuerst erreicht ist.
+- km-Stand = juengster der Ladevorgaenge, Fahrleistung aus 90 Tagen mit dem
+  letzten Stand VOR dem Fenster als Anker, mindestens 14 Tage Spanne, sonst
+  die ganze Historie (dieselbe Regel wie der Tarifrechner).
+- "Erledigt" (`POST /api/reminders/{id}/complete`, Standard heute bzw.
+  juengster km-Stand): naechstes Datum ab Erledigungsdatum, ausser bei
+  `FIXED_DATE_KINDS` (Reifenwechsel, Versicherung, Steuer, THG) - dort laeuft
+  der ALTE Faelligkeitstag in Wiederholungsschritten weiter, bis er nach dem
+  Erledigen liegt (Reifenwechsel am 20.10. -> naechster wieder am 15.10.).
+  km ab dem km-Stand beim Erledigen. Ohne Wiederholung bleibt die Erinnerung
+  als `done` stehen.
+- Ein neuer Reifensatz (`routers/tires.py::create_tire_set`) hakt
+  `tire_winter`/`tire_summer` ab, wenn er hoechstens 90 Tage VOR deren
+  Faelligkeit liegt - ein nachgetragener alter Wechsel soll nichts abhaken.
+- "Erledigt" schlaegt eine Kostenkategorie vor (`cost_category`); THG ist eine
+  Einnahme und bekommt keinen Vorschlag.
+
+**Mail** (`notifications.py::_run_reminders`, im 15-min-Takt): je Erinnerung
+eine Mail beim Eintritt in den Vorlauf und eine beim Ueberfaelligwerden,
+mehrere eines Nutzers in EINER Mail. Merker `Reminder.notified_stage`, geleert
+bei jeder Aenderung der Faelligkeit (PATCH, Erledigt); nur Serverzustand, nicht
+im Sync. Schalter `User.notify_reminders` (Standard an) - in
+`NotificationSettingsUpdate` bewusst optional, damit aeltere Clients ihn nicht
+zuruecksetzen.
+
+Web: Bereich "Erinnerungen" auf der Seite "Fahrzeug" (`#reminders`) mit
+Erledigt-Dialog, der danach das Kostenformular vorbelegt; Banner oben im
+Dashboard nur bei bald faelligen/ueberfaelligen, bewusst ohne Zeitraumfilter.
+Sync mit Grabstein-Typ `reminder`, Backup `reminders.csv` (optional).
 
 ## Verbrenner-Vergleich und Homescreen-Widget (nur Apps, ab 2026-09-29)
 

@@ -5,6 +5,19 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.33.0",
+        "date": "2026-10-10",
+        "title": "Erinnerungen",
+        "changes": [
+            "Auf der Seite „Fahrzeug“ gibt es jetzt Erinnerungen, fällig nach Datum und/oder km-Stand, mit Wiederholung und Vorlauf. Vorlagen: HU/TÜV (24 Monate), Inspektion (12 Monate / 30.000 km), Bremsflüssigkeit (24 Monate), Reifenwechsel Winter (15.10.) und Sommer (15.04.), Versicherung, Kfz-Steuer, THG-Quote und eigene.",
+            "Den km-Stand musst du nicht eintippen: er kommt aus den Ladevorgängen. Aus deiner Fahrleistung der letzten 90 Tage schätzt Lademonitor, wann eine km-Erinnerung erreicht ist.",
+            "„Erledigt“ setzt die nächste Fälligkeit aus der Wiederholung und bietet an, gleich einen Kosteneintrag anzulegen. Ein eingetragener Reifenwechsel hakt die passende Erinnerung automatisch ab.",
+            "Fällige und bald fällige Erinnerungen stehen ganz oben im Dashboard.",
+            "Per Mail kommt je Erinnerung genau eine Nachricht, wenn sie bald fällig wird, und eine, wenn sie überfällig ist. Abschaltbar unter Einstellungen → Benachrichtigungen.",
+            "Erinnerungen sind Teil des Backups und werden mit den Apps synchronisiert.",
+        ],
+    },
+    {
         "version": "0.32.0",
         "date": "2026-10-10",
         "title": "Fahrzeugkosten, Wertverlust und Leasing",

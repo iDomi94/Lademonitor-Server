@@ -14,6 +14,7 @@ from ..auth import get_current_user
 from ..consumption import compute_vehicle_consumptions
 from ..database import get_db
 from ..temperature import collect_points
+from .reminders import complete_for_tire_change
 
 router = APIRouter(prefix="/api/tires", tags=["tires"])
 
@@ -68,6 +69,8 @@ def create_tire_set(
     db.flush()
     if tread is not None and tread.minimum() is not None:
         db.add(_measurement(user, tire_set, tread, payload.installed_on, payload.odometer_km))
+    # Passende Erinnerung "Reifenwechsel Winter/Sommer" abhaken.
+    complete_for_tire_change(db, tire_set)
     db.commit()
     db.refresh(tire_set)
     return tire_set

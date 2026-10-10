@@ -1045,3 +1045,13 @@ details.panel > summary .count {
   .cost-row { grid-template-columns: minmax(0, 7.5em) 1fr auto; gap: 8px; font-size: 13px; }
   .cost-amount small { display: none; }
 }
+
+/* Erinnerungen (reminders.py): Status-Badges auf der Seite "Fahrzeug" und
+   das Banner oben im Dashboard. */
+.badge.reminder-ok { background: rgba(79, 209, 165, 0.15); color: var(--accent); }
+.badge.reminder-done { background: rgba(139, 149, 171, 0.15); color: var(--muted); }
+.badge.reminder-due_soon { background: rgba(242, 184, 75, 0.15); color: var(--warn); }
+.badge.reminder-overdue { background: rgba(239, 100, 97, 0.15); color: var(--danger); }
+.reminder-banner { margin-bottom: 16px; border-left: 3px solid var(--warn); }
+.reminder-line { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; padding: 3px 0; }
+.reminder-when { color: var(--muted); font-size: 0.9em; }

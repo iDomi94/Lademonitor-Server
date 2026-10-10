@@ -6,6 +6,24 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.33.0] — 2026-10-10
+
+### Added
+- **Erinnerungen** (`models.Reminder`, `/api/reminders`, `reminders.py`): Art
+  (`hu`, `inspection`, `brake_fluid`, `tire_winter`, `tire_summer`,
+  `insurance`, `tax`, `thg`, `custom`), Bezeichnung und Notiz (verschlüsselt),
+  `due_date`/`due_km`, `repeat_months`/`repeat_km`, `lead_days`/`lead_km`.
+  Nur lesend: `status` (`ok`/`due_soon`/`overdue`/`done`), `current_km`,
+  `km_remaining`, `km_forecast_date`, `days_remaining`, `next_due_date`,
+  `cost_category`. Grabstein-Typ `reminder`.
+- `POST /api/reminders/{id}/complete`: setzt die nächste Fälligkeit aus der
+  Wiederholung (feste Kalendertage bei Reifenwechsel, Versicherung, Steuer,
+  THG). Ein neuer Reifenwechsel hakt die passende Erinnerung ab.
+- Mail je Stufe (bald fällig/überfällig), Schalter `notify_reminders`
+  (Standard an; in `PUT /api/auth/notifications` optional).
+- Web: Bereich „Erinnerungen“ auf der Seite „Fahrzeug“, Hinweis oben im
+  Dashboard. Backup: neue `reminders.csv` (beim Import optional).
+
 ## [0.32.0] — 2026-10-10
 
 ### Added

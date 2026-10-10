@@ -167,6 +167,8 @@ class User(Base):
     notify_monthly_report: Mapped[bool] = mapped_column(Boolean, default=False)
     # Nur fuer Admins relevant (offene Registrierung, siehe routers/auth.py)
     notify_new_registration: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Faellige Erinnerungen (HU, Inspektion, ... siehe reminders.py).
+    notify_reminders: Mapped[bool] = mapped_column(Boolean, default=True)
 
     review_digest: Mapped[ReviewDigestFrequency] = mapped_column(
         Enum(ReviewDigestFrequency), default=ReviewDigestFrequency.OFF
@@ -310,6 +312,9 @@ class Vehicle(Base):
     costs: Mapped[list["VehicleCost"]] = relationship(
         back_populates="vehicle", cascade="all, delete-orphan"
     )
+    reminders: Mapped[list["Reminder"]] = relationship(
+        back_populates="vehicle", cascade="all, delete-orphan"
+    )
     # Kaskade wie bei den Ladevorgaengen: ohne sie scheitert das Loeschen
     # eines Fahrzeugs an Postgres' Fremdschluessel, sobald ein Reifensatz
     # daran haengt (genau der Fehlertyp aus der Loeschfunktion von 2026-09-09).
@@ -441,6 +446,47 @@ class VehicleCost(Base):
     )
 
     vehicle: Mapped["Vehicle"] = relationship(back_populates="costs")
+
+
+class Reminder(Base):
+    """Erinnerung je Fahrzeug: HU, Inspektion, Reifenwechsel, ... (ab v0.33.0).
+
+    Faellig nach Datum und/oder km-Stand. Der Status (ok / bald faellig /
+    ueberfaellig) und die km-Prognose werden bei jedem Abruf frisch
+    gerechnet (reminders.py), gespeichert wird nur die naechste Faelligkeit.
+    "Erledigt" schreibt sie aus der Wiederholung fort.
+    """
+
+    __tablename__ = "reminders"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_uuid)
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    vehicle_id: Mapped[str] = mapped_column(ForeignKey("vehicles.id"), index=True)
+    # hu | inspection | brake_fluid | tire_winter | tire_summer | insurance |
+    # tax | thg | custom (schemas.ReminderKind). String statt Enum.
+    kind: Mapped[str] = mapped_column(String, default="custom")
+    # Leer = Name der Art in der Sprache des Nutzers. Verschluesselt wie
+    # VehicleCost.label (Freitext).
+    title: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    due_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    due_km: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    repeat_months: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    repeat_km: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    lead_days: Mapped[int] = mapped_column(Integer, default=30)
+    lead_km: Mapped[int] = mapped_column(Integer, default=1000)
+    notes: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    last_done_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_done_km: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Merker gegen Doppelversand (notifications.py): die Stufe, fuer die
+    # zuletzt eine Mail rausging ("due_soon" | "overdue"). Wird bei jeder
+    # Aenderung der Faelligkeit geleert. Nur Serverzustand, nicht im Sync.
+    notified_stage: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    vehicle: Mapped["Vehicle"] = relationship(back_populates="reminders")
 
 
 class ChargingLocation(Base):
@@ -663,6 +709,8 @@ class SyncEntityType(str, enum.Enum):
     PROVIDER_FEE = "provider_fee"
     # Seit v0.32.0.
     VEHICLE_COST = "vehicle_cost"
+    # Seit v0.33.0.
+    REMINDER = "reminder"
 
 
 class DeletedRecord(Base):
@@ -982,7 +1030,7 @@ class EmailLogEntry(Base):
     subject: Mapped[str] = mapped_column(String)
     # test | password_reset | email_verify | invite | backup_failed |
     # myskoda_error | myskoda_key_expiring | review_digest | monthly_report |
-    # new_registration
+    # new_registration | reminders
     kind: Mapped[str] = mapped_column(String, index=True)
     # sent | failed | skipped
     status: Mapped[str] = mapped_column(String, index=True)

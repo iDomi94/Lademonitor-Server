@@ -2,6 +2,11 @@
 {% block content %}
 <h1>{{ t('dashboard.heading') }}</h1>
 
+{# Faellige und bald faellige Erinnerungen (reminders.py) ganz oben - sonst
+   ist hier nichts zu sehen. Folgt bewusst KEINEM Filter: eine faellige HU
+   ist faellig, egal welcher Zeitraum gerade gewaehlt ist. #}
+<div class="card reminder-banner" id="reminder-banner" hidden></div>
+
 <div id="filter-bar"></div>
 
 <div class="grid" id="stat-cards">
@@ -736,6 +741,42 @@ async function loadBattery() {
   });
 }
 
+const REMINDER_T = {
+  kinds: {{ reminder_kind_labels|tojson }},
+  status: {
+    due_soon: {{ t('reminder.status.due_soon')|tojson }},
+    overdue: {{ t('reminder.status.overdue')|tojson }},
+  },
+  inDays: {{ t('reminder_page.in_days')|tojson }},
+  daysAgo: {{ t('reminder_page.days_ago')|tojson }},
+  today: {{ t('reminder_page.today')|tojson }},
+  kmLeft: {{ t('reminder_page.km_left')|tojson }},
+  kmOver: {{ t('reminder_page.km_over')|tojson }},
+  open: {{ t('dashboard.reminders.open')|tojson }},
+};
+
+async function loadReminderBanner() {
+  const box = document.getElementById('reminder-banner');
+  const res = await fetch('api/reminders');
+  const due = (res.ok ? await res.json() : []).filter(r => r.status === 'due_soon' || r.status === 'overdue');
+  box.hidden = !due.length;
+  if (!due.length) return;
+  const km = n => Number(n).toLocaleString(LOCALE) + ' km';
+  box.innerHTML = due.map(r => {
+    const parts = [];
+    if (r.days_remaining != null) parts.push(r.days_remaining === 0 ? REMINDER_T.today
+      : r.days_remaining > 0 ? REMINDER_T.inDays.replace('{n}', r.days_remaining)
+      : REMINDER_T.daysAgo.replace('{n}', -r.days_remaining));
+    if (r.km_remaining != null) parts.push(r.km_remaining > 0
+      ? REMINDER_T.kmLeft.replace('{km}', km(r.km_remaining))
+      : REMINDER_T.kmOver.replace('{km}', km(-r.km_remaining)));
+    return `<div class="reminder-line">
+      <span class="badge reminder-${r.status}">${REMINDER_T.status[r.status]}</span>
+      <strong>${r.title || REMINDER_T.kinds[r.kind] || r.kind}</strong>
+      <span class="reminder-when">${parts.join(' · ')}</span></div>`;
+  }).join('') + `<p class="chartnote"><a class="cost-link" href="vehicle#reminders">${REMINDER_T.open}</a></p>`;
+}
+
 function loadAll() {
   loadStats();
   loadTemperature();
@@ -743,5 +784,6 @@ function loadAll() {
 }
 renderFilterBar('filter-bar', loadAll);
 loadAll();
+loadReminderBanner();
 </script>
 {% endblock %}
