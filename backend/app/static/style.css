@@ -1021,3 +1021,27 @@ details.panel > summary .count {
   .place-row { grid-template-columns: 1fr 1fr; }
   .place-price { text-align: left; }
 }
+
+/* Kostenkategorien (Dashboard "Gesamtkosten", Seite "Fahrzeug"; ui.js
+   renderCostBars) */
+.cost-row {
+  display: grid;
+  grid-template-columns: minmax(0, 10em) 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 5px 0;
+  font-size: 14px;
+}
+.cost-name { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cost-bar { height: 10px; border-radius: 5px; background: rgba(139,152,169,0.15); overflow: hidden; }
+.cost-bar > div { height: 100%; border-radius: 5px; }
+.cost-amount { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cost-link { color: var(--accent2); }
+.cost-amount small { color: var(--muted); font-size: 12px; margin-left: 4px; }
+.cost-kpis { display: flex; gap: 28px; flex-wrap: wrap; margin-bottom: 12px; }
+.cost-kpis .value { font-size: 22px; font-weight: 600; }
+.cost-kpis .label { color: var(--muted); font-size: 12px; }
+@media (max-width: 720px) {
+  .cost-row { grid-template-columns: minmax(0, 7.5em) 1fr auto; gap: 8px; font-size: 13px; }
+  .cost-amount small { display: none; }
+}

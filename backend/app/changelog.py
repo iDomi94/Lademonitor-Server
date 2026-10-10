@@ -5,6 +5,19 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.32.0",
+        "date": "2026-10-10",
+        "title": "Fahrzeugkosten, Wertverlust und Leasing",
+        "changes": [
+            "Neue Seite „Fahrzeug“: Kosten neben dem Laden eintragen, z. B. Versicherung, Kfz-Steuer, Wartung, Reparatur, Reifen, Wallbox, Parken, Maut oder Wäsche. Einträge können einmalig, monatlich oder jährlich sein, optional mit letzter Zahlung. Ein Jahresbeitrag zählt in dem Monat, in dem er fällig ist.",
+            "Die Seite zeigt außerdem die Kosten je Jahr und Kategorie samt Kosten je km.",
+            "Am Fahrzeug lässt sich Kauf oder Leasing hinterlegen. Beim Leasing zählt die Monatsrate plus die Sonderzahlung, gleichmäßig auf die Laufzeit verteilt.",
+            "Beim Kauf schlägt die App aus Kaufpreis, Erstzulassung und km-Stand einen monatlichen Wertverlust vor: im ersten Jahr auf 75 %, danach je Jahr −13 %, wobei mehr als 15.000 km im Jahr das Fahrzeug schneller altern lassen. Der Vorschlag lässt sich mit einem festen Betrag überschreiben, der geschätzte heutige Wert steht dabei.",
+            "Dashboard: neuer Abschnitt „Gesamtkosten“ mit Laden, sonstigen Kosten und Wertverlust bzw. Leasing, Kosten je km und einem Balken je Kategorie. Er erscheint nur, wenn Kosten oder Kauf/Leasing hinterlegt sind. Die übrigen Kennzahlen bleiben reine Ladekosten.",
+            "Der Monatsbericht per Mail nennt die Fahrzeugkosten. Kosten und Kauf/Leasing sind Teil des Backups und werden mit den Apps synchronisiert.",
+        ],
+    },
+    {
         "version": "0.31.0",
         "date": "2026-10-10",
         "title": "Wallbox-kWh und Zuhause/Arbeit/unterwegs",

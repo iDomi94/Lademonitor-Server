@@ -167,31 +167,107 @@ class LanguageUpdate(BaseModel):
 
 # ---------- Vehicle ----------
 
-class VehicleBase(BaseModel):
+# Kauf oder Leasing (siehe models.Vehicle.ownership, vehicle_costs.py).
+Ownership = Literal["none", "purchase", "leasing"]
+
+
+class VehicleOwnershipFields(BaseModel):
+    """Kauf-/Leasingangaben. Alle optional; welche gelten, entscheidet
+    `ownership`. Datumsangaben wie ueberall als naive datetime, nur das Datum
+    zaehlt."""
+
+    purchase_price: float | None = Field(default=None, ge=0)
+    purchase_date: datetime | None = None
+    first_registration: datetime | None = None
+    purchase_odometer_km: int | None = Field(default=None, ge=0)
+    depreciation_monthly_override: float | None = Field(default=None, ge=0)
+    leasing_rate_monthly: float | None = Field(default=None, ge=0)
+    leasing_start: datetime | None = None
+    leasing_end: datetime | None = None
+    leasing_down_payment: float | None = Field(default=None, ge=0)
+
+
+class VehicleBase(VehicleOwnershipFields):
     external_id: str
     name: str
     brand: str | None = None
     model: str | None = None
     battery_capacity_kwh: float | None = None
     is_active: bool = True
+    ownership: Ownership = "none"
 
 
 class VehicleCreate(VehicleBase):
     pass
 
 
-class VehicleUpdate(BaseModel):
+class VehicleUpdate(VehicleOwnershipFields):
     name: str | None = None
     brand: str | None = None
     model: str | None = None
     battery_capacity_kwh: float | None = None
     is_active: bool | None = None
+    ownership: Ownership | None = None
 
 
 class VehicleOut(VehicleBase):
     model_config = ConfigDict(from_attributes=True)
     id: str
     created_at: datetime
+    # Nur lesend, berechnet in vehicle_costs.ownership_info(): geschaetzter
+    # heutiger Wert und Wertverlust je Monat laut Restwertkurve (nur bei
+    # Kauf), sowie der Monatsbetrag, der tatsaechlich zaehlt (Vorschlag oder
+    # ueberschriebener Wert bzw. Leasingrate inkl. Anteil Sonderzahlung).
+    estimated_value: float | None = None
+    depreciation_suggested_monthly: float | None = None
+    ownership_monthly: float | None = None
+
+
+# ---------- Fahrzeugkosten (siehe models.VehicleCost, vehicle_costs.py) ----------
+
+CostCategory = Literal[
+    "insurance", "tax", "maintenance", "repair", "tires",
+    "wallbox", "parking", "toll", "cleaning", "other",
+]
+CostInterval = Literal["once", "monthly", "yearly"]
+
+
+class VehicleCostBase(BaseModel):
+    vehicle_id: str
+    amount: float = Field(ge=0)
+    category: CostCategory = "other"
+    interval: CostInterval = "once"
+    start_date: datetime
+    # Nur bei wiederkehrenden: letzter Tag, an dem noch gezahlt wird.
+    end_date: datetime | None = None
+    odometer_km: int | None = Field(default=None, ge=0)
+    label: str | None = None
+    notes: str | None = None
+
+
+class VehicleCostCreate(VehicleCostBase):
+    pass
+
+
+class VehicleCostUpdate(BaseModel):
+    vehicle_id: str | None = None
+    amount: float | None = Field(default=None, ge=0)
+    category: CostCategory | None = None
+    interval: CostInterval | None = None
+    start_date: datetime | None = None
+    end_date: datetime | None = None
+    odometer_km: int | None = Field(default=None, ge=0)
+    label: str | None = None
+    notes: str | None = None
+
+
+class VehicleCostOut(VehicleCostBase):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    created_at: datetime
+    updated_at: datetime
+    # Nur lesend: Summe aller Zahlungen bis heute.
+    paid_to_date: float = 0
 
 
 # ---------- Provider ----------
@@ -708,6 +784,37 @@ class PlaceStat(BaseModel):
     avg_price_per_kwh: float | None = None
 
 
+class CostCategoryStat(BaseModel):
+    # charging | depreciation | leasing | eine der CostCategory-Kategorien
+    category: str
+    amount: float
+
+
+class YearCostStat(BaseModel):
+    """Kosten eines Kalenderjahres je Kategorie (Seite "Fahrzeug")."""
+
+    year: int
+    total: float
+    cost_per_km: float | None = None
+    km_driven: int | None = None
+    by_category: list[CostCategoryStat]
+
+
+class VehicleCostSummary(BaseModel):
+    """Gesamtkosten des Fahrzeugs im Zeitraum (Dashboard-Abschnitt
+    "Gesamtkosten"). Die uebrigen Kennzahlen in StatsSummary bleiben reine
+    Ladekosten."""
+
+    charging_cost: float
+    other_cost: float
+    # Wertverlust bzw. Leasing
+    ownership_cost: float
+    total_cost: float
+    cost_per_km: float | None = None
+    # Groesster Posten zuerst
+    by_category: list[CostCategoryStat] = []
+
+
 class StatsSummary(BaseModel):
     total_sessions: int
     total_kwh: float
@@ -734,6 +841,9 @@ class StatsSummary(BaseModel):
     # dort nur "Unterwegs 100 %").
     by_place: list[PlaceStat] = []
     monthly: list[MonthlyStat]
+    # None, solange keines der betrachteten Fahrzeuge Kauf/Leasing oder einen
+    # Kosteneintrag hat (siehe vehicle_costs.has_cost_data).
+    vehicle_costs: VehicleCostSummary | None = None
 
 
 # ---------- WebDAV-Backup ----------

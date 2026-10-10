@@ -1,0 +1,317 @@
+{% extends "base.html" %}
+{% block content %}
+{# Eigene Hauptleisten-Seite wie die Reifen: Kosten (und ab Runde B die
+   Erinnerungen) sind Stammdaten plus Auswertung - fuer einen Klappabschnitt
+   in den Einstellungen zu viel. Pfad genau EINE Ebene unter der Basis
+   (/vehicle), damit die relativen fetch()-Aufrufe unter dem HA-Ingress
+   aufloesen. Kauf/Leasing wird im Fahrzeug-Formular der Einstellungen
+   gepflegt, hier nur angezeigt. #}
+<h1>{{ t('vehicle_page.heading') }}</h1>
+
+<details class="help">
+  <summary>{{ t('common.help') }}</summary>
+  <div class="inner">
+    <p>{{ t('vehicle_page.description') }}</p>
+    <p>{{ t('vehicle_page.ownership_help') }}</p>
+  </div>
+</details>
+
+<div class="form-actions" style="margin-top:8px">
+  <label style="margin:0">{{ t('tires.vehicle_filter') }}</label>
+  <select id="vc-vehicle-filter" style="max-width:260px"></select>
+</div>
+
+<h2>{{ t('vehicle_page.ownership_heading') }}</h2>
+<div class="card" id="vc-ownership"></div>
+
+<h2>{{ t('vehicle_page.years_heading') }}</h2>
+<div class="card" id="vc-years"></div>
+
+<h2>{{ t('vehicle_page.costs_heading') }}</h2>
+<details class="panel" id="vc-list-panel" open>
+  <summary>{{ t('vehicle_page.costs_heading') }} <span class="count" id="vc-count"></span></summary>
+  <div class="inner">
+    <details class="panel plain" id="vc-form-panel">
+      <summary id="vc-form-heading">{{ t('vehicle_page.form.new_heading') }}</summary>
+      <div class="inner">
+        <form class="inline-form" id="vc-form">
+          <div>
+            <label>{{ t('vehicle_page.form.vehicle') }}</label>
+            <select id="vc-vehicle" required></select>
+          </div>
+          <div>
+            <label>{{ t('vehicle_page.form.category') }}</label>
+            <select id="vc-category" required>
+              {% for c in ['insurance', 'tax', 'maintenance', 'repair', 'tires', 'wallbox', 'parking', 'toll', 'cleaning', 'other'] %}
+              <option value="{{ c }}">{{ cost_category_labels[c] }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label>{{ t('vehicle_page.form.amount') }}</label>
+            <input type="number" step="0.01" min="0" id="vc-amount" required>
+          </div>
+          <div>
+            <label>{{ t('vehicle_page.form.interval') }}</label>
+            <select id="vc-interval">
+              <option value="once">{{ t('vehicle_page.interval.once') }}</option>
+              <option value="monthly">{{ t('vehicle_page.interval.monthly') }}</option>
+              <option value="yearly">{{ t('vehicle_page.interval.yearly') }}</option>
+            </select>
+          </div>
+          <div>
+            <label id="vc-start-label">{{ t('vehicle_page.form.date') }}</label>
+            <input type="date" id="vc-start" required>
+          </div>
+          <div class="vc-recurring">
+            <label>{{ t('vehicle_page.form.end_date') }}</label>
+            <input type="date" id="vc-end">
+          </div>
+          <div>
+            <label>{{ t('vehicle_page.form.odometer') }}</label>
+            <input type="number" step="1" min="0" id="vc-odometer">
+          </div>
+          <div>
+            <label>{{ t('vehicle_page.form.label') }}</label>
+            <input type="text" id="vc-label" placeholder="{{ t('vehicle_page.form.label_placeholder') }}">
+          </div>
+          <div>
+            <label>{{ t('vehicle_page.form.notes') }}</label>
+            <input type="text" id="vc-notes">
+          </div>
+          <div class="vc-recurring" style="grid-column:1/-1; color:var(--muted); font-size:0.85em">
+            {{ t('vehicle_page.form.recurring_hint') }}
+          </div>
+          <div class="form-actions">
+            <button type="submit" id="vc-submit">{{ t('vehicle_page.form.submit_new') }}</button>
+            <button type="button" class="ghost" id="vc-cancel" hidden>{{ t('tires.form.cancel') }}</button>
+          </div>
+        </form>
+      </div>
+    </details>
+    <div id="vc-empty" style="color:var(--muted); font-size:0.9em"></div>
+    <div class="tablewrap"><table id="vc-table"></table></div>
+  </div>
+</details>
+
+<script>
+const T = {
+  categories: {{ cost_category_labels|tojson }},
+  interval: {
+    once: {{ t('vehicle_page.interval.once')|tojson }},
+    monthly: {{ t('vehicle_page.interval.monthly')|tojson }},
+    yearly: {{ t('vehicle_page.interval.yearly')|tojson }},
+  },
+  ownership: {
+    none: {{ t('settings.vehicle.ownership_none')|tojson }},
+    purchase: {{ t('settings.vehicle.ownership_purchase')|tojson }},
+    leasing: {{ t('settings.vehicle.ownership_leasing')|tojson }},
+  },
+  allVehicles: {{ t('tires.all_vehicles')|tojson }},
+  edit: {{ t('common.edit')|tojson }},
+  del: {{ t('common.delete')|tojson }},
+  confirmDelete: {{ t('vehicle_page.confirm_delete')|tojson }},
+  errorPrefix: {{ t('sessions.error.save_prefix')|tojson }},
+  empty: {{ t('vehicle_page.empty')|tojson }},
+  yearsEmpty: {{ t('vehicle_page.years_empty')|tojson }},
+  ownershipEmpty: {{ t('vehicle_page.ownership_empty')|tojson }},
+  estimatedValue: {{ t('vehicle_page.estimated_value')|tojson }},
+  monthlyDepreciation: {{ t('vehicle_page.monthly_depreciation')|tojson }},
+  monthlyLeasing: {{ t('vehicle_page.monthly_leasing')|tojson }},
+  overridden: {{ t('vehicle_page.overridden')|tojson }},
+  suggested: {{ t('vehicle_page.suggested')|tojson }},
+  purchasedFor: {{ t('vehicle_page.purchased_for')|tojson }},
+  leasingUntil: {{ t('vehicle_page.leasing_until')|tojson }},
+  editInSettings: {{ t('vehicle_page.edit_in_settings')|tojson }},
+  yearTotal: {{ t('dashboard.vehicle_costs.total')|tojson }},
+  perKm: {{ t('dashboard.vehicle_costs.per_km')|tojson }},
+  colDate: {{ t('vehicle_page.col.date')|tojson }},
+  colCategory: {{ t('vehicle_page.col.category')|tojson }},
+  colAmount: {{ t('vehicle_page.col.amount')|tojson }},
+  colPaid: {{ t('vehicle_page.col.paid')|tojson }},
+  colVehicle: {{ t('vehicle_page.col.vehicle')|tojson }},
+  until: {{ t('vehicle_page.until')|tojson }},
+  dateLabel: {{ t('vehicle_page.form.date')|tojson }},
+  startLabel: {{ t('vehicle_page.form.start_date')|tojson }},
+  formNew: {{ t('vehicle_page.form.new_heading')|tojson }},
+  formEdit: {{ t('vehicle_page.form.edit_heading')|tojson }},
+  submitNew: {{ t('vehicle_page.form.submit_new')|tojson }},
+  submitEdit: {{ t('vehicle_page.form.submit_edit')|tojson }},
+};
+
+let vehicles = [];
+let costs = [];
+let editingId = null;
+
+const money = n => Number(n).toLocaleString(window.LADEMONITOR_LANG, { style: 'currency', currency: 'EUR' });
+const shortDate = value =>
+  new Date(value).toLocaleDateString(window.LADEMONITOR_LANG, { dateStyle: 'medium' });
+const vehicleName = id => (vehicles.find(v => v.id === id) || {}).name || '–';
+const currentFilter = () => document.getElementById('vc-vehicle-filter').value;
+const muted = text => `<div style="color:var(--muted); font-size:0.85em">${text}</div>`;
+
+async function loadVehicles() {
+  const res = await fetch('api/vehicles');
+  vehicles = res.ok ? await res.json() : [];
+  const options = vehicles.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+  document.getElementById('vc-vehicle').innerHTML = options;
+  document.getElementById('vc-vehicle-filter').innerHTML =
+    (vehicles.length > 1 ? `<option value="">${T.allVehicles}</option>` : '') + options;
+}
+
+function renderOwnership() {
+  const filter = currentFilter();
+  const shown = vehicles.filter(v => !filter || v.id === filter);
+  const rows = shown.filter(v => v.ownership === 'purchase' || v.ownership === 'leasing').map(v => {
+    const name = vehicles.length > 1 ? `<strong>${v.name}</strong> · ` : '';
+    if (v.ownership === 'purchase') {
+      const monthly = v.depreciation_monthly_override != null
+        ? `${money(v.depreciation_monthly_override)} ${muted(T.overridden + (v.depreciation_suggested_monthly != null
+            ? ' · ' + T.suggested.replace('{value}', money(v.depreciation_suggested_monthly)) : ''))}`
+        : (v.depreciation_suggested_monthly != null ? money(v.depreciation_suggested_monthly) : '–');
+      return `<div class="cost-kpis">
+        <div><div class="value">${v.estimated_value != null ? money(v.estimated_value) : '–'}</div>
+          <div class="label">${T.estimatedValue}</div></div>
+        <div><div class="value">${monthly}</div><div class="label">${T.monthlyDepreciation}</div></div>
+      </div>${muted(name + T.purchasedFor
+          .replace('{price}', v.purchase_price != null ? money(v.purchase_price) : '–')
+          .replace('{date}', v.purchase_date ? shortDate(v.purchase_date) : '–'))}`;
+    }
+    return `<div class="cost-kpis">
+      <div><div class="value">${v.ownership_monthly != null ? money(v.ownership_monthly) : '–'}</div>
+        <div class="label">${T.monthlyLeasing}</div></div>
+    </div>${muted(name + (v.leasing_end ? T.leasingUntil.replace('{date}', shortDate(v.leasing_end)) : T.ownership.leasing))}`;
+  });
+  document.getElementById('vc-ownership').innerHTML =
+    (rows.length ? rows.join('<hr style="border:none; border-top:1px solid var(--border, #2a3348); margin:12px 0">')
+      : muted(T.ownershipEmpty)) +
+    `<p class="chartnote"><a class="cost-link" href="settings">${T.editInSettings}</a></p>`;
+}
+
+async function loadYears() {
+  const filter = currentFilter();
+  const res = await fetch('api/vehicle-costs/summary' + (filter ? `?vehicle_id=${filter}` : ''));
+  const years = res.ok ? await res.json() : [];
+  const box = document.getElementById('vc-years');
+  if (!years.length) { box.innerHTML = muted(T.yearsEmpty); return; }
+  box.innerHTML = years.map((y, i) => `
+    <details class="panel plain"${i === 0 ? ' open' : ''}>
+      <summary>${y.year} · ${money(y.total)}${y.cost_per_km != null
+        ? ` <span class="count">${money(y.cost_per_km)} ${T.perKm}</span>` : ''}</summary>
+      <div class="inner">${renderCostBars(y.by_category, T.categories)}</div>
+    </details>`).join('');
+}
+
+async function loadCosts() {
+  const filter = currentFilter();
+  const res = await fetch('api/vehicle-costs' + (filter ? `?vehicle_id=${filter}` : ''));
+  costs = res.ok ? await res.json() : [];
+  document.getElementById('vc-count').textContent = costs.length;
+  document.getElementById('vc-empty').textContent = costs.length ? '' : T.empty;
+  const table = document.getElementById('vc-table');
+  if (!costs.length) { table.innerHTML = ''; return; }
+  const withVehicle = vehicles.length > 1;
+  table.innerHTML = `<tr><th>${T.colDate}</th><th>${T.colCategory}</th><th>${T.colAmount}</th>` +
+    `<th>${T.colPaid}</th>${withVehicle ? `<th>${T.colVehicle}</th>` : ''}<th></th></tr>` +
+    costs.map(c => {
+      const period = c.interval === 'once' ? '' : muted(T.interval[c.interval] +
+        (c.end_date ? ' · ' + T.until.replace('{date}', shortDate(c.end_date)) : ''));
+      return `<tr><td>${shortDate(c.start_date)}${c.odometer_km != null ? muted(c.odometer_km.toLocaleString(window.LADEMONITOR_LANG) + ' km') : ''}</td>` +
+        `<td>${T.categories[c.category] || c.category}${c.label || c.notes ? muted([c.label, c.notes].filter(Boolean).join(' · ')) : ''}</td>` +
+        `<td>${money(c.amount)}${period}</td>` +
+        `<td>${money(c.paid_to_date)}</td>` +
+        (withVehicle ? `<td>${vehicleName(c.vehicle_id)}</td>` : '') +
+        `<td>${editDeleteButtons(`startEdit('${c.id}')`, `deleteCost('${c.id}')`, T.edit, T.del)}</td></tr>`;
+    }).join('');
+}
+
+function syncIntervalFields() {
+  const once = document.getElementById('vc-interval').value === 'once';
+  document.querySelectorAll('.vc-recurring').forEach(el => el.hidden = once);
+  document.getElementById('vc-start-label').textContent = once ? T.dateLabel : T.startLabel;
+}
+document.getElementById('vc-interval').addEventListener('change', syncIntervalFields);
+
+function resetForm() {
+  editingId = null;
+  document.getElementById('vc-form').reset();
+  if (currentFilter()) document.getElementById('vc-vehicle').value = currentFilter();
+  document.getElementById('vc-start').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('vc-form-heading').textContent = T.formNew;
+  document.getElementById('vc-submit').textContent = T.submitNew;
+  document.getElementById('vc-cancel').hidden = true;
+  syncIntervalFields();
+}
+document.getElementById('vc-cancel').addEventListener('click', resetForm);
+
+function startEdit(id) {
+  const c = costs.find(x => x.id === id);
+  if (!c) return;
+  editingId = id;
+  document.getElementById('vc-vehicle').value = c.vehicle_id;
+  document.getElementById('vc-category').value = c.category;
+  document.getElementById('vc-amount').value = c.amount;
+  document.getElementById('vc-interval').value = c.interval;
+  document.getElementById('vc-start').value = c.start_date.slice(0, 10);
+  document.getElementById('vc-end').value = c.end_date ? c.end_date.slice(0, 10) : '';
+  document.getElementById('vc-odometer').value = c.odometer_km ?? '';
+  document.getElementById('vc-label').value = c.label || '';
+  document.getElementById('vc-notes').value = c.notes || '';
+  document.getElementById('vc-form-heading').textContent = T.formEdit;
+  document.getElementById('vc-submit').textContent = T.submitEdit;
+  document.getElementById('vc-cancel').hidden = false;
+  syncIntervalFields();
+  document.getElementById('vc-list-panel').open = true;
+  document.getElementById('vc-form-panel').open = true;
+  document.getElementById('vc-form').scrollIntoView({ behavior: 'smooth' });
+}
+
+async function deleteCost(id) {
+  if (!confirm(T.confirmDelete)) return;
+  await fetch(`api/vehicle-costs/${id}`, { method: 'DELETE' });
+  if (editingId === id) resetForm();
+  refresh();
+}
+
+document.getElementById('vc-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const value = id => document.getElementById(id).value;
+  const payload = {
+    vehicle_id: value('vc-vehicle'),
+    category: value('vc-category'),
+    amount: value('vc-amount'),
+    interval: value('vc-interval'),
+    start_date: value('vc-start'),
+    end_date: value('vc-interval') === 'once' ? null : (value('vc-end') || null),
+    odometer_km: value('vc-odometer') || null,
+    label: value('vc-label') || null,
+    notes: value('vc-notes') || null,
+  };
+  const res = await fetch(editingId ? `api/vehicle-costs/${editingId}` : 'api/vehicle-costs', {
+    method: editingId ? 'PATCH' : 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    alert(T.errorPrefix + ' ' + (typeof body.detail === 'string' ? body.detail : res.status));
+    return;
+  }
+  resetForm();
+  refresh();
+});
+
+function refresh() {
+  renderOwnership();
+  loadYears();
+  loadCosts();
+}
+
+document.getElementById('vc-vehicle-filter').addEventListener('change', () => {
+  if (!editingId && currentFilter()) document.getElementById('vc-vehicle').value = currentFilter();
+  refresh();
+});
+
+loadVehicles().then(() => { resetForm(); refresh(); });
+</script>
+{% endblock %}

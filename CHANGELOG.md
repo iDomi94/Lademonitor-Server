@@ -6,6 +6,29 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.32.0] — 2026-10-10
+
+### Added
+- **Fahrzeugkosten** (`models.VehicleCost`, `/api/vehicle-costs`): Betrag,
+  Kategorie (`insurance`, `tax`, `maintenance`, `repair`, `tires`, `wallbox`,
+  `parking`, `toll`, `cleaning`, `other`), Wiederholung `once`/`monthly`/
+  `yearly` mit optionalem Enddatum, km-Stand, Bezeichnung und Notiz
+  (verschlüsselt). Antwort mit `paid_to_date`. Grabstein-Typ `vehicle_cost`.
+- `GET /api/vehicle-costs/summary`: Kosten je Kalenderjahr und Kategorie inkl.
+  Laden, Wertverlust/Leasing und Kosten je km.
+- **Kauf/Leasing am Fahrzeug**: `ownership` (`none`/`purchase`/`leasing`),
+  `purchase_price`, `purchase_date`, `first_registration`,
+  `purchase_odometer_km`, `depreciation_monthly_override`,
+  `leasing_rate_monthly`, `leasing_start`, `leasing_end`,
+  `leasing_down_payment`. Nur lesend: `estimated_value`,
+  `depreciation_suggested_monthly`, `ownership_monthly` (`vehicle_costs.py`).
+- `GET /api/stats/summary` liefert `vehicle_costs` (Gesamtkosten, Kosten je km,
+  je Kategorie), `null` ohne Kosten- oder Kauf/Leasing-Angaben.
+- Web: neue Seite „Fahrzeug“, Kauf/Leasing im Fahrzeug-Formular, Dashboard-
+  Abschnitt „Gesamtkosten“, Zeile „Fahrzeugkosten“ im Monatsbericht.
+- Backup: Kauf/Leasing-Spalten in `vehicles.csv`, neue `costs.csv` (beim Import
+  beides optional).
+
 ## [0.31.0] — 2026-10-10
 
 ### Added

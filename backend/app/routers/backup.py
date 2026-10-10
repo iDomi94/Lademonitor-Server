@@ -3,8 +3,8 @@
 Gedacht als Backup/Restore-Mechanismus (z.B. Neuaufsetzen des Servers), nicht
 als flexibles Datenaustauschformat - Reimport erwartet exakt die vom Export
 erzeugte ZIP-Struktur mit den vier festen Dateinamen (plus optional
-`fees.csv` seit v0.27.0 - aeltere ZIPs haben sie nicht und bleiben
-importierbar).
+`fees.csv` seit v0.27.0 und `costs.csv` seit v0.32.0 - aeltere ZIPs haben
+sie nicht und bleiben importierbar).
 
 Zwei Faelle, die der Import auseinanderhalten muss (siehe `_target_id`):
 
@@ -39,7 +39,16 @@ router = APIRouter(prefix="/api/backup", tags=["backup"])
 VEHICLE_FIELDS = [
     "id", "external_id", "name", "brand", "model",
     "battery_capacity_kwh", "is_active", "created_at",
+    # Seit v0.32.0 (Kauf/Leasing), beim Import optional (fehlt -> keine Angabe).
+    "ownership", "purchase_price", "purchase_date", "first_registration",
+    "purchase_odometer_km", "depreciation_monthly_override",
+    "leasing_rate_monthly", "leasing_start", "leasing_end", "leasing_down_payment",
 ]
+OWNERSHIP_FLOAT_FIELDS = (
+    "purchase_price", "depreciation_monthly_override",
+    "leasing_rate_monthly", "leasing_down_payment",
+)
+OWNERSHIP_DATE_FIELDS = ("purchase_date", "first_registration", "leasing_start", "leasing_end")
 PROVIDER_FIELDS = [
     "id", "name", "last_price_ac_per_kwh", "last_price_dc_per_kwh", "notes", "created_at",
     # Seit v0.29.0, beim Import optional (fehlt -> Ladesaeule, wie vorher).
@@ -77,6 +86,12 @@ FEE_FIELDS = [
     "start_date", "end_date", "label", "notes", "created_at",
 ]
 
+# Seit v0.32.0 (Fahrzeugkosten, siehe models.VehicleCost), beim Import optional.
+COST_FIELDS = [
+    "id", "vehicle_id", "vehicle_name", "amount", "category", "interval",
+    "start_date", "end_date", "odometer_km", "label", "notes", "created_at",
+]
+
 README_TEMPLATE = """Lademonitor Backup
 ===================
 
@@ -88,6 +103,7 @@ Inhalt dieser ZIP-Datei:
 - locations.csv   - alle bekannten Ladeorte
 - sessions.csv    - alle Ladevorgaenge
 - fees.csv        - Grundgebuehren/Abos der Anbieter (seit v0.27.0)
+- costs.csv       - sonstige Fahrzeugkosten (seit v0.32.0)
 
 Format:
 - Trennzeichen: Komma, UTF-8, Kopfzeile in der ersten Zeile
@@ -116,8 +132,8 @@ Reimport:
   von einem anderen Server stammt und alle IDs abweichen.
 - Die Reihenfolge (Fahrzeuge vor Anbietern vor Grundgebuehren, Ladeorten und
   Ladevorgaengen, wegen Fremdschluesseln) uebernimmt der Importer automatisch.
-- fees.csv ist optional: ZIPs aus Versionen vor 0.27.0 enthalten sie nicht
-  und lassen sich trotzdem einlesen.
+- fees.csv und costs.csv sind optional: ZIPs aus Versionen vor 0.27.0 bzw.
+  0.32.0 enthalten sie nicht und lassen sich trotzdem einlesen.
 
 Nicht enthalten:
 - Zugangsdaten. Insbesondere der MyŠkoda-API-Key und das WebDAV-Passwort sind
@@ -183,6 +199,12 @@ def build_backup_zip(db: Session, user: models.User) -> bytes:
         .order_by(models.ProviderFee.start_date)
         .all()
     )
+    costs = (
+        db.query(models.VehicleCost)
+        .filter(models.VehicleCost.user_id == user.id)
+        .order_by(models.VehicleCost.start_date)
+        .all()
+    )
 
     vehicles_by_id = {v.id: v for v in vehicles}
     providers_by_id = {p.id: p for p in providers}
@@ -194,6 +216,9 @@ def build_backup_zip(db: Session, user: models.User) -> bytes:
             "brand": _c(v.brand), "model": _c(v.model),
             "battery_capacity_kwh": _c(v.battery_capacity_kwh),
             "is_active": _c(v.is_active), "created_at": _c(v.created_at),
+            "ownership": _c(v.ownership),
+            "purchase_odometer_km": _c(v.purchase_odometer_km),
+            **{f: _c(getattr(v, f)) for f in OWNERSHIP_FLOAT_FIELDS + OWNERSHIP_DATE_FIELDS},
         }
         for v in vehicles
     ]
@@ -256,6 +281,18 @@ def build_backup_zip(db: Session, user: models.User) -> bytes:
         }
         for f in fees
     ]
+    cost_rows = [
+        {
+            "id": _c(c.id),
+            "vehicle_id": _c(c.vehicle_id),
+            "vehicle_name": _c(vehicles_by_id[c.vehicle_id].name) if c.vehicle_id in vehicles_by_id else "",
+            "amount": _c(c.amount), "category": _c(c.category), "interval": _c(c.interval),
+            "start_date": _c(c.start_date), "end_date": _c(c.end_date),
+            "odometer_km": _c(c.odometer_km),
+            "label": _c(c.label), "notes": _c(c.notes), "created_at": _c(c.created_at),
+        }
+        for c in costs
+    ]
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -265,6 +302,7 @@ def build_backup_zip(db: Session, user: models.User) -> bytes:
         zf.writestr("locations.csv", _write_csv(LOCATION_FIELDS, location_rows))
         zf.writestr("sessions.csv", _write_csv(SESSION_FIELDS, session_rows))
         zf.writestr("fees.csv", _write_csv(FEE_FIELDS, fee_rows))
+        zf.writestr("costs.csv", _write_csv(COST_FIELDS, cost_rows))
     return buf.getvalue()
 
 
@@ -290,6 +328,8 @@ class BackupImportResult(BaseModel):
     sessions_skipped: int
     fees_imported: int = 0
     fees_skipped: int = 0
+    costs_imported: int = 0
+    costs_skipped: int = 0
 
 
 def _parse_bool(v: str | None) -> bool:
@@ -343,6 +383,16 @@ def _fee_key(provider_id: str, start_date: datetime, interval, amount: float) ->
     """Fachlicher Schluessel einer Grundgebuehr: derselbe Anbieter, derselbe
     Beginn, derselbe Rhythmus und Betrag ist dieselbe Gebuehr."""
     return (provider_id, start_date, models.FeeInterval(interval), round(amount, 2))
+
+
+def _cost_key(vehicle_id: str, start_date: datetime, category: str, interval: str, amount: float) -> tuple:
+    """Fachlicher Schluessel eines Kosteneintrags, wie _fee_key()."""
+    return (vehicle_id, start_date, category, interval, round(amount, 2))
+
+
+def _parse_ownership(v: str | None) -> str:
+    v = (v or "").strip()
+    return v if v in ("none", "purchase", "leasing") else "none"
 
 
 def _target_id(old_id: str, owner: str | None, user_id: str) -> str | None:
@@ -478,6 +528,10 @@ async def import_backup(
                 battery_capacity_kwh=_parse_float(row.get("battery_capacity_kwh")),
                 is_active=_parse_bool(row.get("is_active")),
                 created_at=_parse_dt(row.get("created_at")),
+                ownership=_parse_ownership(row.get("ownership")),
+                purchase_odometer_km=_parse_int(row.get("purchase_odometer_km")),
+                **{f: _parse_float(row.get(f)) for f in OWNERSHIP_FLOAT_FIELDS},
+                **{f: _parse_dt(row.get(f)) for f in OWNERSHIP_DATE_FIELDS},
             )
         )
         existing_vehicle_owners[new_id] = user.id
@@ -696,6 +750,60 @@ async def import_backup(
             fees_imported += 1
         db.commit()
 
+    costs_imported = costs_skipped = 0
+    if "costs.csv" in names:
+        existing_cost_owners = {
+            row[0]: row[1] for row in db.query(models.VehicleCost.id, models.VehicleCost.user_id).all()
+        }
+        own_cost_keys = {
+            _cost_key(c.vehicle_id, c.start_date, c.category, c.interval, c.amount)
+            for c in db.query(models.VehicleCost).filter(models.VehicleCost.user_id == user.id).all()
+        }
+        for row in _read_csv(zf.read("costs.csv")):
+            old_id = row["id"]
+            new_id = _target_id(old_id, existing_cost_owners.get(old_id), user.id)
+            vehicle_id = _parse_str(row.get("vehicle_id"))
+            if vehicle_id:
+                vehicle_id = vehicle_id_map.get(vehicle_id, vehicle_id)
+            start_date = _parse_dt(row.get("start_date"))
+            amount = _parse_float(row.get("amount"))
+            category = _parse_str(row.get("category")) or "other"
+            interval = _parse_str(row.get("interval")) or "once"
+            if (
+                new_id is None
+                or not vehicle_id
+                or existing_vehicle_owners.get(vehicle_id) != user.id
+                or start_date is None
+                or amount is None
+                or interval not in ("once", "monthly", "yearly")
+            ):
+                costs_skipped += 1
+                continue
+            key = _cost_key(vehicle_id, start_date, category, interval, amount)
+            if key in own_cost_keys:
+                costs_skipped += 1
+                continue
+            db.add(
+                models.VehicleCost(
+                    id=new_id,
+                    user_id=user.id,
+                    vehicle_id=vehicle_id,
+                    amount=amount,
+                    category=category,
+                    interval=interval,
+                    start_date=start_date,
+                    end_date=_parse_dt(row.get("end_date")) if interval != "once" else None,
+                    odometer_km=_parse_int(row.get("odometer_km")),
+                    label=_parse_str(row.get("label")),
+                    notes=_parse_str(row.get("notes")),
+                    created_at=_parse_dt(row.get("created_at")),
+                )
+            )
+            existing_cost_owners[new_id] = user.id
+            own_cost_keys.add(key)
+            costs_imported += 1
+        db.commit()
+
     return BackupImportResult(
         vehicles_imported=vehicles_imported,
         vehicles_skipped=vehicles_skipped,
@@ -707,4 +815,6 @@ async def import_backup(
         sessions_skipped=sessions_skipped,
         fees_imported=fees_imported,
         fees_skipped=fees_skipped,
+        costs_imported=costs_imported,
+        costs_skipped=costs_skipped,
     )

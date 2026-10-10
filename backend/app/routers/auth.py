@@ -82,6 +82,10 @@ def _purge_owned_data(db: Session, user_id: str) -> None:
     db.query(models.TireSet).filter(
         models.TireSet.user_id == user_id
     ).delete(synchronize_session=False)
+    # Fahrzeugkosten haengen ebenfalls am Fahrzeug.
+    db.query(models.VehicleCost).filter(
+        models.VehicleCost.user_id == user_id
+    ).delete(synchronize_session=False)
     db.query(models.Vehicle).filter(
         models.Vehicle.user_id == user_id
     ).delete(synchronize_session=False)

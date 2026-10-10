@@ -36,6 +36,15 @@
   <div class="card" id="places-card" style="margin-bottom:24px"></div>
 </div>
 
+<!-- Gesamtkosten: Laden + sonstige Kosten + Wertverlust/Leasing. Nur
+     sichtbar, wenn es Kosten oder eine Kauf-/Leasingangabe gibt
+     (vehicle_costs leer = ausgeblendet). Die Kennzahlen oben bleiben reine
+     Ladekosten. -->
+<div id="vehicle-costs-section" hidden>
+  <h2>{{ t('dashboard.vehicle_costs.heading') }}</h2>
+  <div class="card" id="vehicle-costs-card" style="margin-bottom:24px"></div>
+</div>
+
 <h2>{{ t('dashboard.cost_per_month') }}</h2>
 <div class="card" id="chart-cost"></div>
 
@@ -313,6 +322,30 @@ function renderGauge(containerId, acKwh, dcKwh) {
 // Zuhause/Arbeit/Unterwegs: oben die kWh-Anteile als geteilter Balken wie
 // beim AC/DC-Anteil, darunter je Ort kWh, Kosten und der Preis je kWh -
 // der ist die eigentliche Antwort ("was kostet mich unterwegs mehr").
+const COST_T = {
+  total: {{ t('dashboard.vehicle_costs.total')|tojson }},
+  perKm: {{ t('dashboard.vehicle_costs.per_km')|tojson }},
+  chargingShare: {{ t('dashboard.vehicle_costs.charging_share')|tojson }},
+  more: {{ t('dashboard.vehicle_costs.more')|tojson }},
+  categories: {{ cost_category_labels|tojson }},
+};
+
+function renderVehicleCosts(costs) {
+  const section = document.getElementById('vehicle-costs-section');
+  if (!costs) { section.hidden = true; return; }
+  section.hidden = false;
+  const money = n => n.toLocaleString(LOCALE, { style: 'currency', currency: 'EUR' });
+  const share = costs.total_cost ? Math.round(costs.charging_cost / costs.total_cost * 100) : 0;
+  document.getElementById('vehicle-costs-card').innerHTML = `
+    <div class="cost-kpis">
+      <div><div class="value">${money(costs.total_cost)}</div><div class="label">${COST_T.total}</div></div>
+      <div><div class="value">${costs.cost_per_km != null ? money(costs.cost_per_km) : '–'}</div><div class="label">${COST_T.perKm}</div></div>
+      <div><div class="value">${share}%</div><div class="label">${COST_T.chargingShare}</div></div>
+    </div>
+    ${renderCostBars(costs.by_category, COST_T.categories)}
+    <p class="chartnote"><a class="cost-link" href="vehicle">${COST_T.more}</a></p>`;
+}
+
 function renderPlaces(places) {
   const section = document.getElementById('places-section');
   if (!places || !places.length) { section.hidden = true; return; }
@@ -601,6 +634,7 @@ async function loadStats() {
 
     renderGauge('acdc-gauge', data.ac_kwh || 0, data.dc_kwh || 0);
     renderPlaces(data.by_place);
+    renderVehicleCosts(data.vehicle_costs);
 
     if (data.by_provider && data.by_provider.length) {
       const buckets = buildProviderBuckets(data.by_provider);

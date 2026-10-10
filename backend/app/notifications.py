@@ -338,6 +338,13 @@ def _run_monthly_reports(db: Session) -> None:
                     translate("email.monthly.row_acdc"),
                     f"{summary.ac_kwh:.0f} kWh AC / {summary.dc_kwh:.0f} kWh DC",
                 ))
+            costs = summary.vehicle_costs
+            if costs is not None and (costs.other_cost or costs.ownership_cost):
+                rows.append((
+                    translate("email.monthly.row_vehicle_costs"),
+                    f"{costs.other_cost + costs.ownership_cost:.2f} € · "
+                    + translate("email.monthly.vehicle_costs_total", total=f"{costs.total_cost:.2f} €"),
+                ))
             for entry in summary.by_provider[:5]:
                 rows.append((entry.provider_name, f"{entry.total_kwh:.1f} kWh · {entry.total_cost:.2f} €"))
 

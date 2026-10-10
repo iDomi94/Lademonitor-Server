@@ -57,16 +57,18 @@ backend/app/
   models.py          - SQLAlchemy: Vehicle, Provider, ChargingLocation, ChargingSession,
                           DeletedRecord (Grabsteine, siehe Abschnitt "Sync"),
                           TireSet, TireTreadMeasurement (siehe Abschnitt "Reifensaetze")
-                          ProviderFee (siehe Abschnitt "Grundgebuehren")
+                          ProviderFee (siehe Abschnitt "Grundgebuehren"),
+                          VehicleCost (siehe Abschnitt "Fahrzeugkosten")
   schemas.py          - Pydantic Request/Response-Schemas
   routers/
     vehicles.py, providers.py, locations.py, sessions.py, stats.py, importer.py,
     geocoding.py, backup.py, auth.py, webdav_backup.py, myskoda.py, email.py,
-    sync.py, tires.py, provider_fees.py
+    sync.py, tires.py, provider_fees.py, vehicle_costs.py
   auth.py            - Passwort-Hashing, Token-Handling, Auth-Dependencies
   sync.py            - record_deletion(): Grabstein fuer eine geloeschte Zeile
   tires.py           - Reifensaetze, temperaturbereinigter Vergleich
   fees.py            - Grundgebuehren/Abos: Perioden und Umlage nach kWh
+  vehicle_costs.py   - Fahrzeugkosten, Wertverlust (Restwertkurve), Leasing
   battery.py         - Akku-Index und Ladeverluste (siehe Abschnitt "Akku und Ladeverluste")
   myskoda.py         - Client fuer die offizielle MyŠkoda Public API (sync httpx)
   myskoda_poller.py  - Zustandsmaschine der automatischen Ladeerkennung + Debug-Log
@@ -2200,6 +2202,55 @@ Regelaenderungen hier dort mitziehen.
 In den Apps ersetzt das Feld ausserdem die lokale Liste "oeffentliche
 Anbieter" des Tarifrechners (siehe dort). Voraussetzung fuer den spaeteren
 Erstattungsbericht fuer den Dienstwagen (Heimladungen).
+
+## Fahrzeugkosten, Wertverlust und Leasing (`vehicle_costs.py`, `routers/vehicle_costs.py`, `templates/vehicle.html`, ab 2026-10-10, v0.32.0)
+
+Beantwortet "was kostet mich das Auto insgesamt je km" - Laden ist dabei nur
+ein Posten. Plan und Entscheidungen des Nutzers (10.10.2026):
+`/mnt/project-files/ideen/plan-schritt-3-4.md` (Runde A).
+
+**Sonstige Kosten** (`VehicleCost`, je Fahrzeug): feste Kategorienliste
+(`vehicle_costs.CATEGORIES`, "other" faengt den Rest), Wiederholung
+`once`/`monthly`/`yearly` mit optionalem inklusivem Enddatum - dieselbe
+Ankertag-Logik wie bei den Grundgebuehren (`fees.add_months`). **Ein
+Jahresbetrag zaehlt in dem Monat, in dem er faellig ist**, nicht auf zwoelf
+Monate verteilt (wie auf dem Konto). Eine Beitragsaenderung ist eine zweite
+Zeile. Strings statt Postgres-Enums (wie `energy_meter`), `label`/`notes`
+verschluesselt. Grabstein-Typ `vehicle_cost`; das Loeschen eines Fahrzeugs
+legt auch fuer seine Kosten Grabsteine an (ORM-Kaskade), `_purge_owned_data()`
+loescht sie vor den Fahrzeugen.
+
+**Kauf/Leasing** sind Felder am `Vehicle` (`ownership` none/purchase/leasing,
+PATCH mit `null` laesst es stehen). Leasing: Rate + Sonderzahlung / Laufzeit in
+Monaten; ohne Enddatum zaehlt die Sonderzahlung im ersten Monat. Kauf:
+Restwertkurve (1. Jahr linear auf 75 %, danach x0,87 je Jahr), ausgewertet
+ueber ein **wirksames Alter** = max(Kalenderalter seit Erstzulassung,
+km / 15.000). Der Kaufpreis gilt als Wert BEIM KAUF, gerechnet wird mit dem
+Verhaeltnis der Kurve zwischen Kaufzeitpunkt und Stichtag - so geht auch ein
+Gebrauchter ohne Neupreis. Die km kommen aus den Ladevorgaengen, zwischen zwei
+Staenden interpoliert, danach mit der Fahrleistung der letzten 365 Tage
+fortgeschrieben (sonst stuende der Wertverlust bei Ladepausen still).
+Monatsbetraege laufen in Perioden ab dem Kaufdatum und zaehlen voll, sobald sie
+begonnen haben; `depreciation_monthly_override` ersetzt die Kurve komplett.
+Alles wird bei jedem Abruf frisch gerechnet, nichts gespeichert.
+
+**Auswertung:** `StatsSummary.vehicle_costs` (Dashboard "Gesamtkosten") folgt
+Zeitraum- und Fahrzeugfilter, ist `None` ohne Kosten- und Kauf/Leasing-Angabe;
+`charging_cost` ist `total_cost` der Zusammenfassung (inkl. Grundgebuehren),
+`cost_per_km` teilt durch `total_km_driven`. Die uebrigen Kennzahlen bleiben
+bewusst reine Ladekosten - sonst verzerrte die Versicherung den Preis je kWh.
+`GET /api/vehicle-costs/summary` liefert dieselben Bausteine je Kalenderjahr
+(km je Jahr: letzter Stand des Jahres minus letzter Stand davor). Kategorie-
+Balken in `static/ui.js::renderCostBars` (Dashboard und Seite "Fahrzeug"),
+Namen ueber `cost_category_labels` im Template-Kontext.
+
+**Beide Apps rechnen das lokal nach** (`LocalVehicleCostCalculator`), weil ihr
+Dashboard lokal entsteht - Regelaenderungen hier dort mitziehen;
+`tests/test_vehicle_costs.py` haelt die Faelle fest. Backup: Kauf/Leasing-
+Spalten in `vehicles.csv`, `costs.csv` (beides beim Import optional).
+
+**Offen:** Runde B (Erinnerungen) aus demselben Plan; echte Kosten im
+Verbrenner-Vergleich bewusst spaeter.
 
 ## Verbrenner-Vergleich und Homescreen-Widget (nur Apps, ab 2026-09-29)
 
