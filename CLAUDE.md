@@ -299,7 +299,9 @@ Lade-Art fehlt, das faengt `needs_review` beim manuellen Nachtragen ab.
 Attribute latitude/longitude, nur bei "Position teilen"-Einstellung im
 Škoda-Account). Energie-kWh wird bewusst NICHT vom Auto übernommen (MySkoda
 liefert das nicht zuverlässig) - stattdessen serverseitige Schätzung aus
-SoC-Delta × Akkukapazität.
+SoC-Delta × Akkukapazität. **Seit 2026-10-10 (v0.31.0, Lademonitor-HA
+0.6.0)** kann stattdessen der Energiezaehler der WALLBOX die kWh liefern - siehe
+Abschnitt "Wallbox-Zaehler aus Home Assistant" unter "Akku und Ladeverluste".
 
 Umsetzung beim Nutzer: HA-Package (`packages/lademonitor.yaml`, NICHT in
 `configuration.yaml` direkt, um die Hauptdatei sauber zu halten) mit
@@ -2075,9 +2077,11 @@ Die Entscheidungen des Nutzers (23.09.2026):
   an **oeffentlichen** Anbietern, nur dieselbe Lade-Art, ohne den gerade
   betrachteten Anbieter. Welche Anbieter oeffentlich sind (die eigene Wallbox
   abwaehlen), steht **lokal auf dem Geraet**, nicht synchronisiert -
-  bewusst, Entscheidung per Karte. Ein synchronisiertes Feld
-  "oeffentlich/privat" am `Provider` waere der naechste Schritt, falls es auch
-  fuer andere Auswertungen ("zu Hause vs. unterwegs") gebraucht wird.
+  bewusst, Entscheidung per Karte. **Ueberholt seit v0.31.0:** an die Stelle
+  der lokalen Liste tritt das synchronisierte Feld `Provider.charging_place`
+  (siehe Abschnitt "Zuhause, Arbeit, unterwegs") - die Automatik nimmt nur
+  Anbieter "Unterwegs". Beim ersten Start nach dem Update setzen die Apps die
+  frueher abgewaehlten Anbieter einmalig auf "Zuhause".
 
 Vorschlagswerte: km/Monat je Fahrzeug aus dem Kilometerstand der letzten 90
 Tage (mit dem Vorgang davor als Anker, mindestens 14 Tage Spanne, sonst die
@@ -2152,6 +2156,50 @@ DC getrennt sind. String statt Postgres-Enum, damit ein dritter Wert keine
 
 **Offen:** nur an synthetischen Daten verifiziert. Ob die echten Daten des
 Nutzers genug Vorgaenge mit gemessener Energie haben, ist nicht geprueft.
+
+### Wallbox-Zaehler aus Home Assistant (ab 2026-10-10, v0.31.0)
+
+Bis dahin waren ALLE automatisch erfassten Vorgaenge geschaetzt und fielen
+damit aus Akku-Index und Verlusten komplett heraus - die Auswertung lebte nur
+von Hand eingetragenen kWh. Lademonitor-HA 0.6.0 nimmt deshalb optional einen
+Energiesensor (`energy_sensor`, im Blueprint "Energiezaehler der Wallbox") an,
+liest ihn beim `begin_charging_session` und beim `end_charging_session` selbst
+aus (inkl. Umrechnung Wh/MWh ueber `unit_of_measurement`) und schickt die
+Differenz als `energy_kwh` plus `energy_meter="charger"`. Unplausibles (<= 0,
+z.B. nach einem Zaehlerreset, oder > 200 kWh) laesst die Integration weg, dann
+schaetzt der Server wie bisher. Bewusst ein Gesamtzaehler und kein
+"Energie dieser Ladung"-Sensor: der setzt sich je nach Wallbox zu
+unterschiedlichen Zeitpunkten zurueck, ein stetig steigender Zaehler ist bei
+jeder Wallbox gleich auszuwerten.
+
+Der Server speichert `energy_meter` aus dem Push nur zusammen mit echter
+`energy_kwh` und normalisiert ihn gegen den Anbieter, NACHDEM
+`apply_provider_price()` den Anbieter ueber den Ladeort gesetzt hat. Der
+Messort muss mitkommen, weil der typische Heim-Anbieter gerade auf "Fahrzeug"
+steht (Wallbox ohne Abrechnungszaehler) - ohne Angabe fiele die echte
+Wallbox-Messung genau dort aus der Verlustrechnung.
+
+## Zuhause, Arbeit, unterwegs (`Provider.charging_place`, ab 2026-10-10, v0.31.0)
+
+**Entscheidung des Nutzers (10.10.2026):** ein Feld am ANBIETER, nicht am
+Ladeort oder Vorgang - "Anbieter" ist hier ohnehin, wer abrechnet, und die
+eigene Wallbox ist praktisch immer ein eigener Anbieter. Drei Werte `home`/
+`work`/`public`, Standard `public` (Bestandsanbieter ebenso, per Migration).
+String statt Postgres-Enum wie `energy_meter`.
+
+Das Dashboard zeigt kWh, Kosten (inkl. Grundgebuehren) und Preis je kWh je
+Ladeort (`StatsSummary.by_place`, `routers/stats.py::build_by_place()`), folgt
+Zeitraum- und Fahrzeugfilter - und **erscheint nur, wenn im gefilterten
+Zeitraum mindestens ein Vorgang "Zuhause" oder "Arbeit" ist** (sonst ist die
+Liste leer; ausdruecklicher Wunsch des Nutzers, eine Aufteilung "100 %
+unterwegs" sagt nichts). Vorgaenge ohne Anbieter zaehlen als unterwegs, nicht
+umgelegte Gebuehrenperioden beim Ort ihres Anbieters. Beide Apps rechnen
+dieselbe Aufteilung lokal nach (ihr Dashboard entsteht immer lokal) -
+Regelaenderungen hier dort mitziehen.
+
+In den Apps ersetzt das Feld ausserdem die lokale Liste "oeffentliche
+Anbieter" des Tarifrechners (siehe dort). Voraussetzung fuer den spaeteren
+Erstattungsbericht fuer den Dienstwagen (Heimladungen).
 
 ## Verbrenner-Vergleich und Homescreen-Widget (nur Apps, ab 2026-09-29)
 

@@ -373,6 +373,9 @@ def push_auto_session(
         latitude=payload.latitude,
         longitude=payload.longitude,
         energy_kwh=payload.energy_kwh,
+        # Messort nur zusammen mit einer echten kWh-Angabe - eine Schaetzung
+        # (estimate_energy_kwh) ist an keinem Ort gemessen.
+        energy_meter=payload.energy_meter if payload.energy_kwh is not None else None,
         external_session_id=payload.external_session_id,
         source=models.SessionSource.AUTOMATIC,
         needs_review=True,
@@ -382,6 +385,9 @@ def push_auto_session(
 
     estimate_energy_kwh(session, vehicle)
     apply_provider_price(session, db)
+    # Erst NACH apply_provider_price: der Anbieter steht erst dann fest, und
+    # gegen ihn wird der Messort normalisiert.
+    normalize_energy_meter(session, db)
 
     db.add(session)
     db.commit()

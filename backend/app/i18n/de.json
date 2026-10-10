@@ -766,5 +766,13 @@
   "battery.without_provider": "Ohne Anbieter",
   "battery.unknown_type": "Lade-Art unbekannt",
   "battery.excluded": "{count} Ladevorgänge nicht berücksichtigt, davon {estimated} mit geschätzter Energie (übrige: fehlende Werte, weniger als {delta} Prozentpunkte Hub oder unplausibel)",
-  "battery.vehicle_measured": "{count} Ladevorgänge wurden im Fahrzeug abgelesen – sie zählen im Akku-Index (mit eigenem Anfangswert), aber nicht bei den Ladeverlusten. Welche Anbieter im Fahrzeug ablesen, stellst du in den Einstellungen beim Anbieter ein."
+  "battery.vehicle_measured": "{count} Ladevorgänge wurden im Fahrzeug abgelesen – sie zählen im Akku-Index (mit eigenem Anfangswert), aber nicht bei den Ladeverlusten. Welche Anbieter im Fahrzeug ablesen, stellst du in den Einstellungen beim Anbieter ein.",
+  "settings.provider.place": "Ladeort",
+  "place.home": "Zuhause",
+  "place.work": "Arbeit",
+  "place.public": "Unterwegs",
+  "dashboard.places.heading": "Zuhause, Arbeit, unterwegs",
+  "dashboard.places.sessions": "Vorgänge",
+  "dashboard.places.per_kwh": "je kWh",
+  "dashboard.places.session": "Vorgang"
 }

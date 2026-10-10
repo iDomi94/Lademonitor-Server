@@ -44,6 +44,8 @@ PROVIDER_FIELDS = [
     "id", "name", "last_price_ac_per_kwh", "last_price_dc_per_kwh", "notes", "created_at",
     # Seit v0.29.0, beim Import optional (fehlt -> Ladesaeule, wie vorher).
     "energy_meter",
+    # Seit v0.31.0, beim Import optional (fehlt -> unterwegs, wie vorher).
+    "charging_place",
 ]
 LOCATION_FIELDS = [
     "id", "name", "latitude", "longitude", "radius_m",
@@ -202,6 +204,7 @@ def build_backup_zip(db: Session, user: models.User) -> bytes:
             "last_price_dc_per_kwh": _c(p.last_price_dc_per_kwh),
             "notes": _c(p.notes), "created_at": _c(p.created_at),
             "energy_meter": _c(p.energy_meter),
+            "charging_place": _c(p.charging_place),
         }
         for p in providers
     ]
@@ -306,6 +309,11 @@ def _parse_int(v: str | None) -> int | None:
 def _parse_str(v: str | None) -> str | None:
     v = (v or "").strip()
     return v or None
+
+
+def _parse_place(v: str | None) -> str:
+    v = (v or "").strip().lower()
+    return v if v in ("home", "work", "public") else "public"
 
 
 def _parse_meter(v: str | None) -> str | None:
@@ -499,6 +507,7 @@ async def import_backup(
                 notes=_parse_str(row.get("notes")),
                 created_at=_parse_dt(row.get("created_at")),
                 energy_meter=_parse_meter(row.get("energy_meter")) or "charger",
+                charging_place=_parse_place(row.get("charging_place")),
             )
         )
         existing_provider_owners[new_id] = user.id

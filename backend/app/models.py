@@ -321,6 +321,11 @@ class Provider(Base):
     # ChargingSession.energy_meter und battery.py. String statt Enum, damit
     # ein spaeterer dritter Wert keine ALTER TYPE-Migration braucht.
     energy_meter: Mapped[str] = mapped_column(String, default="charger")
+    # Wo geladen wird: "home" (eigene Wallbox), "work" (Arbeitgeber) oder
+    # "public" (unterwegs). Trennt im Dashboard Kosten und Preis je kWh nach
+    # Ladeort-Art und bestimmt im Tarifrechner der Apps, welche Anbieter als
+    # "ohne Tarif" zaehlen. String statt Enum wie energy_meter.
+    charging_place: Mapped[str] = mapped_column(String, default="public")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     sessions: Mapped[list["ChargingSession"]] = relationship(back_populates="provider")

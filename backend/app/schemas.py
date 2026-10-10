@@ -200,12 +200,16 @@ class VehicleOut(VehicleBase):
 # Ladesaeule/Rechnung (inkl. Ladeverluste) oder Anzeige im Fahrzeug.
 EnergyMeter = Literal["charger", "vehicle"]
 
+# Wo geladen wird (siehe models.Provider.charging_place).
+ChargingPlace = Literal["home", "work", "public"]
+
 class ProviderBase(BaseModel):
     name: str
     last_price_ac_per_kwh: float | None = None
     last_price_dc_per_kwh: float | None = None
     notes: str | None = None
     energy_meter: EnergyMeter = "charger"
+    charging_place: ChargingPlace = "public"
 
 
 class ProviderCreate(ProviderBase):
@@ -218,6 +222,7 @@ class ProviderUpdate(BaseModel):
     last_price_dc_per_kwh: float | None = None
     notes: str | None = None
     energy_meter: EnergyMeter | None = None
+    charging_place: ChargingPlace | None = None
 
 
 class ProviderOut(ProviderBase):
@@ -615,6 +620,21 @@ class AutoSessionPush(BaseModel):
     # Grund: zum Ladeende hat sich die Temperatur schon geaendert, und die
     # Fahrt DAVOR ist das, was die Verbrauchsanalyse auswertet.
     outside_temp_c: float | None = Field(default=None, ge=-60, le=60)
+    # Wo energy_kwh gemessen wurde. Die HA-Integration schickt "charger", wenn
+    # sie die kWh aus dem Energiezaehler der Wallbox abgeleitet hat - sonst
+    # wuerde ein Heim-Anbieter mit "Fahrzeug" (Wallbox ohne Zaehler, kWh im
+    # Auto abgelesen) diese echte Ladesaeulenmessung faelschlich aus der
+    # Verlustrechnung werfen. Ohne energy_kwh bedeutungslos und ignoriert.
+    energy_meter: EnergyMeter | None = None
+
+    @field_validator("energy_meter", mode="before")
+    @classmethod
+    def _tolerate_unknown_meter(cls, value: object) -> object:
+        """Ein unbekannter Wert verwirft den Push nicht - dann gilt der Anbieter."""
+        if not isinstance(value, str):
+            return value
+        lower = value.strip().lower()
+        return lower if lower in ("charger", "vehicle") else None
 
     @field_validator("outside_temp_c", mode="before")
     @classmethod
@@ -679,6 +699,15 @@ class GeocodeResult(BaseModel):
     longitude: float
 
 
+class PlaceStat(BaseModel):
+    place: ChargingPlace
+    session_count: int
+    total_kwh: float
+    # inkl. Grundgebuehren, wie ueberall in StatsSummary
+    total_cost: float
+    avg_price_per_kwh: float | None = None
+
+
 class StatsSummary(BaseModel):
     total_sessions: int
     total_kwh: float
@@ -700,6 +729,10 @@ class StatsSummary(BaseModel):
     dc_kwh: float = 0
     total_km_driven: int | None = None
     by_provider: list[ProviderStat] = []
+    # Zuhause/Arbeit/Unterwegs - leer, solange kein einziger Vorgang im
+    # Zeitraum an einem Anbieter "Zuhause" oder "Arbeit" liegt (sonst stuende
+    # dort nur "Unterwegs 100 %").
+    by_place: list[PlaceStat] = []
     monthly: list[MonthlyStat]
 
 

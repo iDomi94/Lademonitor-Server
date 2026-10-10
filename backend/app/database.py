@@ -220,6 +220,19 @@ def run_light_migrations() -> None:
             text("ALTER TABLE charging_sessions ADD COLUMN IF NOT EXISTS energy_meter VARCHAR")
         )
 
+        # Zuhause/Arbeit/Unterwegs (siehe models.Provider.charging_place):
+        # Bestandsanbieter gelten als "unterwegs", bis der Nutzer seine
+        # Wallbox umstellt.
+        conn.execute(
+            text(
+                "ALTER TABLE providers ADD COLUMN IF NOT EXISTS charging_place VARCHAR "
+                "DEFAULT 'public'"
+            )
+        )
+        conn.execute(
+            text("UPDATE providers SET charging_place = 'public' WHERE charging_place IS NULL")
+        )
+
         # i18n: UI-Sprache pro Nutzer (siehe models.User.language). DEFAULT 'de'
         # deckt sowohl neue Zeilen als auch - via UPDATE - bereits bestehende
         # Nutzer ab, die die Spalte noch nicht hatten (Postgres setzt den

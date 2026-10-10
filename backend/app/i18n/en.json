@@ -766,5 +766,13 @@
   "battery.without_provider": "No provider",
   "battery.unknown_type": "Charging type unknown",
   "battery.excluded": "{count} charging sessions not included, {estimated} of them with estimated energy (others: missing values, less than {delta} percentage points gain, or implausible)",
-  "battery.vehicle_measured": "{count} charging sessions were read in the vehicle – they count for the battery index (with their own baseline) but not for the charging losses. Which providers are read in the vehicle is set per provider in the settings."
+  "battery.vehicle_measured": "{count} charging sessions were read in the vehicle – they count for the battery index (with their own baseline) but not for the charging losses. Which providers are read in the vehicle is set per provider in the settings.",
+  "settings.provider.place": "Charging place",
+  "place.home": "Home",
+  "place.work": "Work",
+  "place.public": "On the road",
+  "dashboard.places.heading": "Home, work, on the road",
+  "dashboard.places.sessions": "sessions",
+  "dashboard.places.per_kwh": "per kWh",
+  "dashboard.places.session": "session"
 }
