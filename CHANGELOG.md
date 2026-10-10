@@ -6,6 +6,17 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.31.0] — 2026-10-10
+
+### Added
+- `POST /api/sessions/auto` nimmt optional `energy_meter` (`charger`/`vehicle`)
+  an. Gespeichert wird es nur zusammen mit einer echten `energy_kwh` und wie
+  beim normalen Anlegen nur als Ausnahme vom Anbieter
+  (`normalize_energy_meter()`). Ein unbekannter Wert verwirft den Push nicht.
+  Gegenstück ist der Wallbox-Energiezähler in Lademonitor-HA 0.6.0: dessen
+  kWh sind eine Messung an der Ladesäule und sollen auch bei einem
+  Heim-Anbieter mit Messort „Fahrzeug" in die Verlustrechnung eingehen.
+
 ## [0.30.0] — 2026-09-29
 
 ### Added

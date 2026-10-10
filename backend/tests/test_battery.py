@@ -247,3 +247,66 @@ def test_meter_follows_the_provider_and_only_stores_exceptions(client):
     entry = client.get("/api/stats/battery").json()["vehicles"][0]
     assert entry["excluded"]["vehicle_measured"] == 2
     assert {p["energy_meter"] for p in entry["points"]} == {"charger", "vehicle"}
+
+
+def _home_with_vehicle_meter(client):
+    """Heim-Anbieter auf "Fahrzeug" (Wallbox ohne Zaehler) mit Ladeort, dem
+    der HA-Push per GPS zugeordnet wird."""
+    register(client)
+    create_vehicle(client, external_id="enyaq")
+    home = client.post(
+        "/api/providers", json={"name": "Zuhause", "energy_meter": "vehicle"}
+    ).json()
+    client.post(
+        "/api/locations",
+        json={"name": "Garage", "latitude": 48.8, "longitude": 9.0,
+              "default_provider_id": home["id"]},
+    )
+    return home
+
+
+def _auto_push(client, sid, **extra):
+    body = {
+        "vehicle_external_id": "enyaq",
+        "external_session_id": sid,
+        "start_time": "2026-03-01T18:00:00",
+        "soc_start": 20, "soc_end": 80,
+        "latitude": 48.8, "longitude": 9.0,
+    }
+    body.update(extra)
+    response = client.post("/api/sessions/auto", json=body)
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def test_auto_push_with_wallbox_kwh_counts_as_charger_measurement(client):
+    """Die HA-Integration leitet die kWh aus dem Wallbox-Zaehler ab - das ist
+    eine Messung an der Ladesaeule, auch wenn der Heim-Anbieter sonst auf
+    "Fahrzeug" steht. Sonst fiele genau diese Messung aus der Verlustrechnung."""
+    home = _home_with_vehicle_meter(client)
+    pushed = _auto_push(client, "ha-1", energy_kwh=50.3, energy_meter="charger")
+    assert pushed["provider_id"] == home["id"]
+    assert pushed["energy_is_estimated"] is False
+    assert pushed["energy_meter"] == "charger"
+    assert pushed["energy_meter_effective"] == "charger"
+
+
+def test_auto_push_meter_matching_the_provider_is_not_stored(client):
+    _home_with_vehicle_meter(client)
+    pushed = _auto_push(client, "ha-2", energy_kwh=47.0, energy_meter="VEHICLE")
+    assert pushed["energy_meter"] is None
+    assert pushed["energy_meter_effective"] == "vehicle"
+
+
+def test_auto_push_ignores_the_meter_without_measured_kwh(client):
+    """Ohne kWh schaetzt der Server - eine Schaetzung ist nirgends gemessen."""
+    _home_with_vehicle_meter(client)
+    pushed = _auto_push(client, "ha-3", energy_meter="charger")
+    assert pushed["energy_is_estimated"] is True
+    assert pushed["energy_meter"] is None
+
+
+def test_auto_push_tolerates_an_unknown_meter_value(client):
+    _home_with_vehicle_meter(client)
+    pushed = _auto_push(client, "ha-4", energy_kwh=47.0, energy_meter="unknown")
+    assert pushed["energy_meter"] is None

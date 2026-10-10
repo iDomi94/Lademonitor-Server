@@ -5,6 +5,16 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.31.0",
+        "date": "2026-10-10",
+        "title": "Gemessene kWh von der Wallbox",
+        "changes": [
+            "Die Home-Assistant-Integration (ab 0.6.0) kann den Energiezähler deiner Wallbox auslesen und schickt die beim Laden gezählten kWh mit. Automatisch erfasste Ladevorgänge haben damit echte statt geschätzter kWh und zählen bei Verbrauch, Akku-Index und Ladeverlusten mit.",
+            "So übertragene kWh gelten als an der Ladesäule gemessen, auch wenn der Heim-Anbieter auf „Fahrzeug\" steht.",
+            "API: POST /api/sessions/auto nimmt zusätzlich energy_meter (charger/vehicle) an. Ein unbekannter Wert wird ignoriert, ohne kWh-Angabe ebenfalls.",
+        ],
+    },
+    {
         "version": "0.30.0",
         "date": "2026-09-29",
         "title": "Reifen: DOT-Alter und Profiltiefe",

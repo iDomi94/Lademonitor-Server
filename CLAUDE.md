@@ -299,7 +299,9 @@ Lade-Art fehlt, das faengt `needs_review` beim manuellen Nachtragen ab.
 Attribute latitude/longitude, nur bei "Position teilen"-Einstellung im
 Škoda-Account). Energie-kWh wird bewusst NICHT vom Auto übernommen (MySkoda
 liefert das nicht zuverlässig) - stattdessen serverseitige Schätzung aus
-SoC-Delta × Akkukapazität.
+SoC-Delta × Akkukapazität. **Seit 2026-10-10 (v0.31.0, Lademonitor-HA
+0.6.0)** kann stattdessen der Energiezaehler der WALLBOX die kWh liefern - siehe
+Abschnitt "Wallbox-Zaehler aus Home Assistant" unter "Akku und Ladeverluste".
 
 Umsetzung beim Nutzer: HA-Package (`packages/lademonitor.yaml`, NICHT in
 `configuration.yaml` direkt, um die Hauptdatei sauber zu halten) mit
@@ -2152,6 +2154,28 @@ DC getrennt sind. String statt Postgres-Enum, damit ein dritter Wert keine
 
 **Offen:** nur an synthetischen Daten verifiziert. Ob die echten Daten des
 Nutzers genug Vorgaenge mit gemessener Energie haben, ist nicht geprueft.
+
+### Wallbox-Zaehler aus Home Assistant (ab 2026-10-10, v0.31.0)
+
+Bis dahin waren ALLE automatisch erfassten Vorgaenge geschaetzt und fielen
+damit aus Akku-Index und Verlusten komplett heraus - die Auswertung lebte nur
+von Hand eingetragenen kWh. Lademonitor-HA 0.6.0 nimmt deshalb optional einen
+Energiesensor (`energy_sensor`, im Blueprint "Energiezaehler der Wallbox") an,
+liest ihn beim `begin_charging_session` und beim `end_charging_session` selbst
+aus (inkl. Umrechnung Wh/MWh ueber `unit_of_measurement`) und schickt die
+Differenz als `energy_kwh` plus `energy_meter="charger"`. Unplausibles (<= 0,
+z.B. nach einem Zaehlerreset, oder > 200 kWh) laesst die Integration weg, dann
+schaetzt der Server wie bisher. Bewusst ein Gesamtzaehler und kein
+"Energie dieser Ladung"-Sensor: der setzt sich je nach Wallbox zu
+unterschiedlichen Zeitpunkten zurueck, ein stetig steigender Zaehler ist bei
+jeder Wallbox gleich auszuwerten.
+
+Der Server speichert `energy_meter` aus dem Push nur zusammen mit echter
+`energy_kwh` und normalisiert ihn gegen den Anbieter, NACHDEM
+`apply_provider_price()` den Anbieter ueber den Ladeort gesetzt hat. Der
+Messort muss mitkommen, weil der typische Heim-Anbieter gerade auf "Fahrzeug"
+steht (Wallbox ohne Abrechnungszaehler) - ohne Angabe fiele die echte
+Wallbox-Messung genau dort aus der Verlustrechnung.
 
 ## Verbrenner-Vergleich und Homescreen-Widget (nur Apps, ab 2026-09-29)
 
