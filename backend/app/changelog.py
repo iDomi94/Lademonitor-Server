@@ -7,11 +7,13 @@ CHANGELOG = [
     {
         "version": "0.31.0",
         "date": "2026-10-10",
-        "title": "Gemessene kWh von der Wallbox",
+        "title": "Wallbox-kWh und Zuhause/Arbeit/unterwegs",
         "changes": [
             "Die Home-Assistant-Integration (ab 0.6.0) kann den Energiezähler deiner Wallbox auslesen und schickt die beim Laden gezählten kWh mit. Automatisch erfasste Ladevorgänge haben damit echte statt geschätzter kWh und zählen bei Verbrauch, Akku-Index und Ladeverlusten mit.",
             "So übertragene kWh gelten als an der Ladesäule gemessen, auch wenn der Heim-Anbieter auf „Fahrzeug\" steht.",
             "API: POST /api/sessions/auto nimmt zusätzlich energy_meter (charger/vehicle) an. Ein unbekannter Wert wird ignoriert, ohne kWh-Angabe ebenfalls.",
+            "Anbieter haben einen Ladeort: Zuhause, Arbeit oder Unterwegs (Standard). Das Dashboard zeigt dann kWh, Kosten und Preis je kWh getrennt nach Ladeort – sobald im Zeitraum mindestens ein Ladevorgang zuhause oder bei der Arbeit liegt.",
+            "Der Ladeort wird mit den Apps synchronisiert und ist Teil des Backups. In den Apps bestimmt er auch, welche Anbieter der Tarifrechner als „ohne Tarif\" heranzieht.",
         ],
     },
     {

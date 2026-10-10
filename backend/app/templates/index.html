@@ -29,6 +29,13 @@
 <h2>{{ t('dashboard.ac_dc_share') }}</h2>
 <div class="card" id="acdc-gauge" style="margin-bottom:24px"></div>
 
+<!-- Nur sichtbar, wenn im Zeitraum mindestens ein Vorgang an einem Anbieter
+     "Zuhause" oder "Arbeit" liegt (by_place leer = ausgeblendet). -->
+<div id="places-section" hidden>
+  <h2>{{ t('dashboard.places.heading') }}</h2>
+  <div class="card" id="places-card" style="margin-bottom:24px"></div>
+</div>
+
 <h2>{{ t('dashboard.cost_per_month') }}</h2>
 <div class="card" id="chart-cost"></div>
 
@@ -135,6 +142,18 @@ const BATTERY_T = {
   excluded: {{ t('battery.excluded')|tojson }},
   vehicleMeasured: {{ t('battery.vehicle_measured')|tojson }},
 };
+
+const PLACE_T = {
+  home: {{ t('place.home')|tojson }},
+  work: {{ t('place.work')|tojson }},
+  public: {{ t('place.public')|tojson }},
+  session: {{ t('dashboard.places.session')|tojson }},
+  sessions: {{ t('dashboard.places.sessions')|tojson }},
+  perKwh: {{ t('dashboard.places.per_kwh')|tojson }},
+};
+// Zuhause gruen, Arbeit blau, unterwegs gelb - dieselben Toene wie der
+// AC/DC-Balken darueber, damit kein neues Farbschema entsteht.
+const PLACE_COLORS = { home: '#4fd1a5', work: '#5b8def', public: '#f2b84b' };
 
 const MONTH_NAMES = {{ t('dashboard.month_names')|tojson }}.split('|');
 const MONTH_NAMES_SHORT = {{ t('dashboard.month_names_short')|tojson }}.split('|');
@@ -289,6 +308,33 @@ function renderGauge(containerId, acKwh, dcKwh) {
       <span>AC · ${acPct.toFixed(0)}% · ${acKwh.toFixed(1)} kWh</span>
       <span>DC · ${dcPct.toFixed(0)}% · ${dcKwh.toFixed(1)} kWh</span>
     </div>`;
+}
+
+// Zuhause/Arbeit/Unterwegs: oben die kWh-Anteile als geteilter Balken wie
+// beim AC/DC-Anteil, darunter je Ort kWh, Kosten und der Preis je kWh -
+// der ist die eigentliche Antwort ("was kostet mich unterwegs mehr").
+function renderPlaces(places) {
+  const section = document.getElementById('places-section');
+  if (!places || !places.length) { section.hidden = true; return; }
+  section.hidden = false;
+  const totalKwh = places.reduce((sum, p) => sum + p.total_kwh, 0);
+  const bar = totalKwh > 0 ? `
+    <div style="display:flex; height:22px; border-radius:6px; overflow:hidden; gap:2px; margin-bottom:14px">
+      ${places.filter(p => p.total_kwh > 0).map(p =>
+        `<div style="width:${p.total_kwh / totalKwh * 100}%; background:${PLACE_COLORS[p.place]}"></div>`).join('')}
+    </div>` : '';
+  const rows = places.map(p => {
+    const pct = totalKwh > 0 ? Math.round(p.total_kwh / totalKwh * 100) : 0;
+    return `
+      <div class="place-row">
+        <div class="place-name"><span class="place-dot" style="background:${PLACE_COLORS[p.place]}"></span>${PLACE_T[p.place]}
+          <small>${p.session_count} ${p.session_count === 1 ? PLACE_T.session : PLACE_T.sessions}</small></div>
+        <div>${p.total_kwh.toFixed(1)} kWh <small>${pct}%</small></div>
+        <div>${p.total_cost.toFixed(2)} €</div>
+        <div class="place-price">${p.avg_price_per_kwh != null ? p.avg_price_per_kwh.toFixed(3) + ' €' : '–'} <small>${PLACE_T.perKwh}</small></div>
+      </div>`;
+  }).join('');
+  document.getElementById('places-card').innerHTML = bar + rows;
 }
 
 /* ---------- Verbrauch nach Temperatur ----------
@@ -554,6 +600,7 @@ async function loadStats() {
     setText('s-km', data.total_km_driven != null ? data.total_km_driven.toLocaleString(LOCALE) + ' km' : '–');
 
     renderGauge('acdc-gauge', data.ac_kwh || 0, data.dc_kwh || 0);
+    renderPlaces(data.by_place);
 
     if (data.by_provider && data.by_provider.length) {
       const buckets = buildProviderBuckets(data.by_provider);

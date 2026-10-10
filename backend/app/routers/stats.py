@@ -146,6 +146,12 @@ def stats_summary(
         for name in sorted(provider_kwh.keys(), key=lambda n: provider_kwh[n], reverse=True)
     ]
 
+    # Zuhause/Arbeit/Unterwegs nach models.Provider.charging_place. Vorgaenge
+    # ohne Anbieter zaehlen als unterwegs (der Normalfall ohne Anbieter ist
+    # die spontane Ladung an einer fremden Saeule), nicht umgelegte
+    # Gebuehren beim Ort ihres Anbieters.
+    by_place = build_by_place(sessions, providers_by_id, unallocated, cost)
+
     # Monatlicher Verbrauch: dieselbe Fallback-Kette wie pro Ladevorgang
     # (consumption.py), km-gewichtet gemittelt statt naiv pro Session -
     # sessions ist hier bereits die vollstaendige (ungepaginierte) Menge,
@@ -217,8 +223,46 @@ def stats_summary(
         dc_kwh=round(dc_kwh, 2),
         total_km_driven=total_km_driven,
         by_provider=by_provider,
+        by_place=by_place,
         monthly=monthly,
     )
+
+
+PLACE_ORDER = ("home", "work", "public")
+
+
+def build_by_place(sessions, providers_by_id, unallocated, cost) -> list[schemas.PlaceStat]:
+    """Kennzahlen je Ladeort-Art. Leer, solange kein Vorgang "Zuhause" oder
+    "Arbeit" ist - eine Aufteilung mit nur "Unterwegs" sagt nichts."""
+
+    def place_of(provider_id: str | None) -> str:
+        provider = providers_by_id.get(provider_id) if provider_id else None
+        place = getattr(provider, "charging_place", None)
+        return place if place in PLACE_ORDER else "public"
+
+    count: dict[str, int] = defaultdict(int)
+    kwh: dict[str, float] = defaultdict(float)
+    total: dict[str, float] = defaultdict(float)
+    for s in sessions:
+        place = place_of(s.provider_id)
+        count[place] += 1
+        kwh[place] += s.energy_kwh or 0
+        total[place] += cost(s)
+    if not (count["home"] or count["work"]):
+        return []
+    for p in unallocated:
+        total[place_of(p.provider_id)] += p.amount
+    return [
+        schemas.PlaceStat(
+            place=place,
+            session_count=count[place],
+            total_kwh=round(kwh[place], 2),
+            total_cost=round(total[place], 2),
+            avg_price_per_kwh=round(total[place] / kwh[place], 4) if kwh[place] else None,
+        )
+        for place in PLACE_ORDER
+        if count[place] or total[place]
+    ]
 
 
 @router.get("/temperature", response_model=schemas.TemperatureStats)

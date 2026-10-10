@@ -16,6 +16,13 @@ folgen [Semantic Versioning](https://semver.org/).
   Gegenstück ist der Wallbox-Energiezähler in Lademonitor-HA 0.6.0: dessen
   kWh sind eine Messung an der Ladesäule und sollen auch bei einem
   Heim-Anbieter mit Messort „Fahrzeug" in die Verlustrechnung eingehen.
+- `Provider.charging_place` (`home`/`work`/`public`, Standard `public`), im
+  Anbieter-Formular als „Ladeort". Neu in `GET /api/stats/summary`:
+  `by_place` mit Vorgängen, kWh, Kosten (inkl. Grundgebühren) und Preis je kWh
+  je Ladeort. Die Liste bleibt leer, solange im gefilterten Zeitraum kein
+  Vorgang zuhause oder bei der Arbeit liegt; Vorgänge ohne Anbieter zählen als
+  unterwegs. Backup-Spalte `charging_place` in `providers.csv`, beim Import
+  optional.
 
 ## [0.30.0] — 2026-09-29
 

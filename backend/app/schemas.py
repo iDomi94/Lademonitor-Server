@@ -200,12 +200,16 @@ class VehicleOut(VehicleBase):
 # Ladesaeule/Rechnung (inkl. Ladeverluste) oder Anzeige im Fahrzeug.
 EnergyMeter = Literal["charger", "vehicle"]
 
+# Wo geladen wird (siehe models.Provider.charging_place).
+ChargingPlace = Literal["home", "work", "public"]
+
 class ProviderBase(BaseModel):
     name: str
     last_price_ac_per_kwh: float | None = None
     last_price_dc_per_kwh: float | None = None
     notes: str | None = None
     energy_meter: EnergyMeter = "charger"
+    charging_place: ChargingPlace = "public"
 
 
 class ProviderCreate(ProviderBase):
@@ -218,6 +222,7 @@ class ProviderUpdate(BaseModel):
     last_price_dc_per_kwh: float | None = None
     notes: str | None = None
     energy_meter: EnergyMeter | None = None
+    charging_place: ChargingPlace | None = None
 
 
 class ProviderOut(ProviderBase):
@@ -694,6 +699,15 @@ class GeocodeResult(BaseModel):
     longitude: float
 
 
+class PlaceStat(BaseModel):
+    place: ChargingPlace
+    session_count: int
+    total_kwh: float
+    # inkl. Grundgebuehren, wie ueberall in StatsSummary
+    total_cost: float
+    avg_price_per_kwh: float | None = None
+
+
 class StatsSummary(BaseModel):
     total_sessions: int
     total_kwh: float
@@ -715,6 +729,10 @@ class StatsSummary(BaseModel):
     dc_kwh: float = 0
     total_km_driven: int | None = None
     by_provider: list[ProviderStat] = []
+    # Zuhause/Arbeit/Unterwegs - leer, solange kein einziger Vorgang im
+    # Zeitraum an einem Anbieter "Zuhause" oder "Arbeit" liegt (sonst stuende
+    # dort nur "Unterwegs 100 %").
+    by_place: list[PlaceStat] = []
     monthly: list[MonthlyStat]
 
 

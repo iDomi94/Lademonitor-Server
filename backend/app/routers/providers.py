@@ -50,7 +50,7 @@ def update_provider(
     for field, value in payload.model_dump(exclude_unset=True).items():
         # Der Messort hat immer einen Wert (Standard Ladesaeule) - ein
         # mitgeschicktes null laesst ihn stehen statt die Spalte zu leeren.
-        if field == "energy_meter" and value is None:
+        if field in ("energy_meter", "charging_place") and value is None:
             continue
         setattr(provider, field, value)
     db.commit()

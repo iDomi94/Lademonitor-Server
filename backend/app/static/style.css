@@ -1001,3 +1001,23 @@ details.panel > summary .count {
   gap: 6px;
   margin-top: 6px;
 }
+
+/* Dashboard: Zuhause/Arbeit/Unterwegs (index.html, renderPlaces) */
+.place-row {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr 1fr;
+  gap: 8px;
+  align-items: baseline;
+  padding: 8px 0;
+  border-top: 1px solid var(--border, #2a3348);
+  font-size: 14px;
+}
+.place-row small { color: var(--muted); font-size: 12px; margin-left: 4px; }
+.place-name { font-weight: 600; }
+.place-name small { display: block; margin-left: 0; font-weight: 400; }
+.place-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+.place-price { text-align: right; font-weight: 600; }
+@media (max-width: 720px) {
+  .place-row { grid-template-columns: 1fr 1fr; }
+  .place-price { text-align: left; }
+}
