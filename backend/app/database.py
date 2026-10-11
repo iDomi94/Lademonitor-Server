@@ -63,6 +63,10 @@ _ENCRYPTABLE_TEXT_COLUMNS = (
     ("myskoda_log_entries", "payload"),
     ("provider_fees", "label"),
     ("provider_fees", "notes"),
+    ("vehicle_costs", "label"),
+    ("vehicle_costs", "notes"),
+    ("reminders", "title"),
+    ("reminders", "notes"),
 )
 
 
@@ -233,6 +237,25 @@ def run_light_migrations() -> None:
             text("UPDATE providers SET charging_place = 'public' WHERE charging_place IS NULL")
         )
 
+        # v0.32.0: Kauf/Leasing am Fahrzeug (siehe vehicle_costs.py). Die
+        # Tabelle vehicle_costs legt create_all() an.
+        conn.execute(
+            text("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS ownership VARCHAR DEFAULT 'none'")
+        )
+        conn.execute(text("UPDATE vehicles SET ownership = 'none' WHERE ownership IS NULL"))
+        for column, sql_type in (
+            ("purchase_price", "DOUBLE PRECISION"),
+            ("purchase_date", "TIMESTAMP"),
+            ("first_registration", "TIMESTAMP"),
+            ("purchase_odometer_km", "INTEGER"),
+            ("depreciation_monthly_override", "DOUBLE PRECISION"),
+            ("leasing_rate_monthly", "DOUBLE PRECISION"),
+            ("leasing_start", "TIMESTAMP"),
+            ("leasing_end", "TIMESTAMP"),
+            ("leasing_down_payment", "DOUBLE PRECISION"),
+        ):
+            conn.execute(text(f"ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS {column} {sql_type}"))
+
         # i18n: UI-Sprache pro Nutzer (siehe models.User.language). DEFAULT 'de'
         # deckt sowohl neue Zeilen als auch - via UPDATE - bereits bestehende
         # Nutzer ab, die die Spalte noch nicht hatten (Postgres setzt den
@@ -317,6 +340,14 @@ def run_light_migrations() -> None:
         conn.execute(
             text("ALTER TYPE syncentitytype ADD VALUE IF NOT EXISTS 'PROVIDER_FEE'")
         )
+        # v0.32.0: dasselbe fuer die Fahrzeugkosten (models.VehicleCost).
+        conn.execute(
+            text("ALTER TYPE syncentitytype ADD VALUE IF NOT EXISTS 'VEHICLE_COST'")
+        )
+        # v0.33.0: dasselbe fuer die Erinnerungen (models.Reminder).
+        conn.execute(
+            text("ALTER TYPE syncentitytype ADD VALUE IF NOT EXISTS 'REMINDER'")
+        )
 
         # Multi-User-Umstellung: user_id auf allen vier Kern-Tabellen ergaenzen.
         # Bestehende Zeilen (aus der Zeit vor Multi-User) werden dem ERSTEN
@@ -398,6 +429,8 @@ def run_light_migrations() -> None:
             ("notify_myskoda_error", "BOOLEAN", "TRUE"),
             ("notify_monthly_report", "BOOLEAN", "FALSE"),
             ("notify_new_registration", "BOOLEAN", "TRUE"),
+            # v0.33.0: faellige Erinnerungen (reminders.py), Standard an.
+            ("notify_reminders", "BOOLEAN", "TRUE"),
             ("review_digest", "reviewdigestfrequency", "'OFF'"),
             ("last_review_digest_at", "TIMESTAMP", None),
             ("last_monthly_report_at", "TIMESTAMP", None),

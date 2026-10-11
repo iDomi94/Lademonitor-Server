@@ -128,3 +128,18 @@ def test_tires_page_renders_with_only_relative_paths(client):
     # Die Hauptleiste muss den neuen Punkt kennen, sonst ist die Seite nur
     # ueber die Adresszeile erreichbar.
     assert 'href="tires"' in response.text
+
+
+def test_vehicle_page_renders_with_only_relative_paths(client):
+    """Seite "Fahrzeug" (Kosten): genau eine Ebene unter der Basis, relative
+    Aufrufe, Punkt in der Hauptleiste - wie die Reifenseite."""
+    register(client)
+
+    response = client.get("/vehicle")
+
+    assert response.status_code == 200
+    assert "api/vehicle-costs/summary" in response.text
+    assert "'/api/vehicle-costs" not in response.text
+    assert 'href="vehicle"' in response.text
+    # Kategorienamen kommen aus der Uebersetzung, nicht als roher Schluessel.
+    assert "cost.category." not in response.text

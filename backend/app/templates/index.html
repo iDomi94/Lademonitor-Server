@@ -2,6 +2,11 @@
 {% block content %}
 <h1>{{ t('dashboard.heading') }}</h1>
 
+{# Faellige und bald faellige Erinnerungen (reminders.py) ganz oben - sonst
+   ist hier nichts zu sehen. Folgt bewusst KEINEM Filter: eine faellige HU
+   ist faellig, egal welcher Zeitraum gerade gewaehlt ist. #}
+<div class="card reminder-banner" id="reminder-banner" hidden></div>
+
 <div id="filter-bar"></div>
 
 <div class="grid" id="stat-cards">
@@ -34,6 +39,15 @@
 <div id="places-section" hidden>
   <h2>{{ t('dashboard.places.heading') }}</h2>
   <div class="card" id="places-card" style="margin-bottom:24px"></div>
+</div>
+
+<!-- Gesamtkosten: Laden + sonstige Kosten + Wertverlust/Leasing. Nur
+     sichtbar, wenn es Kosten oder eine Kauf-/Leasingangabe gibt
+     (vehicle_costs leer = ausgeblendet). Die Kennzahlen oben bleiben reine
+     Ladekosten. -->
+<div id="vehicle-costs-section" hidden>
+  <h2>{{ t('dashboard.vehicle_costs.heading') }}</h2>
+  <div class="card" id="vehicle-costs-card" style="margin-bottom:24px"></div>
 </div>
 
 <h2>{{ t('dashboard.cost_per_month') }}</h2>
@@ -313,6 +327,30 @@ function renderGauge(containerId, acKwh, dcKwh) {
 // Zuhause/Arbeit/Unterwegs: oben die kWh-Anteile als geteilter Balken wie
 // beim AC/DC-Anteil, darunter je Ort kWh, Kosten und der Preis je kWh -
 // der ist die eigentliche Antwort ("was kostet mich unterwegs mehr").
+const COST_T = {
+  total: {{ t('dashboard.vehicle_costs.total')|tojson }},
+  perKm: {{ t('dashboard.vehicle_costs.per_km')|tojson }},
+  chargingShare: {{ t('dashboard.vehicle_costs.charging_share')|tojson }},
+  more: {{ t('dashboard.vehicle_costs.more')|tojson }},
+  categories: {{ cost_category_labels|tojson }},
+};
+
+function renderVehicleCosts(costs) {
+  const section = document.getElementById('vehicle-costs-section');
+  if (!costs) { section.hidden = true; return; }
+  section.hidden = false;
+  const money = n => n.toLocaleString(LOCALE, { style: 'currency', currency: 'EUR' });
+  const share = costs.total_cost ? Math.round(costs.charging_cost / costs.total_cost * 100) : 0;
+  document.getElementById('vehicle-costs-card').innerHTML = `
+    <div class="cost-kpis">
+      <div><div class="value">${money(costs.total_cost)}</div><div class="label">${COST_T.total}</div></div>
+      <div><div class="value">${costs.cost_per_km != null ? money(costs.cost_per_km) : '–'}</div><div class="label">${COST_T.perKm}</div></div>
+      <div><div class="value">${share}%</div><div class="label">${COST_T.chargingShare}</div></div>
+    </div>
+    ${renderCostBars(costs.by_category, COST_T.categories)}
+    <p class="chartnote"><a class="cost-link" href="vehicle">${COST_T.more}</a></p>`;
+}
+
 function renderPlaces(places) {
   const section = document.getElementById('places-section');
   if (!places || !places.length) { section.hidden = true; return; }
@@ -601,6 +639,7 @@ async function loadStats() {
 
     renderGauge('acdc-gauge', data.ac_kwh || 0, data.dc_kwh || 0);
     renderPlaces(data.by_place);
+    renderVehicleCosts(data.vehicle_costs);
 
     if (data.by_provider && data.by_provider.length) {
       const buckets = buildProviderBuckets(data.by_provider);
@@ -702,6 +741,42 @@ async function loadBattery() {
   });
 }
 
+const REMINDER_T = {
+  kinds: {{ reminder_kind_labels|tojson }},
+  status: {
+    due_soon: {{ t('reminder.status.due_soon')|tojson }},
+    overdue: {{ t('reminder.status.overdue')|tojson }},
+  },
+  inDays: {{ t('reminder_page.in_days')|tojson }},
+  daysAgo: {{ t('reminder_page.days_ago')|tojson }},
+  today: {{ t('reminder_page.today')|tojson }},
+  kmLeft: {{ t('reminder_page.km_left')|tojson }},
+  kmOver: {{ t('reminder_page.km_over')|tojson }},
+  open: {{ t('dashboard.reminders.open')|tojson }},
+};
+
+async function loadReminderBanner() {
+  const box = document.getElementById('reminder-banner');
+  const res = await fetch('api/reminders');
+  const due = (res.ok ? await res.json() : []).filter(r => r.status === 'due_soon' || r.status === 'overdue');
+  box.hidden = !due.length;
+  if (!due.length) return;
+  const km = n => Number(n).toLocaleString(LOCALE) + ' km';
+  box.innerHTML = due.map(r => {
+    const parts = [];
+    if (r.days_remaining != null) parts.push(r.days_remaining === 0 ? REMINDER_T.today
+      : r.days_remaining > 0 ? REMINDER_T.inDays.replace('{n}', r.days_remaining)
+      : REMINDER_T.daysAgo.replace('{n}', -r.days_remaining));
+    if (r.km_remaining != null) parts.push(r.km_remaining > 0
+      ? REMINDER_T.kmLeft.replace('{km}', km(r.km_remaining))
+      : REMINDER_T.kmOver.replace('{km}', km(-r.km_remaining)));
+    return `<div class="reminder-line">
+      <span class="badge reminder-${r.status}">${REMINDER_T.status[r.status]}</span>
+      <strong>${r.title || REMINDER_T.kinds[r.kind] || r.kind}</strong>
+      <span class="reminder-when">${parts.join(' · ')}</span></div>`;
+  }).join('') + `<p class="chartnote"><a class="cost-link" href="vehicle#reminders">${REMINDER_T.open}</a></p>`;
+}
+
 function loadAll() {
   loadStats();
   loadTemperature();
@@ -709,5 +784,6 @@ function loadAll() {
 }
 renderFilterBar('filter-bar', loadAll);
 loadAll();
+loadReminderBanner();
 </script>
 {% endblock %}

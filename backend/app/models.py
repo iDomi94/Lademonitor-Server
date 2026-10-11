@@ -167,6 +167,8 @@ class User(Base):
     notify_monthly_report: Mapped[bool] = mapped_column(Boolean, default=False)
     # Nur fuer Admins relevant (offene Registrierung, siehe routers/auth.py)
     notify_new_registration: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Faellige Erinnerungen (HU, Inspektion, ... siehe reminders.py).
+    notify_reminders: Mapped[bool] = mapped_column(Boolean, default=True)
 
     review_digest: Mapped[ReviewDigestFrequency] = mapped_column(
         Enum(ReviewDigestFrequency), default=ReviewDigestFrequency.OFF
@@ -284,9 +286,33 @@ class Vehicle(Base):
     model: Mapped[str | None] = mapped_column(String, nullable=True)
     battery_capacity_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Kauf oder Leasing (siehe vehicle_costs.py): "none" | "purchase" |
+    # "leasing". String statt Enum wie Provider.energy_meter. Die Betraege
+    # sind kein personenbezogenes Datum und nicht verschluesselt - die
+    # Statistik rechnet damit.
+    ownership: Mapped[str] = mapped_column(String, default="none")
+    purchase_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    purchase_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Erstzulassung - daraus das Alter beim Kauf. Leer heisst Neuwagen
+    # (Erstzulassung = Kaufdatum).
+    first_registration: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    purchase_odometer_km: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Fester Wertverlust je Monat statt des berechneten Vorschlags.
+    depreciation_monthly_override: Mapped[float | None] = mapped_column(Float, nullable=True)
+    leasing_rate_monthly: Mapped[float | None] = mapped_column(Float, nullable=True)
+    leasing_start: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    leasing_end: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Anzahlung/Sonderzahlung, gleichmaessig auf die Laufzeit verteilt.
+    leasing_down_payment: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     sessions: Mapped[list["ChargingSession"]] = relationship(
+        back_populates="vehicle", cascade="all, delete-orphan"
+    )
+    costs: Mapped[list["VehicleCost"]] = relationship(
+        back_populates="vehicle", cascade="all, delete-orphan"
+    )
+    reminders: Mapped[list["Reminder"]] = relationship(
         back_populates="vehicle", cascade="all, delete-orphan"
     )
     # Kaskade wie bei den Ladevorgaengen: ohne sie scheitert das Loeschen
@@ -381,6 +407,86 @@ class ProviderFee(Base):
     )
 
     provider: Mapped["Provider"] = relationship(back_populates="fees")
+
+
+class VehicleCost(Base):
+    """Sonstige Kosten eines Fahrzeugs: Versicherung, Steuer, Wartung, ...
+
+    Wie ProviderFee ist ein wiederkehrender Betrag EINE Zeile ("ab 01.01.
+    jaehrlich 480 EUR"), die Zahlungstermine erzeugt
+    vehicle_costs.occurrences(). Anders als dort ist `once` eine einzelne
+    Zahlung am `start_date` (kein Zeitraum), und es wird nichts auf
+    Ladevorgaenge umgelegt - die Kosten gehoeren dem Fahrzeug.
+    """
+
+    __tablename__ = "vehicle_costs"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_uuid)
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    vehicle_id: Mapped[str] = mapped_column(ForeignKey("vehicles.id"), index=True)
+    # Betrag je Zahlung in EUR.
+    amount: Mapped[float] = mapped_column(Float)
+    # insurance | tax | maintenance | repair | tires | wallbox | parking |
+    # toll | cleaning | other (schemas.CostCategory). String statt Enum.
+    category: Mapped[str] = mapped_column(String, default="other")
+    # once | monthly | yearly
+    interval: Mapped[str] = mapped_column(String, default="once")
+    # Datum der (ersten) Zahlung und - nur bei wiederkehrenden - der letzten
+    # Tag, an dem noch gezahlt wird. Naive datetime um Mitternacht wie
+    # ProviderFee.start_date.
+    start_date: Mapped[datetime] = mapped_column(DateTime, index=True)
+    end_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    odometer_km: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Verschluesselt (siehe crypto.py) - Freitext.
+    label: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    notes: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    vehicle: Mapped["Vehicle"] = relationship(back_populates="costs")
+
+
+class Reminder(Base):
+    """Erinnerung je Fahrzeug: HU, Inspektion, Reifenwechsel, ... (ab v0.33.0).
+
+    Faellig nach Datum und/oder km-Stand. Der Status (ok / bald faellig /
+    ueberfaellig) und die km-Prognose werden bei jedem Abruf frisch
+    gerechnet (reminders.py), gespeichert wird nur die naechste Faelligkeit.
+    "Erledigt" schreibt sie aus der Wiederholung fort.
+    """
+
+    __tablename__ = "reminders"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_uuid)
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    vehicle_id: Mapped[str] = mapped_column(ForeignKey("vehicles.id"), index=True)
+    # hu | inspection | brake_fluid | tire_winter | tire_summer | insurance |
+    # tax | thg | custom (schemas.ReminderKind). String statt Enum.
+    kind: Mapped[str] = mapped_column(String, default="custom")
+    # Leer = Name der Art in der Sprache des Nutzers. Verschluesselt wie
+    # VehicleCost.label (Freitext).
+    title: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    due_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    due_km: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    repeat_months: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    repeat_km: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    lead_days: Mapped[int] = mapped_column(Integer, default=30)
+    lead_km: Mapped[int] = mapped_column(Integer, default=1000)
+    notes: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    last_done_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_done_km: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Merker gegen Doppelversand (notifications.py): die Stufe, fuer die
+    # zuletzt eine Mail rausging ("due_soon" | "overdue"). Wird bei jeder
+    # Aenderung der Faelligkeit geleert. Nur Serverzustand, nicht im Sync.
+    notified_stage: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    vehicle: Mapped["Vehicle"] = relationship(back_populates="reminders")
 
 
 class ChargingLocation(Base):
@@ -601,6 +707,10 @@ class SyncEntityType(str, enum.Enum):
     # Seit v0.27.0. Aeltere Apps ueberspringen einen unbekannten Typ (siehe
     # SyncService.applyDeletions in beiden Apps), scheitern also nicht daran.
     PROVIDER_FEE = "provider_fee"
+    # Seit v0.32.0.
+    VEHICLE_COST = "vehicle_cost"
+    # Seit v0.33.0.
+    REMINDER = "reminder"
 
 
 class DeletedRecord(Base):
@@ -920,7 +1030,7 @@ class EmailLogEntry(Base):
     subject: Mapped[str] = mapped_column(String)
     # test | password_reset | email_verify | invite | backup_failed |
     # myskoda_error | myskoda_key_expiring | review_digest | monthly_report |
-    # new_registration
+    # new_registration | reminders
     kind: Mapped[str] = mapped_column(String, index=True)
     # sent | failed | skipped
     status: Mapped[str] = mapped_column(String, index=True)

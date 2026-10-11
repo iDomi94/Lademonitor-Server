@@ -57,16 +57,20 @@ backend/app/
   models.py          - SQLAlchemy: Vehicle, Provider, ChargingLocation, ChargingSession,
                           DeletedRecord (Grabsteine, siehe Abschnitt "Sync"),
                           TireSet, TireTreadMeasurement (siehe Abschnitt "Reifensaetze")
-                          ProviderFee (siehe Abschnitt "Grundgebuehren")
+                          ProviderFee (siehe Abschnitt "Grundgebuehren"),
+                          VehicleCost (siehe Abschnitt "Fahrzeugkosten")
+                          Reminder (siehe Abschnitt "Erinnerungen")
   schemas.py          - Pydantic Request/Response-Schemas
   routers/
     vehicles.py, providers.py, locations.py, sessions.py, stats.py, importer.py,
     geocoding.py, backup.py, auth.py, webdav_backup.py, myskoda.py, email.py,
-    sync.py, tires.py, provider_fees.py
+    sync.py, tires.py, provider_fees.py, vehicle_costs.py, reminders.py
   auth.py            - Passwort-Hashing, Token-Handling, Auth-Dependencies
   sync.py            - record_deletion(): Grabstein fuer eine geloeschte Zeile
   tires.py           - Reifensaetze, temperaturbereinigter Vergleich
   fees.py            - Grundgebuehren/Abos: Perioden und Umlage nach kWh
+  vehicle_costs.py   - Fahrzeugkosten, Wertverlust (Restwertkurve), Leasing
+  reminders.py       - Erinnerungen: Status, km-Prognose, naechste Faelligkeit
   battery.py         - Akku-Index und Ladeverluste (siehe Abschnitt "Akku und Ladeverluste")
   myskoda.py         - Client fuer die offizielle MyŠkoda Public API (sync httpx)
   myskoda_poller.py  - Zustandsmaschine der automatischen Ladeerkennung + Debug-Log
@@ -2200,6 +2204,99 @@ Regelaenderungen hier dort mitziehen.
 In den Apps ersetzt das Feld ausserdem die lokale Liste "oeffentliche
 Anbieter" des Tarifrechners (siehe dort). Voraussetzung fuer den spaeteren
 Erstattungsbericht fuer den Dienstwagen (Heimladungen).
+
+## Fahrzeugkosten, Wertverlust und Leasing (`vehicle_costs.py`, `routers/vehicle_costs.py`, `templates/vehicle.html`, ab 2026-10-10, v0.32.0)
+
+Beantwortet "was kostet mich das Auto insgesamt je km" - Laden ist dabei nur
+ein Posten. Plan und Entscheidungen des Nutzers (10.10.2026):
+`/mnt/project-files/ideen/plan-schritt-3-4.md` (Runde A).
+
+**Sonstige Kosten** (`VehicleCost`, je Fahrzeug): feste Kategorienliste
+(`vehicle_costs.CATEGORIES`, "other" faengt den Rest), Wiederholung
+`once`/`monthly`/`yearly` mit optionalem inklusivem Enddatum - dieselbe
+Ankertag-Logik wie bei den Grundgebuehren (`fees.add_months`). **Ein
+Jahresbetrag zaehlt in dem Monat, in dem er faellig ist**, nicht auf zwoelf
+Monate verteilt (wie auf dem Konto). Eine Beitragsaenderung ist eine zweite
+Zeile. Strings statt Postgres-Enums (wie `energy_meter`), `label`/`notes`
+verschluesselt. Grabstein-Typ `vehicle_cost`; das Loeschen eines Fahrzeugs
+legt auch fuer seine Kosten Grabsteine an (ORM-Kaskade), `_purge_owned_data()`
+loescht sie vor den Fahrzeugen.
+
+**Kauf/Leasing** sind Felder am `Vehicle` (`ownership` none/purchase/leasing,
+PATCH mit `null` laesst es stehen). Leasing: Rate + Sonderzahlung / Laufzeit in
+Monaten; ohne Enddatum zaehlt die Sonderzahlung im ersten Monat. Kauf:
+Restwertkurve (1. Jahr linear auf 75 %, danach x0,87 je Jahr), ausgewertet
+ueber ein **wirksames Alter** = max(Kalenderalter seit Erstzulassung,
+km / 15.000). Der Kaufpreis gilt als Wert BEIM KAUF, gerechnet wird mit dem
+Verhaeltnis der Kurve zwischen Kaufzeitpunkt und Stichtag - so geht auch ein
+Gebrauchter ohne Neupreis. Die km kommen aus den Ladevorgaengen, zwischen zwei
+Staenden interpoliert, danach mit der Fahrleistung der letzten 365 Tage
+fortgeschrieben (sonst stuende der Wertverlust bei Ladepausen still).
+Monatsbetraege laufen in Perioden ab dem Kaufdatum und zaehlen voll, sobald sie
+begonnen haben; `depreciation_monthly_override` ersetzt die Kurve komplett.
+Alles wird bei jedem Abruf frisch gerechnet, nichts gespeichert.
+
+**Auswertung:** `StatsSummary.vehicle_costs` (Dashboard "Gesamtkosten") folgt
+Zeitraum- und Fahrzeugfilter, ist `None` ohne Kosten- und Kauf/Leasing-Angabe;
+`charging_cost` ist `total_cost` der Zusammenfassung (inkl. Grundgebuehren),
+`cost_per_km` teilt durch `total_km_driven`. Die uebrigen Kennzahlen bleiben
+bewusst reine Ladekosten - sonst verzerrte die Versicherung den Preis je kWh.
+`GET /api/vehicle-costs/summary` liefert dieselben Bausteine je Kalenderjahr
+(km je Jahr: letzter Stand des Jahres minus letzter Stand davor). Kategorie-
+Balken in `static/ui.js::renderCostBars` (Dashboard und Seite "Fahrzeug"),
+Namen ueber `cost_category_labels` im Template-Kontext.
+
+**Beide Apps rechnen das lokal nach** (`LocalVehicleCostCalculator`), weil ihr
+Dashboard lokal entsteht - Regelaenderungen hier dort mitziehen;
+`tests/test_vehicle_costs.py` haelt die Faelle fest. Backup: Kauf/Leasing-
+Spalten in `vehicles.csv`, `costs.csv` (beides beim Import optional).
+
+**Offen:** echte Kosten im Verbrenner-Vergleich bewusst spaeter.
+
+## Erinnerungen (`reminders.py`, `routers/reminders.py`, ab 2026-10-10, v0.33.0)
+
+Runde B aus `ideen/plan-schritt-3-4.md`. Je Fahrzeug eine Zeile
+`models.Reminder`: Art (Vorlage, String statt Enum), optionale Bezeichnung und
+Notiz (verschluesselt), faellig am Datum und/oder bei km, Wiederholung in
+Monaten und/oder km, Vorlauf (Standard 30 Tage / 1.000 km). **Gespeichert wird
+nur die naechste Faelligkeit**; Status, km-Prognose und "naechstes Datum"
+rechnet jede Antwort frisch (`reminders.evaluate()`).
+
+**Regeln** (`tests/test_reminders.py` haelt sie fest, die Apps rechnen sie in
+`LocalReminderCalculator` nach - Aenderungen dort mitziehen):
+
+- Status `overdue`, sobald das Datum VERSTRICHEN ist (der Tag selbst ist noch
+  `due_soon`) oder der km-Stand erreicht ist; `due_soon` im Vorlauf; ohne
+  jede Faelligkeit `done` (schon erledigt) bzw. `ok`. Sind Datum und km
+  gesetzt, zaehlt, was zuerst erreicht ist.
+- km-Stand = juengster der Ladevorgaenge, Fahrleistung aus 90 Tagen mit dem
+  letzten Stand VOR dem Fenster als Anker, mindestens 14 Tage Spanne, sonst
+  die ganze Historie (dieselbe Regel wie der Tarifrechner).
+- "Erledigt" (`POST /api/reminders/{id}/complete`, Standard heute bzw.
+  juengster km-Stand): naechstes Datum ab Erledigungsdatum, ausser bei
+  `FIXED_DATE_KINDS` (Reifenwechsel, Versicherung, Steuer, THG) - dort laeuft
+  der ALTE Faelligkeitstag in Wiederholungsschritten weiter, bis er nach dem
+  Erledigen liegt (Reifenwechsel am 20.10. -> naechster wieder am 15.10.).
+  km ab dem km-Stand beim Erledigen. Ohne Wiederholung bleibt die Erinnerung
+  als `done` stehen.
+- Ein neuer Reifensatz (`routers/tires.py::create_tire_set`) hakt
+  `tire_winter`/`tire_summer` ab, wenn er hoechstens 90 Tage VOR deren
+  Faelligkeit liegt - ein nachgetragener alter Wechsel soll nichts abhaken.
+- "Erledigt" schlaegt eine Kostenkategorie vor (`cost_category`); THG ist eine
+  Einnahme und bekommt keinen Vorschlag.
+
+**Mail** (`notifications.py::_run_reminders`, im 15-min-Takt): je Erinnerung
+eine Mail beim Eintritt in den Vorlauf und eine beim Ueberfaelligwerden,
+mehrere eines Nutzers in EINER Mail. Merker `Reminder.notified_stage`, geleert
+bei jeder Aenderung der Faelligkeit (PATCH, Erledigt); nur Serverzustand, nicht
+im Sync. Schalter `User.notify_reminders` (Standard an) - in
+`NotificationSettingsUpdate` bewusst optional, damit aeltere Clients ihn nicht
+zuruecksetzen.
+
+Web: Bereich "Erinnerungen" auf der Seite "Fahrzeug" (`#reminders`) mit
+Erledigt-Dialog, der danach das Kostenformular vorbelegt; Banner oben im
+Dashboard nur bei bald faelligen/ueberfaelligen, bewusst ohne Zeitraumfilter.
+Sync mit Grabstein-Typ `reminder`, Backup `reminders.csv` (optional).
 
 ## Verbrenner-Vergleich und Homescreen-Widget (nur Apps, ab 2026-09-29)
 

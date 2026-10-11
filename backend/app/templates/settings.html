@@ -28,6 +28,25 @@
         <div><label>{{ t('settings.vehicle.brand') }}</label><input id="v-brand"></div>
         <div><label>{{ t('settings.vehicle.model') }}</label><input id="v-model"></div>
         <div><label>{{ t('settings.vehicle.capacity') }}</label><input type="number" step="0.1" id="v-capacity"></div>
+        {# Kauf oder Leasing (siehe vehicle_costs.py) - fuer den Abschnitt
+           "Gesamtkosten" und die Seite "Fahrzeug". #}
+        <div><label>{{ t('settings.vehicle.ownership') }}</label>
+          <select id="v-ownership">
+            <option value="none">{{ t('settings.vehicle.ownership_none') }}</option>
+            <option value="purchase">{{ t('settings.vehicle.ownership_purchase') }}</option>
+            <option value="leasing">{{ t('settings.vehicle.ownership_leasing') }}</option>
+          </select>
+        </div>
+        <div class="v-purchase"><label>{{ t('settings.vehicle.purchase_price') }}</label><input type="number" step="1" min="0" id="v-purchase-price"></div>
+        <div class="v-purchase"><label>{{ t('settings.vehicle.purchase_date') }}</label><input type="date" id="v-purchase-date"></div>
+        <div class="v-purchase"><label>{{ t('settings.vehicle.first_registration') }}</label><input type="date" id="v-first-registration"></div>
+        <div class="v-purchase"><label>{{ t('settings.vehicle.purchase_odometer') }}</label><input type="number" step="1" min="0" id="v-purchase-odometer"></div>
+        <div class="v-purchase"><label>{{ t('settings.vehicle.depreciation_override') }}</label><input type="number" step="0.01" min="0" id="v-depreciation-override" placeholder="{{ t('settings.vehicle.depreciation_override_placeholder') }}"></div>
+        <div class="v-leasing"><label>{{ t('settings.vehicle.leasing_rate') }}</label><input type="number" step="0.01" min="0" id="v-leasing-rate"></div>
+        <div class="v-leasing"><label>{{ t('settings.vehicle.leasing_start') }}</label><input type="date" id="v-leasing-start"></div>
+        <div class="v-leasing"><label>{{ t('settings.vehicle.leasing_end') }}</label><input type="date" id="v-leasing-end"></div>
+        <div class="v-leasing"><label>{{ t('settings.vehicle.leasing_down_payment') }}</label><input type="number" step="0.01" min="0" id="v-leasing-down"></div>
+        <div id="v-ownership-hint" style="grid-column:1/-1; color:var(--muted); font-size:0.85em"></div>
         <div class="form-actions">
           <button type="button" id="vehicle-cancel-btn" style="background:var(--muted); display:none">{{ t('settings.vehicle.cancel') }}</button>
           <button type="submit" id="vehicle-submit-btn">{{ t('settings.vehicle.submit_new') }}</button>
@@ -283,6 +302,9 @@
       <div class="form-row-wide">
         <label><input type="checkbox" id="n-monthly" style="width:auto; display:inline-block; margin-right:6px">{{ t('settings.notifications.monthly_report') }}</label>
       </div>
+      <div class="form-row-wide">
+        <label><input type="checkbox" id="n-reminders" style="width:auto; display:inline-block; margin-right:6px">{{ t('settings.notifications.reminders') }}</label>
+      </div>
       {% if user.is_admin %}
       <div class="form-row-wide">
         <label><input type="checkbox" id="n-registration" style="width:auto; display:inline-block; margin-right:6px">{{ t('settings.notifications.new_registration') }}</label>
@@ -382,6 +404,10 @@ const T = {
   vehicleSubmitNew: {{ t('settings.vehicle.submit_new')|tojson }},
   vehicleSubmitEdit: {{ t('settings.vehicle.submit_edit')|tojson }},
   vehicleConfirmDelete: {{ t('settings.vehicle.confirm_delete')|tojson }},
+  vehiclePurchaseHint: {{ t('settings.vehicle.purchase_hint')|tojson }},
+  vehicleEstimate: {{ t('settings.vehicle.estimate')|tojson }},
+  vehicleLeasingHint: {{ t('settings.vehicle.leasing_hint')|tojson }},
+  vehicleLeasingMonthly: {{ t('settings.vehicle.leasing_monthly')|tojson }},
 
   providerEditHeading: {{ t('settings.provider.edit_heading')|tojson }},
   providerAddHeading: {{ t('settings.provider.add_heading')|tojson }},
@@ -499,6 +525,7 @@ function startEditVehicle(id) {
   document.getElementById('v-brand').value = v.brand || '';
   document.getElementById('v-model').value = v.model || '';
   document.getElementById('v-capacity').value = v.battery_capacity_kwh ?? '';
+  fillOwnership(v);
   document.getElementById('vehicle-form-heading').textContent = T.vehicleEditHeading;
   document.getElementById('vehicle-submit-btn').textContent = T.vehicleSubmitEdit;
   document.getElementById('vehicle-cancel-btn').style.display = 'inline-block';
@@ -510,11 +537,73 @@ function cancelEditVehicle() {
   editingVehicleId = null;
   document.getElementById('vehicle-form').reset();
   document.getElementById('v-external').disabled = false;
+  fillOwnership(null);
   document.getElementById('vehicle-form-heading').textContent = T.vehicleAddHeading;
   document.getElementById('vehicle-submit-btn').textContent = T.vehicleSubmitNew;
   document.getElementById('vehicle-cancel-btn').style.display = 'none';
 }
 document.getElementById('vehicle-cancel-btn').addEventListener('click', cancelEditVehicle);
+
+// Kauf/Leasing: Datumsfelder als JJJJ-MM-TT, leere Felder als null (damit ein
+// Leeren beim Bearbeiten auch wirklich loescht).
+const OWNERSHIP_INPUTS = {
+  purchase_price: 'v-purchase-price', purchase_date: 'v-purchase-date',
+  first_registration: 'v-first-registration', purchase_odometer_km: 'v-purchase-odometer',
+  depreciation_monthly_override: 'v-depreciation-override',
+  leasing_rate_monthly: 'v-leasing-rate', leasing_start: 'v-leasing-start',
+  leasing_end: 'v-leasing-end', leasing_down_payment: 'v-leasing-down',
+};
+const euro = n => Number(n).toLocaleString(window.LADEMONITOR_LANG, { style: 'currency', currency: 'EUR' });
+
+function showOwnershipFields() {
+  const mode = document.getElementById('v-ownership').value;
+  document.querySelectorAll('.v-purchase').forEach(el => el.hidden = mode !== 'purchase');
+  document.querySelectorAll('.v-leasing').forEach(el => el.hidden = mode !== 'leasing');
+}
+
+function fillOwnership(v) {
+  document.getElementById('v-ownership').value = (v && v.ownership) || 'none';
+  for (const [field, id] of Object.entries(OWNERSHIP_INPUTS)) {
+    const value = v ? v[field] : null;
+    const input = document.getElementById(id);
+    input.value = value === null || value === undefined ? ''
+      : (input.type === 'date' ? String(value).slice(0, 10) : value);
+  }
+  let hint = '';
+  if (v && v.ownership === 'purchase') {
+    hint = v.estimated_value !== null && v.estimated_value !== undefined
+      ? T.vehicleEstimate.replace('{value}', euro(v.estimated_value))
+          .replace('{monthly}', euro(v.depreciation_suggested_monthly))
+      : T.vehiclePurchaseHint;
+  } else if (v && v.ownership === 'leasing' && v.ownership_monthly !== null && v.ownership_monthly !== undefined) {
+    hint = T.vehicleLeasingMonthly.replace('{monthly}', euro(v.ownership_monthly));
+  }
+  document.getElementById('v-ownership-hint').dataset.saved = hint;
+  updateOwnershipHint();
+  showOwnershipFields();
+}
+
+function updateOwnershipHint() {
+  const mode = document.getElementById('v-ownership').value;
+  const el = document.getElementById('v-ownership-hint');
+  el.textContent = el.dataset.saved || (mode === 'purchase' ? T.vehiclePurchaseHint
+    : mode === 'leasing' ? T.vehicleLeasingHint : '');
+}
+document.getElementById('v-ownership').addEventListener('change', () => {
+  document.getElementById('v-ownership-hint').dataset.saved = '';
+  updateOwnershipHint();
+  showOwnershipFields();
+});
+fillOwnership(null);
+
+function ownershipPayload() {
+  const payload = { ownership: document.getElementById('v-ownership').value };
+  for (const [field, id] of Object.entries(OWNERSHIP_INPUTS)) {
+    const value = document.getElementById(id).value;
+    payload[field] = value === '' ? null : value;
+  }
+  return payload;
+}
 
 async function deleteItemVehicle(id) {
   if (!confirm(T.vehicleConfirmDelete)) return;
@@ -533,6 +622,7 @@ document.getElementById('vehicle-form').addEventListener('submit', async (e) => 
         brand: document.getElementById('v-brand').value || null,
         model: document.getElementById('v-model').value || null,
         battery_capacity_kwh: document.getElementById('v-capacity').value || null,
+        ...ownershipPayload(),
       })
     });
     cancelEditVehicle();
@@ -545,9 +635,11 @@ document.getElementById('vehicle-form').addEventListener('submit', async (e) => 
         brand: document.getElementById('v-brand').value || null,
         model: document.getElementById('v-model').value || null,
         battery_capacity_kwh: document.getElementById('v-capacity').value || null,
+        ...ownershipPayload(),
       })
     });
     e.target.reset();
+    fillOwnership(null);
   }
   loadVehicles();
 });
@@ -995,6 +1087,7 @@ function renderNotifications() {
   document.getElementById('n-backup').checked = me.notify_backup_failed;
   document.getElementById('n-myskoda').checked = me.notify_myskoda_error;
   document.getElementById('n-monthly').checked = me.notify_monthly_report;
+  document.getElementById('n-reminders').checked = me.notify_reminders !== false;
   const reg = document.getElementById('n-registration');
   if (reg) reg.checked = me.notify_new_registration;
   document.getElementById('n-review').value = me.review_digest;
@@ -1186,6 +1279,7 @@ document.getElementById('notifications-form').addEventListener('submit', async (
       notify_backup_failed: document.getElementById('n-backup').checked,
       notify_myskoda_error: document.getElementById('n-myskoda').checked,
       notify_monthly_report: document.getElementById('n-monthly').checked,
+      notify_reminders: document.getElementById('n-reminders').checked,
       // Nicht-Admins bekommen den Schalter gar nicht zu sehen - der
       // gespeicherte Wert bleibt dann unveraendert.
       notify_new_registration: reg ? reg.checked : me.notify_new_registration,

@@ -10,6 +10,7 @@ from .. import battery
 from ..consumption import compute_vehicle_consumptions
 from ..database import get_db
 from ..fees import load_allocation
+from ..vehicle_costs import cost_entries, has_cost_data, ownership_entries
 from ..temperature import (
     BUCKET_WIDTH_C,
     build_buckets,
@@ -225,6 +226,76 @@ def stats_summary(
         by_provider=by_provider,
         by_place=by_place,
         monthly=monthly,
+        vehicle_costs=build_vehicle_costs(
+            db, user, vehicle_id, start_date, end_date, round(total_cost, 2), total_km_driven
+        ),
+    )
+
+
+def build_vehicle_costs(
+    db: Session,
+    user: models.User,
+    vehicle_id: str | None,
+    start_date: date | None,
+    end_date: date | None,
+    charging_cost: float,
+    km_driven: int | None,
+) -> schemas.VehicleCostSummary | None:
+    """Gesamtkosten: Laden + sonstige Kosten + Wertverlust/Leasing.
+
+    Folgt denselben Filtern wie der Rest der Zusammenfassung. `None`, solange
+    es zu keinem der betrachteten Fahrzeuge Kosten oder eine Kauf-/
+    Leasingangabe gibt - dann blendet das Dashboard den Abschnitt aus.
+    """
+    vq = db.query(models.Vehicle).filter(models.Vehicle.user_id == user.id)
+    if vehicle_id:
+        vq = vq.filter(models.Vehicle.id == vehicle_id)
+    vehicles = vq.all()
+    if not vehicles:
+        return None
+    ids = [v.id for v in vehicles]
+    costs = db.query(models.VehicleCost).filter(models.VehicleCost.vehicle_id.in_(ids)).all()
+    if not any(has_cost_data(v, costs) for v in vehicles):
+        return None
+
+    today = date.today()
+    until = min(end_date, today) if end_date else today
+    entries = cost_entries(costs, until)
+    for v in vehicles:
+        if v.ownership not in ("purchase", "leasing"):
+            continue
+        # Die km-Staende fuer die Restwertkurve kommen aus der GANZEN
+        # Historie des Fahrzeugs, nicht nur aus dem gefilterten Zeitraum.
+        history = (
+            db.query(models.ChargingSession)
+            .filter(
+                models.ChargingSession.vehicle_id == v.id,
+                models.ChargingSession.odometer_km.isnot(None),
+            )
+            .all()
+        )
+        entries.extend(ownership_entries(v, history, until))
+    entries = [e for e in entries if not start_date or e.day >= start_date]
+
+    by_cat: dict[str, float] = defaultdict(float)
+    if charging_cost:
+        by_cat["charging"] = charging_cost
+    for e in entries:
+        by_cat[e.category] += e.amount
+    ownership_cost = sum(a for c, a in by_cat.items() if c in ("depreciation", "leasing"))
+    other_cost = sum(a for c, a in by_cat.items() if c not in ("charging", "depreciation", "leasing"))
+    total = charging_cost + other_cost + ownership_cost
+    return schemas.VehicleCostSummary(
+        charging_cost=round(charging_cost, 2),
+        other_cost=round(other_cost, 2),
+        ownership_cost=round(ownership_cost, 2),
+        total_cost=round(total, 2),
+        cost_per_km=round(total / km_driven, 3) if km_driven and km_driven > 0 else None,
+        by_category=[
+            schemas.CostCategoryStat(category=c, amount=round(a, 2))
+            for c, a in sorted(by_cat.items(), key=lambda kv: kv[1], reverse=True)
+            if a
+        ],
     )
 
 
