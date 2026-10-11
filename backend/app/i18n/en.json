@@ -914,5 +914,10 @@
   "email.reminders.heading": "Reminders",
   "email.reminders.intro": "These reminders are due soon or already overdue:",
   "email.reminders.button": "Open reminders",
-  "email.reminders.forecast": "expected around {date}"
+  "email.reminders.forecast": "expected around {date}",
+  "range.heading": "Real-world range (100 → 0 %)",
+  "range.note": "{capacity} kWh usable, measured between {from} and {to} °C",
+  "range.loss": "{loss} % charging loss removed",
+  "range.no_loss": "Charging loss unknown (too few sessions measured at the charger) – range rather too low",
+  "range.extrapolated": "* extrapolated, your data has never been this warm or cold"
 }

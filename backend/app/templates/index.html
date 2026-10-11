@@ -93,6 +93,14 @@
   <div id="temp-seasons"></div>
 </div>
 
+<div id="range-section" hidden>
+<h2>{{ t('range.heading') }}</h2>
+<div class="card">
+  <div id="range-bars"></div>
+  <p class="chartnote" id="range-note"></p>
+</div>
+</div>
+
 <h2>{{ t('battery.heading') }}</h2>
 
 <details class="help">
@@ -135,6 +143,10 @@ const TEMP_T = {
   tableConsumption: {{ t('temp.table.consumption')|tojson }},
   tableSessions: {{ t('temp.table.sessions')|tojson }},
   tableKm: {{ t('temp.table.km')|tojson }},
+  rangeNote: {{ t('range.note')|tojson }},
+  rangeLoss: {{ t('range.loss')|tojson }},
+  rangeNoLoss: {{ t('range.no_loss')|tojson }},
+  rangeExtrapolated: {{ t('range.extrapolated')|tojson }},
 };
 
 const BATTERY_T = {
@@ -184,7 +196,7 @@ function formatMonthLabelShort(monthKey) {
 
 // Leichtgewichtige SVG-Diagramme ohne externe Abhaengigkeit (z.B. falls kein
 // Internetzugriff zu einem CDN besteht - laeuft komplett lokal im Server-HTML).
-function renderBarChart(containerId, labels, values, color, unit) {
+function renderBarChart(containerId, labels, values, color, unit, decimals = 1) {
   const container = document.getElementById(containerId);
   if (!container) return;
   const max = Math.max(...values, 0.0001);
@@ -201,7 +213,7 @@ function renderBarChart(containerId, labels, values, color, unit) {
     bars += `
       <text x="0" y="${y + barHeight / 2 + 4}" fill="#8b95ab" font-size="12">${label}</text>
       <rect x="${labelWidth}" y="${y}" width="${barW}" height="${barHeight}" rx="4" fill="${color}"></rect>
-      <text x="${labelWidth + barW + 8}" y="${y + barHeight / 2 + 4}" fill="#e6e9f0" font-size="12">${values[i].toFixed(1)}${unit}</text>
+      <text x="${labelWidth + barW + 8}" y="${y + barHeight / 2 + 4}" fill="#e6e9f0" font-size="12">${values[i].toFixed(decimals)}${unit}</text>
     `;
   });
 
@@ -616,6 +628,35 @@ async function loadTemperature() {
     ' kWh/100 km',
   );
   document.getElementById('temp-seasons-card').hidden = seasons.length === 0;
+
+  renderRange(data.range);
+}
+
+// Reale Reichweite 100 -> 0 % (range_estimate.py). Nur bei genau einem
+// Fahrzeug - sonst liefert der Server null und der Abschnitt bleibt weg.
+function renderRange(range) {
+  const section = document.getElementById('range-section');
+  section.hidden = !range || range.rows.length === 0;
+  if (section.hidden) return;
+  renderBarChart(
+    'range-bars',
+    range.rows.map(r => `${fmtNumber(r.temp_c, 0)} °C${r.extrapolated ? '*' : ''}`),
+    range.rows.map(r => r.range_km),
+    TEMP_COLORS.buckets,
+    ' km',
+    0,
+  );
+  const parts = [
+    range.loss_pct != null
+      ? TEMP_T.rangeLoss.replace('{loss}', fmtNumber(range.loss_pct, 0))
+      : TEMP_T.rangeNoLoss,
+    TEMP_T.rangeNote
+      .replace('{capacity}', fmtNumber(range.capacity_kwh, 0))
+      .replace('{from}', fmtNumber(range.measured_from_c, 0))
+      .replace('{to}', fmtNumber(range.measured_to_c, 0)),
+  ];
+  if (range.rows.some(r => r.extrapolated)) parts.push(TEMP_T.rangeExtrapolated);
+  setText('range-note', parts.join(' · '));
 }
 
 async function loadStats() {

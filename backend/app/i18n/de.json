@@ -914,5 +914,10 @@
   "email.reminders.heading": "Erinnerungen",
   "email.reminders.intro": "Diese Erinnerungen sind bald fällig oder bereits überfällig:",
   "email.reminders.button": "Erinnerungen öffnen",
-  "email.reminders.forecast": "voraussichtlich am {date}"
+  "email.reminders.forecast": "voraussichtlich am {date}",
+  "range.heading": "Reale Reichweite (100 → 0 %)",
+  "range.note": "{capacity} kWh nutzbar, gemessen zwischen {from} und {to} °C",
+  "range.loss": "Ladeverlust von {loss} % herausgerechnet",
+  "range.no_loss": "Ladeverlust unbekannt (zu wenige an der Ladesäule gemessene Ladungen) – Reichweite eher zu niedrig",
+  "range.extrapolated": "* hochgerechnet, so warm oder kalt war es in deinen Daten noch nie"
 }

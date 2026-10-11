@@ -71,6 +71,7 @@ backend/app/
   fees.py            - Grundgebuehren/Abos: Perioden und Umlage nach kWh
   vehicle_costs.py   - Fahrzeugkosten, Wertverlust (Restwertkurve), Leasing
   reminders.py       - Erinnerungen: Status, km-Prognose, naechste Faelligkeit
+  range_estimate.py  - Reale Reichweite je Temperatur (Verbrauch ab Akku)
   battery.py         - Akku-Index und Ladeverluste (siehe Abschnitt "Akku und Ladeverluste")
   myskoda.py         - Client fuer die offizielle MyŠkoda Public API (sync httpx)
   myskoda_poller.py  - Zustandsmaschine der automatischen Ladeerkennung + Debug-Log
@@ -2297,6 +2298,33 @@ Web: Bereich "Erinnerungen" auf der Seite "Fahrzeug" (`#reminders`) mit
 Erledigt-Dialog, der danach das Kostenformular vorbelegt; Banner oben im
 Dashboard nur bei bald faelligen/ueberfaelligen, bewusst ohne Zeitraumfilter.
 Sync mit Grabstein-Typ `reminder`, Backup `reminders.csv` (optional).
+
+## Reale Reichweite je Temperatur (`range_estimate.py`, ab 2026-10-11, v0.34.0)
+
+Schritt 5 aus `ideen/plan-schritt-5.md`. `GET /api/stats/temperature` liefert
+zusaetzlich `range`: Reichweite 100 -> 0 % = Nennkapazitaet / Verbrauch AB AKKU,
+in 5-Grad-Schritten ueber den gemessenen Bereich plus immer 0 und 20 Grad
+(`extrapolated` ausserhalb), dazu `curve` je ganzem Grad -20..40 fuer den
+Reichweitenrechner der Apps (die interpolieren nur, kennen das Kurvenmodell
+nicht). Nur bei genau EINEM Fahrzeug mit Akkukapazitaet.
+
+**Entscheidungen des Nutzers (11.10.2026):** Ladeverlust herausrechnen, wenn
+bekannt; Akku-Index NICHT einrechnen (kein echter SoH); der Rechner nur in den
+Apps (Tools-Reiter), im Web nur die Kachel.
+
+**Ab Akku je Fahrt, nicht pauschal:** die Verbrauchswerte sind aus GELADENEN kWh
+gerechnet. Geteilt durch (1 + Verlust) werden nur Fahrten, deren Vorgang an der
+Ladesaeule gemessen wurde - geschaetzte Energie und Fahrzeugmessung sind schon
+ab Akku. Dann wird eine eigene Kurve (`build_trend`) durch die korrigierten
+Punkte gelegt; sie kann ein anderes Modell haben als die angezeigte. Verlust =
+energiegewichteter Gesamtwert aus `battery.collect_points` (AC und DC gemischt,
+wie die Fahrten), ab `MIN_LOSS_SESSIONS` (3), nie negativ; sonst `loss_pct`
+None und die Oberflaeche sagt, dass die Reichweite eher zu niedrig ist. Werte
+unter 8 kWh/100 km (ein hochgerechneter Ast gegen null) werden weggelassen.
+
+**Nebenbei behoben:** `trend` in derselben Antwort lieferte `model`, `curve`,
+`breakpoint_c` usw. seit v0.25.0 nie aus - der Router reichte nur die
+Gerade durch; Web und Apps fielen deshalb immer auf die Gerade zurueck.
 
 ## Verbrenner-Vergleich und Homescreen-Widget (nur Apps, ab 2026-09-29)
 

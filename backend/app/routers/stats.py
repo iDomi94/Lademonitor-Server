@@ -10,6 +10,7 @@ from .. import battery
 from ..consumption import compute_vehicle_consumptions
 from ..database import get_db
 from ..fees import load_allocation
+from ..range_estimate import build_range
 from ..vehicle_costs import cost_entries, has_cost_data, ownership_entries
 from ..temperature import (
     BUCKET_WIDTH_C,
@@ -421,12 +422,66 @@ def stats_temperature(
                 consumption_at_0c=trend.consumption_at_0c,
                 consumption_at_20c=trend.consumption_at_20c,
                 extra_pct_at_0c=trend.extra_pct_at_0c,
+                # Bis v0.34.0 fehlten die folgenden Felder in der Antwort -
+                # alle Clients fielen deshalb auf die einfache Gerade zurueck.
+                model=trend.model,
+                curve=[
+                    schemas.TempCurveVertexOut(temp_c=v.temp_c, consumption=v.consumption)
+                    for v in trend.curve
+                ],
+                breakpoint_c=trend.breakpoint_c,
+                slope_cold=trend.slope_cold,
+                slope_warm=trend.slope_warm,
+                at_0c_is_extrapolated=trend.at_0c_is_extrapolated,
             )
             if (trend := build_trend(points))
             else None
         ),
         sessions_without_temp=without_temp,
         bucket_width_c=BUCKET_WIDTH_C,
+        range=_range_out(db, user, sessions, points, vehicle_id),
+    )
+
+
+def _range_out(db, user, sessions, points, vehicle_id) -> schemas.TempRangeOut | None:
+    """Reale Reichweite (range_estimate.py) - nur fuer genau EIN Fahrzeug:
+    die Kurve mehrerer Autos passt zu keiner Akkukapazitaet."""
+    sessions_by_id = {s.id: s for s in sessions}
+    vehicle_ids = {sessions_by_id[p.session_id].vehicle_id for p in points if p.session_id in sessions_by_id}
+    if vehicle_id:
+        vehicle_ids = {vehicle_id}
+    if len(vehicle_ids) != 1:
+        return None
+    vehicle = (
+        db.query(models.Vehicle)
+        .filter(models.Vehicle.id == next(iter(vehicle_ids)), models.Vehicle.user_id == user.id)
+        .first()
+    )
+    if vehicle is None:
+        return None
+    provider_meters = {
+        p.id: p.energy_meter
+        for p in db.query(models.Provider).filter(models.Provider.user_id == user.id).all()
+    }
+    estimate = build_range(points, sessions_by_id, vehicle, provider_meters)
+    if estimate is None:
+        return None
+    return schemas.TempRangeOut(
+        vehicle_id=estimate.vehicle_id,
+        capacity_kwh=estimate.capacity_kwh,
+        loss_pct=estimate.loss_pct,
+        measured_from_c=estimate.measured_from_c,
+        measured_to_c=estimate.measured_to_c,
+        rows=[
+            schemas.TempRangeRowOut(
+                temp_c=r.temp_c,
+                consumption_kwh_per_100km=r.consumption,
+                range_km=r.range_km,
+                extrapolated=r.extrapolated,
+            )
+            for r in estimate.rows
+        ],
+        curve=[schemas.TempCurveVertexOut(temp_c=t, consumption=c) for t, c in estimate.curve],
     )
 
 

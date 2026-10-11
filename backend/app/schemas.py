@@ -1168,6 +1168,31 @@ class TempTrendOut(BaseModel):
     at_0c_is_extrapolated: bool = False
 
 
+class TempRangeRowOut(BaseModel):
+    temp_c: int
+    # Verbrauch AB AKKU (Ladeverlust herausgerechnet, falls bekannt)
+    consumption_kwh_per_100km: float
+    # Reichweite 100 -> 0 %
+    range_km: int
+    # Ausserhalb der gemessenen Fahrten - Hochrechnung, keine Messung
+    extrapolated: bool
+
+
+class TempRangeOut(BaseModel):
+    """Reale Reichweite je Temperatur (range_estimate.py)."""
+
+    vehicle_id: str
+    capacity_kwh: float
+    # Abgezogener Ladeverlust in Prozent; None = unbekannt, nichts abgezogen
+    loss_pct: float | None = None
+    measured_from_c: float
+    measured_to_c: float
+    rows: list[TempRangeRowOut]
+    # Verbrauch ab Akku je ganzem Grad (-20..40) fuer den Reichweitenrechner
+    # der Apps - sie interpolieren und muessen das Kurvenmodell nicht kennen.
+    curve: list[TempCurveVertexOut]
+
+
 class TemperatureStats(BaseModel):
     points: list[TempPointOut]
     buckets: list[TempBucketOut]
@@ -1179,6 +1204,8 @@ class TemperatureStats(BaseModel):
     # sichtbar, wie vollstaendig die Grundlage ist.
     sessions_without_temp: int = 0
     bucket_width_c: int
+    # Nur bei genau einem Fahrzeug mit Akkukapazitaet und belastbarer Kurve.
+    range: TempRangeOut | None = None
 
 
 # ---------- Akku-Gesundheit und Ladeverluste (battery.py) ----------

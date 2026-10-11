@@ -5,6 +5,16 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.34.0",
+        "date": "2026-10-11",
+        "title": "Reale Reichweite je Temperatur",
+        "changes": [
+            "Dashboard: neuer Abschnitt „Reale Reichweite (100 → 0 %)“ – wie weit du mit einer vollen Ladung bei 0, 5, 10, … °C realistisch kommst, aus deinen eigenen Fahrten und der Temperaturkurve. Erscheint, sobald genau ein Fahrzeug mit Akkukapazität gewählt ist (oder du nur eines hast).",
+            "Der Ladeverlust wird dabei herausgerechnet, sofern genug an der Ladesäule gemessene Ladungen vorliegen: der Verbrauch in Lademonitor zählt die geladenen kWh, aus dem Akku kommt weniger. Temperaturen außerhalb deiner Daten sind als hochgerechnet markiert.",
+            "Behoben: die Temperaturauswertung lieferte das Modell mit zwei Geraden (Knick) nie aus – Dashboard und Apps zeichneten deshalb immer nur die einfache Ausgleichsgerade.",
+        ],
+    },
+    {
         "version": "0.33.0",
         "date": "2026-10-10",
         "title": "Erinnerungen",
