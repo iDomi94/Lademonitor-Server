@@ -57,6 +57,41 @@
       </div>`).join('');
   };
 
+  /** Vertikales (Saeulen-)Diagramm als Inline-SVG, z.B. fuer den
+   *  Monatstrend beim Verbrauch (Dashboard) und kWh je Monat (Rueckblick).
+   *  Werte mit null werden als Luecke dargestellt - eine Saeule der Hoehe 0
+   *  saehe aus wie ein gemessener Monat ohne Verbrauch. */
+  window.renderVerticalBarChart = function (containerId, labels, values, color, decimals = 1) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    const known = values.filter(v => v != null);
+    const max = Math.max(...known, 0.0001);
+    const barWidth = 40;
+    const gap = 30;
+    const chartHeight = 200;
+    const topPad = 24;
+    const bottomPad = 30;
+    const width = labels.length * (barWidth + gap);
+    const height = topPad + chartHeight + bottomPad;
+
+    let bars = '';
+    labels.forEach((label, i) => {
+      const value = values[i];
+      const x = gap / 2 + i * (barWidth + gap);
+      if (value != null) {
+        const h = Math.max((value / max) * chartHeight, 2);
+        const y = topPad + (chartHeight - h);
+        bars += `
+          <rect x="${x}" y="${y}" width="${barWidth}" height="${h}" rx="4" fill="${color}"></rect>
+          <text class="bar-value" x="${x + barWidth / 2}" y="${y - 8}" fill="#e6e9f0" font-size="11" text-anchor="middle">${value.toFixed(decimals)}</text>
+        `;
+      }
+      bars += `<text class="bar-label" x="${x + barWidth / 2}" y="${topPad + chartHeight + 20}" fill="#8b95ab" font-size="12" text-anchor="middle">${label}</text>`;
+    });
+
+    container.innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}">${bars}</svg>`;
+  };
+
   /** Bearbeiten + Loeschen als Paar - die Aktionsspalte praktisch aller
    *  Tabellen dieser App. */
   window.editDeleteButtons = function (editCall, deleteCall, editLabel, deleteLabel) {

@@ -19,6 +19,15 @@
   <div class="card"><div class="stat-label">{{ t('dashboard.stat.km') }}</div><div class="stat-value" id="s-km">–</div></div>
 </div>
 
+{# Kachel "Jahresrueckblick" (review.py): ab 1. Dezember das laufende Jahr,
+   sonst das Vorjahr. Folgt wie das Erinnerungsbanner KEINEM Filter - der
+   Rueckblick hat seinen eigenen Zeitraum. #}
+<a class="card review-tile" id="review-tile" href="review" hidden>
+  <div class="review-tile-title" id="review-tile-title"></div>
+  <div class="review-tile-figures" id="review-tile-figures"></div>
+  <div class="review-tile-more">{{ t('dashboard.review.open') }}</div>
+</a>
+
 <h2>{{ t('dashboard.provider_distribution') }}</h2>
 <div style="display:flex; gap:24px; flex-wrap:wrap; margin-bottom:24px">
   <div class="card" style="flex:1; min-width:260px">
@@ -220,38 +229,8 @@ function renderBarChart(containerId, labels, values, color, unit, decimals = 1) 
   container.innerHTML = `<svg viewBox="0 0 ${chartWidth} ${height}" width="100%" height="${height}">${bars}</svg>`;
 }
 
-// Vertikales (Saeulen-)Diagramm, z.B. fuer den Monatstrend beim Verbrauch -
-// Werte mit null (kein berechenbarer Monat) werden als Luecke dargestellt.
-function renderVerticalBarChart(containerId, labels, values, color) {
-  const container = document.getElementById(containerId);
-  if (!container) return;
-  const known = values.filter(v => v != null);
-  const max = Math.max(...known, 0.0001);
-  const barWidth = 40;
-  const gap = 30;
-  const chartHeight = 200;
-  const topPad = 24;
-  const bottomPad = 30;
-  const width = labels.length * (barWidth + gap);
-  const height = topPad + chartHeight + bottomPad;
-
-  let bars = '';
-  labels.forEach((label, i) => {
-    const value = values[i];
-    const x = gap / 2 + i * (barWidth + gap);
-    if (value != null) {
-      const h = Math.max((value / max) * chartHeight, 2);
-      const y = topPad + (chartHeight - h);
-      bars += `
-        <rect x="${x}" y="${y}" width="${barWidth}" height="${h}" rx="4" fill="${color}"></rect>
-        <text x="${x + barWidth / 2}" y="${y - 8}" fill="#e6e9f0" font-size="11" text-anchor="middle">${value.toFixed(1)}</text>
-      `;
-    }
-    bars += `<text x="${x + barWidth / 2}" y="${topPad + chartHeight + 20}" fill="#8b95ab" font-size="12" text-anchor="middle">${label}</text>`;
-  });
-
-  container.innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}">${bars}</svg>`;
-}
+// renderVerticalBarChart (Monatstrend beim Verbrauch) liegt seit v0.36.0 in
+// static/ui.js - der Rueckblick (review.html) zeichnet damit kWh je Monat.
 
 // Farben in fester Reihenfolge - immer dieselbe Farbe fuer denselben Anbieter,
 // egal ob im kWh- oder Bezahlt-Kuchendiagramm (Farbe folgt der Entitaet)
@@ -818,6 +797,34 @@ async function loadReminderBanner() {
   }).join('') + `<p class="chartnote"><a class="cost-link" href="vehicle#reminders">${REMINDER_T.open}</a></p>`;
 }
 
+const REVIEW_T = {
+  title: {{ t('dashboard.review.title')|tojson }},
+  saved: {{ t('dashboard.review.saved')|tojson }},
+};
+
+async function loadReviewTile() {
+  const now = new Date();
+  const year = now.getMonth() === 11 ? now.getFullYear() : now.getFullYear() - 1;
+  const res = await fetch(`api/stats/review?period=year&year=${year}`);
+  if (!res.ok) return;
+  const r = await res.json();
+  const tile = document.getElementById('review-tile');
+  // Die Kachel ist zugleich der Einstieg in die Seite - sie bleibt deshalb
+  // auch ohne Ladevorgang im Jahr stehen, nur ohne Zahlen.
+  tile.hidden = false;
+  tile.href = `review#period=year&year=${year}`;
+  document.getElementById('review-tile-title').textContent = REVIEW_T.title.replace('{year}', year);
+  if (!r.totals.sessions) return;
+  const money = n => n.toLocaleString(LOCALE, { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
+  const parts = [
+    `${r.totals.kwh.toLocaleString(LOCALE, { maximumFractionDigits: 0 })} kWh`,
+    money(r.totals.cost),
+  ];
+  if (r.totals.km > 0) parts.push(`${r.totals.km.toLocaleString(LOCALE, { maximumFractionDigits: 0 })} km`);
+  if (r.savings && r.savings.saved_eur > 0) parts.push(REVIEW_T.saved.replace('{amount}', money(r.savings.saved_eur)));
+  document.getElementById('review-tile-figures').textContent = parts.join(' · ');
+}
+
 function loadAll() {
   loadStats();
   loadTemperature();
@@ -826,5 +833,6 @@ function loadAll() {
 renderFilterBar('filter-bar', loadAll);
 loadAll();
 loadReminderBanner();
+loadReviewTile();
 </script>
 {% endblock %}

@@ -61,11 +61,14 @@ backend/app/
                           VehicleCost (siehe Abschnitt "Fahrzeugkosten")
                           Reminder (siehe Abschnitt "Erinnerungen")
                           ReimbursementRate (siehe Abschnitt "Erstattungsbericht Dienstwagen")
+                          User.combustion_* (Vergleichsfahrzeug, siehe Abschnitt
+                          "Jahres- und Monatsrueckblick")
   schemas.py          - Pydantic Request/Response-Schemas
   routers/
     vehicles.py, providers.py, locations.py, sessions.py, stats.py, importer.py,
     geocoding.py, backup.py, auth.py, webdav_backup.py, myskoda.py, email.py,
-    sync.py, tires.py, provider_fees.py, vehicle_costs.py, reminders.py, reimbursement.py
+    sync.py, tires.py, provider_fees.py, vehicle_costs.py, reminders.py, reimbursement.py,
+    combustion_vehicle.py
   auth.py            - Passwort-Hashing, Token-Handling, Auth-Dependencies
   sync.py            - record_deletion(): Grabstein fuer eine geloeschte Zeile
   tires.py           - Reifensaetze, temperaturbereinigter Vergleich
@@ -73,6 +76,7 @@ backend/app/
   vehicle_costs.py   - Fahrzeugkosten, Wertverlust (Restwertkurve), Leasing
   reminders.py       - Erinnerungen: Status, km-Prognose, naechste Faelligkeit
   reimbursement.py   - Erstattungsbericht Dienstwagen (Heimladungen, CSV)
+  review.py          - Jahres- und Monatsrueckblick, Vergleichsfahrzeug
   range_estimate.py  - Reale Reichweite je Temperatur (Verbrauch ab Akku)
   battery.py         - Akku-Index und Ladeverluste (siehe Abschnitt "Akku und Ladeverluste")
   myskoda.py         - Client fuer die offizielle MyŠkoda Public API (sync httpx)
@@ -81,7 +85,8 @@ backend/app/
   notifications.py   - Benachrichtigungen (ereignisgetrieben + zeitgesteuert)
   templates/          - Jinja2 Web-UI (index=Dashboard, sessions, map, tires, settings +
                           die Unterseiten import, settings_backup, settings_api,
-                          settings_email; auth_base.html fuer die Seiten ohne
+                          settings_email; review fuer den Rueckblick;
+                          auth_base.html fuer die Seiten ohne
                           Anmeldung; emails/ fuer die Mail-Vorlagen)
   static/style.css, static/filter.js, static/ui.js, static/sw.js,
   static/vendor/leaflet/  - Leaflet 1.9.4 lokal (siehe Abschnitt "Kartenansicht")
@@ -1429,6 +1434,9 @@ dieses Projekt real gestolpert ist:
   keiner.
 - `test_tire_dot_tread.py` - DOT-Parsing/-Alter, Profilmessungen inkl.
   Messung beider Saetze beim Wechsel und Minimum aus den Einzelwerten.
+- `test_review.py` - Jahres-/Monatsrueckblick nach dem Vertrag (km mit Anker,
+  Kosten inkl. Gebuehren, Vorperiode, Ersparnis, jeder Rekord samt Schwellen
+  und Gleichstand), Vergleichsfahrzeug und Jahresmail inkl. Merker.
 
 **Was bewusst NICHT getestet wird - und deshalb weiterhin von Hand gegen eine
 Kopie der Produktiv-DB geprueft werden MUSS:**
@@ -2366,6 +2374,79 @@ Die Druckansicht blendet per `@media print` (style.css) alles ausser
 `#rb-report` aus. Die Monatsmail (`notifications.py::_run_reimbursement_reports`)
 schreibt den Merker auch bei fehlgeschlagenem Versand fort, wie der
 Monatsbericht. `mailer.send(attachments=...)` macht daraus multipart/mixed.
+
+## Jahres- und Monatsrueckblick (`review.py`, ab 2026-10-11, v0.36.0)
+
+Schritt 11 aus `ideen/plan-schritt-11.md`, verbindlich fuer alle drei Repos ist
+`ideen/schritt-11-vertrag.md`. Eine Seite je Kalenderjahr oder -monat, alles
+aus vorhandenen Daten: die grossen Zahlen mit Vergleich zur Vorperiode, die
+Ersparnis gegenueber einem Verbrenner, Rekorde, Verteilung und (beim Jahr) kWh
+je Monat. `GET /api/stats/review?period=year|month&year=&month=&vehicle_id=`
+liefert alles in einer Antwort (`schemas.ReviewOut`).
+
+**Entscheidungen des Nutzers (11.10.2026):** die Apps rechnen den Rueckblick
+LOKAL als Ansicht nach (Tools -> "Rueckblick", auch im Local-Only-Modus) - die
+Regeln liegen damit wie beim Dashboard zweimal, Aenderungen in `review.py`
+MUESSEN dort mitgezogen werden (`tests/test_review.py` haelt sie fest); das
+**Vergleichsfahrzeug ist global** je Nutzer, auf dem Server gespeichert und mit
+den Apps synchronisiert; der **Jahresrueckblick per Mail ist Standard an**, die
+Monatszusammenfassung (= der bestehende Monatsbericht) Standard aus; **beide
+Schalter in Web und Apps**. Zusaetzliche Rekorde: laengste Strecke zwischen
+zwei Ladungen, sparsamster/durstigster Monat (nur im Jahr, ab zwei Monaten mit
+Wert).
+
+**Regeln, die nicht offensichtlich sind:**
+
+- Zugeordnet wird ueber den lokalen Kalendertag von `start_time`, beide Enden
+  inklusive. Gerechnet wird aber immer ueber die GANZE Historie und erst danach
+  gefiltert: Verbrauch (Kette, `consumption.py`), km (Anker = letzter Stand
+  desselben Fahrzeugs VOR dem Zeitraum, ohne den der erste im Zeitraum;
+  negativ wird 0) und Grundgebuehren (Umlage ueber alle Vorgaenge, `fees.py`).
+  Darin unterscheidet sich `totals.km` bewusst von `StatsSummary.total_km_driven`
+  mit Datumsfilter, das ohne Anker rechnet.
+- `cost` enthaelt den Gebuehrenanteil und die nicht umgelegten Perioden, die im
+  Zeitraum beginnen - letztere nur ohne Fahrzeugfilter (wie im Dashboard).
+- `previous` ist null, wenn die Vorperiode keinen Vorgang hat; `savings` null
+  ohne gefahrene km. `saved_eur` darf negativ sein.
+- Rekorde je kWh nehmen den Saeulenpreis OHNE Grundgebuehr (der Anteil ist kein
+  Merkmal des Vorgangs) und nur Vorgaenge ab 1 kWh mit Preis; Minimum/Maximum
+  und Temperaturrekorde erst ab zwei Kandidaten. Gleichstand: der fruehere
+  Vorgang (start_time, dann id); bei Ladeort/Anbieter mehr kWh, dann
+  alphabetisch.
+- **Gerundet wird erst in der Anzeige** - die Antwort traegt rohe Werte (anders
+  als `/summary`), damit Summen in Web, Mail und Apps nicht durch
+  Zwischenrundung auseinanderlaufen. Ausnahme: `split.by_place` kommt aus
+  `routers/stats.py::build_by_place()` und ist dort schon gerundet.
+
+**Vergleichsfahrzeug** (`routers/combustion_vehicle.py`): Spalten
+`combustion_*` am `User`, `GET`/`PUT /api/combustion-vehicle`. Ohne gespeicherte
+Werte liefert GET die Standardwerte (`review.COMBUSTION_DEFAULTS`: Benzin 7,0 l
+zu 1,75 EUR, Diesel 5,8 l zu 1,65 EUR, Strommix 0,36 kg/kWh) mit
+`configured=false` - die Apps erkennen daran, dass sie ihre lokalen Werte nicht
+ueberschreiben muessen. PUT verlangt alle vier Felder. CO2 nur Tank-to-Wheel
+(2,37/2,65 kg/l) wie das App-Tool "Vergleich mit Verbrenner" im Modus Betrieb.
+Nicht im Backup - Nutzer-Spalten stehen dort generell nicht drin.
+
+**Mails** bauen auf derselben Funktion `build_review()` auf wie der Endpunkt
+(`notifications.py::_review_rows`). Jahresrueckblick
+(`_run_yearly_reviews`, 15-min-Scheduler): ab dem 1. Januar einmal fuers
+Vorjahr, nur mit mindestens einem Vorgang; Merker `last_yearly_review_year`
+auch ohne Versand. Bewusst OHNE Zeitfenster: wer das Update mitten im Jahr
+einspielt oder den Schalter spaeter einschaltet, bekommt den Rueckblick aufs
+Vorjahr einmal nachgereicht - so gewollt (Entscheidung des Nutzers
+11.10.2026: beim Einspielen von v0.36.0 im Oktober darf der Rueckblick auf
+2025 einmalig rausgehen). Der Monatsbericht bekommt Vormonatsvergleich, Ersparnis und Rekorde
+dazu, sein Knopf fuehrt auf `review#period=month&...`. `notify_yearly_review`
+ist in `NotificationSettingsUpdate` optional (aeltere Clients).
+
+**Web:** Seite `review` (oberste Ebene, Zustand im Hash, damit Kachel und Mail
+direkt verlinken koennen), Druckansicht ueber dieselbe `@media print`-Regel wie
+der Erstattungsbericht (`#rv-report.print-area`), Kachel im Dashboard (ab 1.
+Dezember das laufende Jahr, sonst das Vorjahr; bleibt auch ohne Vorgaenge als
+Einstieg stehen), Abschnitt "Vergleichsfahrzeug" und Schalter "Jahresrueckblick
+per Mail" in den Einstellungen. Zeilen ohne Daten fallen weg statt "–".
+`renderVerticalBarChart` ist dafuer aus `index.html` nach `static/ui.js`
+gewandert.
 
 ## Verbrenner-Vergleich und Homescreen-Widget (nur Apps, ab 2026-09-29)
 

@@ -281,6 +281,34 @@
   </div>
 </details>
 
+{# Vergleichsfahrzeug fuer die Ersparnis im Rueckblick (review.py). Global je
+   Nutzer und mit den Apps synchronisiert - solange nichts gespeichert ist,
+   gelten die Standardwerte (Hinweis darunter). #}
+<details class="panel" id="combustion-panel">
+  <summary>{{ t('settings.combustion.heading') }}</summary>
+  <div class="inner">
+    <p style="color:var(--muted); font-size:0.9em; margin-top:0">{{ t('settings.combustion.description') }}</p>
+    <form class="inline-form" id="combustion-form">
+      <div><label>{{ t('settings.combustion.fuel_type') }}</label>
+        <select id="c-fuel">
+          <option value="petrol">{{ t('review.fuel.petrol') }}</option>
+          <option value="diesel">{{ t('review.fuel.diesel') }}</option>
+        </select>
+      </div>
+      <div><label>{{ t('settings.combustion.consumption') }}</label>
+        <input type="number" id="c-consumption" step="0.1" min="1" max="30" required></div>
+      <div><label>{{ t('settings.combustion.fuel_price') }}</label>
+        <input type="number" id="c-price" step="0.01" min="0.5" max="5" required></div>
+      <div><label>{{ t('settings.combustion.grid_co2') }}</label>
+        <input type="number" id="c-co2" step="0.01" min="0" max="1.5" required></div>
+      <div class="form-actions">
+        <button type="submit">{{ t('settings.combustion.save') }}</button>
+      </div>
+    </form>
+    <div id="combustion-status" style="font-size:0.9em"></div>
+  </div>
+</details>
+
 <details class="panel" id="notifications-panel">
   <summary>{{ t('settings.notifications.heading') }}</summary>
   <div class="inner">
@@ -304,6 +332,9 @@
       </div>
       <div class="form-row-wide">
         <label><input type="checkbox" id="n-reminders" style="width:auto; display:inline-block; margin-right:6px">{{ t('settings.notifications.reminders') }}</label>
+      </div>
+      <div class="form-row-wide">
+        <label><input type="checkbox" id="n-yearly" style="width:auto; display:inline-block; margin-right:6px">{{ t('settings.notifications.yearly_review') }}</label>
       </div>
       {% if user.is_admin %}
       <div class="form-row-wide">
@@ -395,6 +426,7 @@ const LOCALE = {{ lang|default('de')|tojson }} === 'en' ? 'en-US' : 'de-DE';
 // {{ t('...') }} aus der aktiven Sprache befuellt (siehe i18n/__init__.py),
 // statt jede Stelle im JS unten einzeln mit Jinja zu durchsetzen.
 const T = {
+  combustionDefaults: {{ t('settings.combustion.defaults_hint')|tojson }},
   edit: {{ t('common.edit')|tojson }},
   del: {{ t('common.delete')|tojson }},
   noneOption: {{ t('common.none_option')|tojson }},
@@ -1088,6 +1120,7 @@ function renderNotifications() {
   document.getElementById('n-myskoda').checked = me.notify_myskoda_error;
   document.getElementById('n-monthly').checked = me.notify_monthly_report;
   document.getElementById('n-reminders').checked = me.notify_reminders !== false;
+  document.getElementById('n-yearly').checked = me.notify_yearly_review !== false;
   const reg = document.getElementById('n-registration');
   if (reg) reg.checked = me.notify_new_registration;
   document.getElementById('n-review').value = me.review_digest;
@@ -1280,6 +1313,7 @@ document.getElementById('notifications-form').addEventListener('submit', async (
       notify_myskoda_error: document.getElementById('n-myskoda').checked,
       notify_monthly_report: document.getElementById('n-monthly').checked,
       notify_reminders: document.getElementById('n-reminders').checked,
+      notify_yearly_review: document.getElementById('n-yearly').checked,
       // Nicht-Admins bekommen den Schalter gar nicht zu sehen - der
       // gespeicherte Wert bleibt dann unveraendert.
       notify_new_registration: reg ? reg.checked : me.notify_new_registration,
@@ -1294,6 +1328,60 @@ document.getElementById('notifications-form').addEventListener('submit', async (
   me = await res.json();
   status.textContent = T.accountSaved;
   status.style.color = 'var(--accent)';
+});
+
+// ---------- Vergleichsfahrzeug (review.py) ----------
+
+// Standardwerte je Kraftstoff (review.COMBUSTION_DEFAULTS): solange nichts
+// gespeichert ist, zieht ein Wechsel des Kraftstoffs Verbrauch und Preis mit.
+const COMBUSTION_DEFAULTS = {
+  petrol: { consumption: 7.0, price: 1.75 },
+  diesel: { consumption: 5.8, price: 1.65 },
+};
+let combustionConfigured = false;
+
+function showCombustionStatus(text, color) {
+  const status = document.getElementById('combustion-status');
+  status.textContent = text;
+  status.style.color = color;
+}
+
+async function loadCombustion() {
+  const res = await fetch('api/combustion-vehicle');
+  if (!res.ok) return;
+  const c = await res.json();
+  combustionConfigured = c.configured;
+  document.getElementById('c-fuel').value = c.fuel_type;
+  document.getElementById('c-consumption').value = c.consumption_l_per_100km;
+  document.getElementById('c-price').value = c.fuel_price_per_l;
+  document.getElementById('c-co2').value = c.grid_co2_kg_per_kwh;
+  showCombustionStatus(c.configured ? '' : T.combustionDefaults, 'var(--muted)');
+}
+
+document.getElementById('c-fuel').addEventListener('change', e => {
+  if (combustionConfigured) return;
+  const d = COMBUSTION_DEFAULTS[e.target.value];
+  document.getElementById('c-consumption').value = d.consumption;
+  document.getElementById('c-price').value = d.price;
+});
+
+document.getElementById('combustion-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const res = await fetch('api/combustion-vehicle', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      fuel_type: document.getElementById('c-fuel').value,
+      consumption_l_per_100km: parseFloat(document.getElementById('c-consumption').value),
+      fuel_price_per_l: parseFloat(document.getElementById('c-price').value),
+      grid_co2_kg_per_kwh: parseFloat(document.getElementById('c-co2').value),
+    })
+  });
+  if (!res.ok) {
+    showCombustionStatus(T.errorPrefix + await res.text(), 'var(--danger)');
+    return;
+  }
+  combustionConfigured = true;
+  showCombustionStatus(T.accountSaved, 'var(--accent)');
 });
 
 // ---------- Sprache ----------
@@ -1320,6 +1408,7 @@ document.getElementById('language-form').addEventListener('submit', async (e) =>
 (async () => {
   await loadMe();
   await loadWeather();
+  await loadCombustion();
   await loadVehicles();
   await loadProviders();
   await loadFees();

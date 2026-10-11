@@ -32,6 +32,7 @@ from .vehicle_costs import CATEGORIES as COST_CATEGORIES
 from .routers import (
     auth,
     backup,
+    combustion_vehicle,
     email,
     geocoding,
     importer,
@@ -187,6 +188,7 @@ app.include_router(provider_fees.router, dependencies=[Depends(get_current_user)
 app.include_router(locations.router, dependencies=[Depends(get_current_user)])
 app.include_router(sessions.router, dependencies=[Depends(get_current_user)])
 app.include_router(stats.router, dependencies=[Depends(get_current_user)])
+app.include_router(combustion_vehicle.router, dependencies=[Depends(get_current_user)])
 app.include_router(sync.router, dependencies=[Depends(get_current_user)])
 app.include_router(importer.router, dependencies=[Depends(get_current_user)])
 app.include_router(geocoding.router, dependencies=[Depends(get_current_user)])
@@ -283,6 +285,11 @@ def reimbursement_page(request: Request, db: Session = Depends(get_db)):
     return _page(
         request, db, "reimbursement.html", reimbursement_default_rate=DEFAULT_REIMBURSEMENT_RATE
     )
+
+
+@app.get("/review", response_class=HTMLResponse)
+def review_page(request: Request, db: Session = Depends(get_db)):
+    return _page(request, db, "review.html")
 
 
 @app.get("/import", response_class=HTMLResponse)

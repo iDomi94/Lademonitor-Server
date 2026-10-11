@@ -537,6 +537,8 @@ def set_notifications(
     user.review_digest = payload.review_digest
     if payload.notify_reminders is not None:
         user.notify_reminders = payload.notify_reminders
+    if payload.notify_yearly_review is not None:
+        user.notify_yearly_review = payload.notify_yearly_review
     db.commit()
     db.refresh(user)
     return user

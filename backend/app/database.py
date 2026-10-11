@@ -459,6 +459,16 @@ def run_light_migrations() -> None:
             ("notify_new_registration", "BOOLEAN", "TRUE"),
             # v0.33.0: faellige Erinnerungen (reminders.py), Standard an.
             ("notify_reminders", "BOOLEAN", "TRUE"),
+            # v0.36.0: Jahresrueckblick (review.py), Standard an - auch fuer
+            # Bestandsnutzer, so die Entscheidung vom 11.10.2026.
+            ("notify_yearly_review", "BOOLEAN", "TRUE"),
+            ("last_yearly_review_year", "INTEGER", None),
+            # v0.36.0: Vergleichsfahrzeug, NULL = Standardwerte.
+            ("combustion_fuel_type", "VARCHAR", None),
+            ("combustion_consumption_l_per_100km", "DOUBLE PRECISION", None),
+            ("combustion_fuel_price_per_l", "DOUBLE PRECISION", None),
+            ("combustion_grid_co2_kg_per_kwh", "DOUBLE PRECISION", None),
+            ("combustion_updated_at", "TIMESTAMP", None),
             ("review_digest", "reviewdigestfrequency", "'OFF'"),
             ("last_review_digest_at", "TIMESTAMP", None),
             ("last_monthly_report_at", "TIMESTAMP", None),
