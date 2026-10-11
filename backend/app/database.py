@@ -67,6 +67,9 @@ _ENCRYPTABLE_TEXT_COLUMNS = (
     ("vehicle_costs", "notes"),
     ("reminders", "title"),
     ("reminders", "notes"),
+    ("vehicles", "employee_name"),
+    ("vehicles", "employee_number"),
+    ("vehicles", "license_plate"),
 )
 
 
@@ -256,6 +259,27 @@ def run_light_migrations() -> None:
         ):
             conn.execute(text(f"ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS {column} {sql_type}"))
 
+        # v0.35.0: Dienstwagen und Erstattungsbericht (siehe reimbursement.py).
+        # Die Tabelle reimbursement_rates legt create_all() an.
+        for column, sql_type, default in (
+            ("is_company_car", "BOOLEAN", "FALSE"),
+            ("reimbursement_mode", "VARCHAR", "'flat'"),
+            ("reimbursement_include_fees", "BOOLEAN", "FALSE"),
+            ("employee_name", "TEXT", None),
+            ("employee_number", "TEXT", None),
+            ("license_plate", "TEXT", None),
+            ("reimbursement_monthly_mail", "BOOLEAN", "FALSE"),
+            ("reimbursement_last_mailed", "VARCHAR", None),
+        ):
+            suffix = f" DEFAULT {default}" if default else ""
+            conn.execute(
+                text(f"ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS {column} {sql_type}{suffix}")
+            )
+            if default:
+                conn.execute(
+                    text(f"UPDATE vehicles SET {column} = {default} WHERE {column} IS NULL")
+                )
+
         # i18n: UI-Sprache pro Nutzer (siehe models.User.language). DEFAULT 'de'
         # deckt sowohl neue Zeilen als auch - via UPDATE - bereits bestehende
         # Nutzer ab, die die Spalte noch nicht hatten (Postgres setzt den
@@ -347,6 +371,10 @@ def run_light_migrations() -> None:
         # v0.33.0: dasselbe fuer die Erinnerungen (models.Reminder).
         conn.execute(
             text("ALTER TYPE syncentitytype ADD VALUE IF NOT EXISTS 'REMINDER'")
+        )
+        # v0.35.0: dasselbe fuer die Erstattungssaetze (models.ReimbursementRate).
+        conn.execute(
+            text("ALTER TYPE syncentitytype ADD VALUE IF NOT EXISTS 'REIMBURSEMENT_RATE'")
         )
 
         # Multi-User-Umstellung: user_id auf allen vier Kern-Tabellen ergaenzen.

@@ -1,0 +1,377 @@
+{% extends "base.html" %}
+{% block content %}
+{# Unterseite von "Fahrzeug" (siehe reimbursement.py). Pfad genau EINE Ebene
+   unter der Basis (/reimbursement), damit die relativen fetch()-Aufrufe unter
+   dem HA-Ingress aufloesen. Das PDF entsteht ueber die Druckansicht
+   (@media print in style.css blendet alles ausser #rb-report aus) - bewusst
+   keine PDF-Bibliothek auf dem Server. #}
+<a class="backlink no-print" href="vehicle">{{ t('reimbursement.back') }}</a>
+<h1 class="no-print">{{ t('reimbursement.heading') }}</h1>
+
+<details class="help no-print">
+  <summary>{{ t('common.help') }}</summary>
+  <div class="inner">
+    <p>{{ t('reimbursement.help') }}</p>
+    <p>{{ t('reimbursement.help_estimated') }}</p>
+    <p>{{ t('reimbursement.help_pdf') }}</p>
+  </div>
+</details>
+
+<div class="form-actions no-print" style="margin-top:8px">
+  <label style="margin:0">{{ t('tires.vehicle_filter') }}</label>
+  <select id="rb-vehicle" style="max-width:260px"></select>
+</div>
+
+<div id="rb-empty" class="card no-print" style="display:none">{{ t('reimbursement.no_vehicles') }}</div>
+
+<div id="rb-main" class="no-print">
+<details class="panel" id="rb-settings-panel">
+  <summary>{{ t('reimbursement.settings.heading') }}</summary>
+  <div class="inner">
+    <form class="inline-form" id="rb-settings-form">
+      <div class="form-row-wide">
+        <label><input type="checkbox" id="rb-company-car"
+          style="width:auto; display:inline-block; margin-right:6px">{{ t('reimbursement.settings.company_car') }}</label>
+      </div>
+      <div><label>{{ t('reimbursement.settings.mode') }}</label>
+        <select id="rb-mode">
+          <option value="flat">{{ t('reimbursement.mode.flat') }}</option>
+          <option value="actual">{{ t('reimbursement.mode.actual') }}</option>
+        </select>
+      </div>
+      <div id="rb-fees-row"><label>&nbsp;</label>
+        <label><input type="checkbox" id="rb-include-fees"
+          style="width:auto; display:inline-block; margin-right:6px">{{ t('reimbursement.settings.include_fees') }}</label>
+      </div>
+      <div><label>{{ t('reimbursement.settings.employee_name') }}</label>
+        <input type="text" id="rb-employee-name" autocomplete="name"></div>
+      <div><label>{{ t('reimbursement.settings.employee_number') }}</label>
+        <input type="text" id="rb-employee-number"></div>
+      <div><label>{{ t('reimbursement.settings.license_plate') }}</label>
+        <input type="text" id="rb-license-plate"></div>
+      <div class="form-row-wide">
+        <label><input type="checkbox" id="rb-monthly-mail"
+          style="width:auto; display:inline-block; margin-right:6px">{{ t('reimbursement.settings.monthly_mail') }}</label>
+        <div style="color:var(--muted); font-size:0.85em">{{ t('reimbursement.settings.monthly_mail_hint') }}</div>
+      </div>
+      <div class="form-actions">
+        <span id="rb-settings-saved" style="color:var(--muted); font-size:0.9em; align-self:center; margin-right:10px"></span>
+        <button type="submit">{{ t('reimbursement.settings.save') }}</button>
+      </div>
+    </form>
+  </div>
+</details>
+
+<details class="panel" id="rb-rates-panel">
+  <summary>{{ t('reimbursement.rates.heading') }} <span class="count" id="rb-rates-count"></span></summary>
+  <div class="inner">
+    <p style="color:var(--muted); font-size:0.9em; margin-top:0">{{ t('reimbursement.rates.help') }}</p>
+    <div class="tablewrap"><table id="rb-rates-table"></table></div>
+    <form class="inline-form" id="rb-rate-form" style="margin-top:12px">
+      <div><label>{{ t('reimbursement.rates.valid_from') }}</label>
+        <input type="date" id="rb-rate-from" required></div>
+      <div><label>{{ t('reimbursement.rates.rate') }}</label>
+        <input type="number" step="0.0001" min="0" max="10" id="rb-rate-value" required></div>
+      <div class="form-actions">
+        <button type="submit">{{ t('reimbursement.rates.add') }}</button>
+      </div>
+    </form>
+  </div>
+</details>
+
+<div id="rb-not-company" class="card" style="display:none">{{ t('reimbursement.not_company_car') }}</div>
+
+<div id="rb-controls">
+  <h2>{{ t('reimbursement.report.heading') }}</h2>
+  <form class="inline-form" onsubmit="return false">
+      <div><label>{{ t('reimbursement.report.period') }}</label>
+        <select id="rb-period-kind">
+          <option value="month">{{ t('reimbursement.report.month') }}</option>
+          <option value="range">{{ t('reimbursement.report.range') }}</option>
+        </select>
+      </div>
+      <div id="rb-month-row"><label>{{ t('reimbursement.report.month') }}</label>
+        <input type="month" id="rb-month"></div>
+      <div id="rb-from-row" style="display:none"><label>{{ t('reimbursement.report.from') }}</label>
+        <input type="date" id="rb-from"></div>
+      <div id="rb-to-row" style="display:none"><label>{{ t('reimbursement.report.to') }}</label>
+        <input type="date" id="rb-to"></div>
+      <div class="form-actions" style="gap:8px">
+        <a id="rb-csv" href="#" download><button type="button">{{ t('reimbursement.report.csv') }}</button></a>
+        <button type="button" class="ghost" onclick="window.print()">{{ t('reimbursement.report.print') }}</button>
+      </div>
+  </form>
+</div>
+</div>
+
+<section id="rb-report" class="card print-area" style="display:none"></section>
+
+<script>
+const T = {
+  title: {{ t('reimbursement.csv.title')|tojson }},
+  vehicle: {{ t('reimbursement.csv.vehicle')|tojson }},
+  licensePlate: {{ t('reimbursement.csv.license_plate')|tojson }},
+  employeeName: {{ t('reimbursement.csv.employee_name')|tojson }},
+  employeeNumber: {{ t('reimbursement.csv.employee_number')|tojson }},
+  period: {{ t('reimbursement.csv.period')|tojson }},
+  mode: {{ t('reimbursement.csv.mode')|tojson }},
+  modes: {
+    flat: {{ t('reimbursement.mode.flat')|tojson }},
+    actual: {{ t('reimbursement.mode.actual')|tojson }},
+  },
+  withFees: {{ t('reimbursement.csv.with_fees')|tojson }},
+  sources: {
+    charger: {{ t('reimbursement.source.charger')|tojson }},
+    vehicle: {{ t('reimbursement.source.vehicle')|tojson }},
+    estimated: {{ t('reimbursement.source.estimated')|tojson }},
+  },
+  colDate: {{ t('reimbursement.csv.date')|tojson }},
+  colSource: {{ t('reimbursement.csv.source')|tojson }},
+  colOdometer: {{ t('reimbursement.csv.odometer')|tojson }},
+  colRate: {{ t('reimbursement.csv.rate')|tojson }},
+  colFee: {{ t('reimbursement.csv.fee_share')|tojson }},
+  colAmount: {{ t('reimbursement.csv.amount')|tojson }},
+  colMonth: {{ t('reimbursement.csv.month')|tojson }},
+  colSessions: {{ t('reimbursement.csv.sessions')|tojson }},
+  colEstimatedKwh: {{ t('reimbursement.csv.estimated_kwh')|tojson }},
+  total: {{ t('reimbursement.csv.total')|tojson }},
+  monthsHeading: {{ t('reimbursement.report.months_heading')|tojson }},
+  empty: {{ t('reimbursement.report.empty')|tojson }},
+  estimatedNote: {{ t('reimbursement.report.estimated_note')|tojson }},
+  missingFlat: {{ t('reimbursement.report.missing_flat')|tojson }},
+  missingActual: {{ t('reimbursement.report.missing_actual')|tojson }},
+  createdAt: {{ t('reimbursement.report.created_at')|tojson }},
+  rateValidFrom: {{ t('reimbursement.rates.valid_from')|tojson }},
+  rateValue: {{ t('reimbursement.rates.rate')|tojson }},
+  ratesEmpty: {{ t('reimbursement.rates.empty')|tojson }},
+  del: {{ t('common.delete')|tojson }},
+  confirmDelete: {{ t('reimbursement.rates.confirm_delete')|tojson }},
+  saved: {{ t('reimbursement.settings.saved')|tojson }},
+  errorPrefix: {{ t('sessions.error.save_prefix')|tojson }},
+};
+const DEFAULT_RATE = {{ reimbursement_default_rate|tojson }};
+
+let vehicles = [];
+let rates = [];
+
+const lang = window.LADEMONITOR_LANG;
+const money = n => Number(n).toLocaleString(lang, { style: 'currency', currency: 'EUR' });
+const num = (n, d = 2) => n == null ? '–'
+  : Number(n).toLocaleString(lang, { minimumFractionDigits: d, maximumFractionDigits: d });
+const fmtDate = s => new Date(s.length === 10 ? s + 'T00:00:00' : s)
+  .toLocaleDateString(lang, { dateStyle: 'medium' });
+const fmtDateTime = s => new Date(s).toLocaleString(lang, { dateStyle: 'medium', timeStyle: 'short' });
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const pad = n => String(n).padStart(2, '0');
+const isoDay = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const current = () => vehicles.find(v => v.id === document.getElementById('rb-vehicle').value);
+
+async function loadVehicles() {
+  const res = await fetch('api/vehicles');
+  vehicles = res.ok ? await res.json() : [];
+  const select = document.getElementById('rb-vehicle');
+  // Dienstwagen zuerst - meist ist es genau einer.
+  const sorted = [...vehicles].sort((a, b) => (b.is_company_car === true) - (a.is_company_car === true));
+  select.innerHTML = sorted.map(v => `<option value="${v.id}">${esc(v.name)}</option>`).join('');
+  const fromHash = new URLSearchParams(location.hash.slice(1)).get('vehicle');
+  if (fromHash && vehicles.some(v => v.id === fromHash)) select.value = fromHash;
+  document.getElementById('rb-empty').style.display = vehicles.length ? 'none' : '';
+  document.getElementById('rb-main').style.display = vehicles.length ? '' : 'none';
+}
+
+function fillSettings() {
+  const v = current();
+  if (!v) return;
+  document.getElementById('rb-company-car').checked = !!v.is_company_car;
+  document.getElementById('rb-mode').value = v.reimbursement_mode || 'flat';
+  document.getElementById('rb-include-fees').checked = !!v.reimbursement_include_fees;
+  document.getElementById('rb-employee-name').value = v.employee_name || '';
+  document.getElementById('rb-employee-number').value = v.employee_number || '';
+  document.getElementById('rb-license-plate').value = v.license_plate || '';
+  document.getElementById('rb-monthly-mail').checked = !!v.reimbursement_monthly_mail;
+  // Ohne Dienstwagen zuerst die Einstellungen zeigen - dort steht der Schalter.
+  document.getElementById('rb-settings-panel').open = !v.is_company_car;
+  syncVisibility();
+}
+
+function syncVisibility() {
+  const v = current();
+  const company = !!(v && v.is_company_car);
+  const mode = document.getElementById('rb-mode').value;
+  document.getElementById('rb-fees-row').style.display = mode === 'actual' ? '' : 'none';
+  document.getElementById('rb-rates-panel').style.display = company && v.reimbursement_mode !== 'actual' ? '' : 'none';
+  document.getElementById('rb-not-company').style.display = company ? 'none' : '';
+  document.getElementById('rb-controls').style.display = company ? '' : 'none';
+  document.getElementById('rb-report').style.display = company ? '' : 'none';
+}
+
+async function loadRates() {
+  const v = current();
+  if (!v) return;
+  const res = await fetch(`api/reimbursement/rates?vehicle_id=${encodeURIComponent(v.id)}`);
+  rates = res.ok ? await res.json() : [];
+  document.getElementById('rb-rates-count').textContent = rates.length || '';
+  document.getElementById('rb-rates-table').innerHTML = rates.length
+    ? `<tr><th>${T.rateValidFrom}</th><th>${T.rateValue}</th><th class="col-actions"></th></tr>` +
+      rates.map(r => `<tr><td>${fmtDate(r.valid_from)}</td><td>${num(r.rate_per_kwh, 4)} €</td>
+        <td class="col-actions">${iconButton(ICON_DELETE, T.del, `deleteRate('${r.id}')`, 'danger')}</td></tr>`).join('')
+    : `<tr><td style="color:var(--muted)">${T.ratesEmpty}</td></tr>`;
+  // Vorschlag fuer den naechsten Satz: der juengste bzw. die Pauschale, ab 1.1.
+  const latest = rates[0];
+  document.getElementById('rb-rate-value').value = latest ? latest.rate_per_kwh : DEFAULT_RATE;
+  document.getElementById('rb-rate-from').value = `${new Date().getFullYear()}-01-01`;
+}
+
+async function deleteRate(id) {
+  if (!confirm(T.confirmDelete)) return;
+  await fetch(`api/reimbursement/rates/${id}`, { method: 'DELETE' });
+  await loadRates();
+  await loadReport();
+}
+
+function period() {
+  if (document.getElementById('rb-period-kind').value === 'month') {
+    const [y, m] = document.getElementById('rb-month').value.split('-').map(Number);
+    return { from: isoDay(new Date(y, m - 1, 1)), to: isoDay(new Date(y, m, 0)) };
+  }
+  return { from: document.getElementById('rb-from').value, to: document.getElementById('rb-to').value };
+}
+
+async function loadReport() {
+  const v = current();
+  if (!v || !v.is_company_car) return;
+  const p = period();
+  if (!p.from || !p.to) return;
+  const query = `vehicle_id=${encodeURIComponent(v.id)}&from=${p.from}&to=${p.to}`;
+  document.getElementById('rb-csv').href = `api/reimbursement/report?${query}&format=csv`;
+  const res = await fetch(`api/reimbursement/report?${query}`);
+  const el = document.getElementById('rb-report');
+  if (!res.ok) {
+    el.innerHTML = `<p>${T.errorPrefix} ${res.status}</p>`;
+    return;
+  }
+  renderReport(await res.json());
+}
+
+function renderReport(r) {
+  const head = [
+    [T.vehicle, r.vehicle_name],
+    r.license_plate ? [T.licensePlate, r.license_plate] : null,
+    r.employee_name ? [T.employeeName, r.employee_name] : null,
+    r.employee_number ? [T.employeeNumber, r.employee_number] : null,
+    [T.period, `${fmtDate(r.date_from)} – ${fmtDate(r.date_to)}`],
+    [T.mode, T.modes[r.mode] + (r.include_fees ? ` (${T.withFees})` : '')],
+  ].filter(Boolean);
+  const rows = r.rows.map(x => `<tr class="${x.kwh_source === 'estimated' ? 'rb-estimated' : ''}">
+      <td class="col-datetime">${fmtDateTime(x.start_time)}</td>
+      <td class="num">${num(x.energy_kwh)}</td>
+      <td>${T.sources[x.kwh_source]}${x.kwh_source === 'estimated' ? ' *' : ''}</td>
+      <td class="num">${x.odometer_km != null ? Number(x.odometer_km).toLocaleString(lang) : '–'}</td>
+      <td class="num">${x.rate_per_kwh != null ? num(x.rate_per_kwh, 4) : '–'}</td>
+      ${r.include_fees ? `<td class="num">${x.fee_share ? num(x.fee_share) : '–'}</td>` : ''}
+      <td class="num">${x.amount != null ? money(x.amount) : '–'}</td></tr>`).join('');
+  const months = r.months.map(m => `<tr><td>${new Date(m.month + '-01T00:00:00')
+      .toLocaleDateString(lang, { month: 'long', year: 'numeric' })}</td>
+      <td class="num">${m.sessions}</td><td class="num">${num(m.energy_kwh)}</td>
+      <td class="num">${m.estimated_kwh ? num(m.estimated_kwh) : '–'}</td>
+      <td class="num">${money(m.amount)}</td></tr>`).join('');
+  const notes = [];
+  if (r.estimated_sessions) notes.push('* ' + T.estimatedNote
+    .replace('{count}', r.estimated_sessions).replace('{kwh}', num(r.estimated_kwh)));
+  if (r.missing_amount_sessions) notes.push((r.mode === 'flat' ? T.missingFlat : T.missingActual)
+    .replace('{count}', r.missing_amount_sessions));
+  document.getElementById('rb-report').innerHTML = `
+    <h2 style="margin-top:0">${T.title}</h2>
+    <dl class="rb-head">${head.map(([k, val]) => `<dt>${k}</dt><dd>${esc(val)}</dd>`).join('')}</dl>
+    ${r.rows.length ? `
+    <div class="tablewrap"><table class="rb-table">
+      <tr><th>${T.colDate}</th><th class="num">kWh</th><th>${T.colSource}</th><th class="num">${T.colOdometer}</th>
+        <th class="num">${T.colRate}</th>${r.include_fees ? `<th class="num">${T.colFee}</th>` : ''}
+        <th class="num">${T.colAmount}</th></tr>
+      ${rows}
+    </table></div>
+    <h3>${T.monthsHeading}</h3>
+    <div class="tablewrap"><table class="rb-table">
+      <tr><th>${T.colMonth}</th><th class="num">${T.colSessions}</th><th class="num">kWh</th>
+        <th class="num">${T.colEstimatedKwh}</th><th class="num">${T.colAmount}</th></tr>
+      ${months}
+      <tr class="rb-total"><td>${T.total}</td><td class="num">${r.rows.length}</td>
+        <td class="num">${num(r.total_kwh)}</td><td class="num">${r.estimated_kwh ? num(r.estimated_kwh) : '–'}</td>
+        <td class="num">${money(r.total_amount)}</td></tr>
+    </table></div>` : `<p style="color:var(--muted)">${T.empty}</p>`}
+    ${notes.map(n => `<p class="chartnote">${n}</p>`).join('')}
+    <p class="chartnote">${T.createdAt.replace('{date}', new Date().toLocaleDateString(lang, { dateStyle: 'medium' }))}</p>`;
+}
+
+document.getElementById('rb-vehicle').addEventListener('change', async () => {
+  fillSettings();
+  await loadRates();
+  await loadReport();
+});
+document.getElementById('rb-mode').addEventListener('change', syncVisibility);
+document.getElementById('rb-period-kind').addEventListener('change', e => {
+  const month = e.target.value === 'month';
+  document.getElementById('rb-month-row').style.display = month ? '' : 'none';
+  document.getElementById('rb-from-row').style.display = month ? 'none' : '';
+  document.getElementById('rb-to-row').style.display = month ? 'none' : '';
+  if (!month && !document.getElementById('rb-from').value) {
+    document.getElementById('rb-from').value = `${new Date().getFullYear()}-01-01`;
+    document.getElementById('rb-to').value = isoDay(new Date());
+  }
+  loadReport();
+});
+['rb-month', 'rb-from', 'rb-to'].forEach(id =>
+  document.getElementById(id).addEventListener('change', loadReport));
+
+document.getElementById('rb-settings-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const v = current();
+  const payload = {
+    is_company_car: document.getElementById('rb-company-car').checked,
+    reimbursement_mode: document.getElementById('rb-mode').value,
+    reimbursement_include_fees: document.getElementById('rb-include-fees').checked,
+    employee_name: document.getElementById('rb-employee-name').value.trim() || null,
+    employee_number: document.getElementById('rb-employee-number').value.trim() || null,
+    license_plate: document.getElementById('rb-license-plate').value.trim() || null,
+    reimbursement_monthly_mail: document.getElementById('rb-monthly-mail').checked,
+  };
+  const res = await fetch(`api/vehicles/${v.id}`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+  });
+  if (!res.ok) { alert(`${T.errorPrefix} ${res.status}`); return; }
+  Object.assign(v, await res.json());
+  document.getElementById('rb-settings-saved').textContent = T.saved;
+  setTimeout(() => { document.getElementById('rb-settings-saved').textContent = ''; }, 2500);
+  syncVisibility();
+  await loadRates();
+  await loadReport();
+});
+
+document.getElementById('rb-rate-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const res = await fetch('api/reimbursement/rates', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      vehicle_id: current().id,
+      valid_from: document.getElementById('rb-rate-from').value + 'T00:00:00',
+      rate_per_kwh: parseFloat(document.getElementById('rb-rate-value').value),
+    }),
+  });
+  if (!res.ok) { alert(`${T.errorPrefix} ${res.status}`); return; }
+  await loadRates();
+  await loadReport();
+});
+
+(async () => {
+  // Standard: der Vormonat - der Bericht wird meist zu Monatsbeginn gebraucht.
+  const now = new Date();
+  const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  document.getElementById('rb-month').value = `${prev.getFullYear()}-${pad(prev.getMonth() + 1)}`;
+  await loadVehicles();
+  if (!vehicles.length) return;
+  fillSettings();
+  await loadRates();
+  await loadReport();
+})();
+</script>
+{% endblock %}

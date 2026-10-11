@@ -12,6 +12,12 @@ from ..vehicle_costs import ownership_info
 # Datumsfelder der Kauf-/Leasingangaben: nur das Datum zaehlt (wie bei den
 # Grundgebuehren), eine mitgeschickte Uhrzeit wird verworfen.
 _DATE_FIELDS = ("purchase_date", "first_registration", "leasing_start", "leasing_end")
+# Felder mit festem Wert: ein mitgeschicktes null laesst sie stehen (aeltere
+# Apps kennen die Dienstwagen-Felder nicht und schicken sie gar nicht erst).
+_KEEP_ON_NULL = (
+    "ownership", "is_company_car", "reimbursement_mode",
+    "reimbursement_include_fees", "reimbursement_monthly_mail",
+)
 
 
 def _day(value: datetime | None) -> datetime | None:
@@ -98,7 +104,7 @@ def update_vehicle(
         # Kauf/Leasing hat immer einen Wert - ein mitgeschicktes null laesst
         # ihn stehen. Die uebrigen Kauf-/Leasingfelder lassen sich dagegen
         # bewusst per null leeren (z. B. den ueberschriebenen Wertverlust).
-        if field == "ownership" and value is None:
+        if field in _KEEP_ON_NULL and value is None:
             continue
         if field in _DATE_FIELDS:
             value = _day(value)
@@ -121,6 +127,8 @@ def delete_vehicle(
         record_deletion(db, user.id, models.SyncEntityType.VEHICLE_COST, cost.id)
     for reminder in vehicle.reminders:
         record_deletion(db, user.id, models.SyncEntityType.REMINDER, reminder.id)
+    for rate in vehicle.reimbursement_rates:
+        record_deletion(db, user.id, models.SyncEntityType.REIMBURSEMENT_RATE, rate.id)
     # Grabstein VOR dem Loeschen, im selben Commit - siehe sync.record_deletion().
     record_deletion(db, user.id, models.SyncEntityType.VEHICLE, vehicle.id)
     db.delete(vehicle)

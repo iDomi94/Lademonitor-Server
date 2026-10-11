@@ -1055,3 +1055,28 @@ details.panel > summary .count {
 .reminder-banner { margin-bottom: 16px; border-left: 3px solid var(--warn); }
 .reminder-line { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; padding: 3px 0; }
 .reminder-when { color: var(--muted); font-size: 0.9em; }
+
+/* Erstattungsbericht Dienstwagen (templates/reimbursement.html). */
+button.ghost { background: transparent; color: var(--text); border: 1px solid var(--border); }
+button.ghost:hover { border-color: var(--accent2); color: var(--accent2); opacity: 1; }
+.rb-table td.num, .rb-table th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rb-table tr.rb-estimated td { color: var(--warn); }
+.rb-table tr.rb-total td { font-weight: 600; border-top: 2px solid var(--border); }
+.rb-head { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 0 0 16px; }
+.rb-head dt { color: var(--muted); }
+.rb-head dd { margin: 0; }
+
+/* PDF ueber "Drucken -> Als PDF sichern": nur der Bericht, schwarz auf weiss. */
+@media print {
+  body { background: #fff; color: #000; }
+  .topnav, .no-print, footer { display: none !important; }
+  .container { max-width: none; padding: 0; margin: 0; }
+  .print-area { display: block !important; border: none; background: #fff; color: #000; padding: 0; }
+  .print-area h2, .print-area h3 { color: #000; }
+  .print-area .chartnote, .rb-head dt { color: #444; }
+  .print-area table { color: #000; }
+  .print-area th { color: #444; }
+  .print-area th, .print-area td { border-color: #ccc; }
+  .rb-table tr.rb-estimated td { color: #000; font-style: italic; }
+  .tablewrap { overflow: visible; }
+}

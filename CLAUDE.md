@@ -60,17 +60,19 @@ backend/app/
                           ProviderFee (siehe Abschnitt "Grundgebuehren"),
                           VehicleCost (siehe Abschnitt "Fahrzeugkosten")
                           Reminder (siehe Abschnitt "Erinnerungen")
+                          ReimbursementRate (siehe Abschnitt "Erstattungsbericht Dienstwagen")
   schemas.py          - Pydantic Request/Response-Schemas
   routers/
     vehicles.py, providers.py, locations.py, sessions.py, stats.py, importer.py,
     geocoding.py, backup.py, auth.py, webdav_backup.py, myskoda.py, email.py,
-    sync.py, tires.py, provider_fees.py, vehicle_costs.py, reminders.py
+    sync.py, tires.py, provider_fees.py, vehicle_costs.py, reminders.py, reimbursement.py
   auth.py            - Passwort-Hashing, Token-Handling, Auth-Dependencies
   sync.py            - record_deletion(): Grabstein fuer eine geloeschte Zeile
   tires.py           - Reifensaetze, temperaturbereinigter Vergleich
   fees.py            - Grundgebuehren/Abos: Perioden und Umlage nach kWh
   vehicle_costs.py   - Fahrzeugkosten, Wertverlust (Restwertkurve), Leasing
   reminders.py       - Erinnerungen: Status, km-Prognose, naechste Faelligkeit
+  reimbursement.py   - Erstattungsbericht Dienstwagen (Heimladungen, CSV)
   range_estimate.py  - Reale Reichweite je Temperatur (Verbrauch ab Akku)
   battery.py         - Akku-Index und Ladeverluste (siehe Abschnitt "Akku und Ladeverluste")
   myskoda.py         - Client fuer die offizielle MyŠkoda Public API (sync httpx)
@@ -2325,6 +2327,45 @@ unter 8 kWh/100 km (ein hochgerechneter Ast gegen null) werden weggelassen.
 **Nebenbei behoben:** `trend` in derselben Antwort lieferte `model`, `curve`,
 `breakpoint_c` usw. seit v0.25.0 nie aus - der Router reichte nur die
 Gerade durch; Web und Apps fielen deshalb immer auf die Gerade zurueck.
+
+## Erstattungsbericht Dienstwagen (`reimbursement.py`, `routers/reimbursement.py`, `templates/reimbursement.html`, ab 2026-10-11, v0.35.0)
+
+Schritt 8 aus `ideen/plan-schritt-8.md`. Seit 2026 erstattet der Arbeitgeber
+den Strom fuer Heimladungen je kWh statt ueber Monatspauschalen; der Bericht
+ist der Nachweis. **Entscheidungen des Nutzers (11.10.2026):** beide
+Erstattungsarten je Fahrzeug waehlbar (pauschal je kWh mit "gueltig ab",
+Vorschlag 0,34 EUR, oder tatsaechliche Kosten optional inkl. Grundgebuehr),
+geschaetzte kWh zaehlen mit und sind markiert, PDF im Web nur ueber die
+Druckansicht (keine PDF-Bibliothek), optionale Monatsmail mit CSV (Standard
+aus), nur Heimladungen - kein Abschnitt fuer privat bezahlte oeffentliche
+Ladungen.
+
+**Daten:** Felder am `Vehicle` (`is_company_car`, `reimbursement_mode`
+flat/actual als String, `reimbursement_include_fees`, `employee_name`/
+`employee_number`/`license_plate` verschluesselt, `reimbursement_monthly_mail`,
+Merker `reimbursement_last_mailed` "YYYY-MM" nur Serverzustand). PATCH mit
+`null` laesst Schalter und Art stehen (`routers/vehicles.py::_KEEP_ON_NULL`).
+Saetze als eigene Tabelle `ReimbursementRate` (`valid_from`, `rate_per_kwh`),
+synchronisiert wie die Fahrzeugkosten, Grabstein-Typ `reimbursement_rate`,
+Kaskade mit dem Fahrzeug, `_purge_owned_data()`, Backup
+`reimbursement_rates.csv` (optional).
+
+**Regeln** (Docstring in `reimbursement.py`, `tests/test_reimbursement.py`; die
+Apps rechnen sie in `LocalReimbursementCalculator` nach - Aenderungen dort
+mitziehen): nur Vorgaenge des Fahrzeugs mit Anbieter `charging_place == home`;
+Zeitraum ueber den lokalen Kalendertag, beide Enden inklusive; pauschal gilt
+der Satz mit juengstem `valid_from` <= Ladetag, davor keiner (Betrag `null`,
+gezaehlt); tatsaechlich `price_total`, sonst `price_per_kwh` x kWh, sonst
+letzter Anbieterpreis der Lade-Art, plus optional `fee_share`; kWh-Herkunft
+`estimated` vor dem effektiven Messort. Summen sind Summen der gerundeten
+Einzelbetraege.
+
+**Formate:** JSON und CSV aus demselben Endpunkt; CSV in Nutzersprache, auf
+Deutsch mit Semikolon und Dezimalkomma plus BOM (so oeffnet Excel sie direkt).
+Die Druckansicht blendet per `@media print` (style.css) alles ausser
+`#rb-report` aus. Die Monatsmail (`notifications.py::_run_reimbursement_reports`)
+schreibt den Merker auch bei fehlgeschlagenem Versand fort, wie der
+Monatsbericht. `mailer.send(attachments=...)` macht daraus multipart/mixed.
 
 ## Verbrenner-Vergleich und Homescreen-Widget (nur Apps, ab 2026-09-29)
 

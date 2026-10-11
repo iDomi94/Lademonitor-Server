@@ -89,6 +89,9 @@ def _purge_owned_data(db: Session, user_id: str) -> None:
     db.query(models.Reminder).filter(
         models.Reminder.user_id == user_id
     ).delete(synchronize_session=False)
+    db.query(models.ReimbursementRate).filter(
+        models.ReimbursementRate.user_id == user_id
+    ).delete(synchronize_session=False)
     db.query(models.Vehicle).filter(
         models.Vehicle.user_id == user_id
     ).delete(synchronize_session=False)
