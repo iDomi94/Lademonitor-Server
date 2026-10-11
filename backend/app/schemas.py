@@ -72,6 +72,7 @@ class UserOut(BaseModel):
     notify_monthly_report: bool = False
     notify_new_registration: bool = True
     notify_reminders: bool = True
+    notify_yearly_review: bool = True
     review_digest: ReviewDigestFrequency = ReviewDigestFrequency.OFF
     weather_autofill_enabled: bool = False
     weather_api_url: str | None = None
@@ -105,6 +106,8 @@ class NotificationSettingsUpdate(BaseModel):
     # Seit v0.33.0. Optional, damit aeltere Clients den Schalter nicht
     # versehentlich zuruecksetzen: fehlt er, bleibt der gespeicherte Wert.
     notify_reminders: bool | None = None
+    # Seit v0.36.0, aus demselben Grund optional.
+    notify_yearly_review: bool | None = None
 
 
 class AdminUserUpdate(BaseModel):
@@ -1480,3 +1483,120 @@ class WeatherBackfillResult(BaseModel):
     unresolved: int
     written: int
     preview: list[BackfillPreviewItem] = []
+
+
+# ---------- Jahres- und Monatsrueckblick (review.py) ----------
+
+FuelType = Literal["petrol", "diesel"]
+
+
+class CombustionVehicleIn(BaseModel):
+    """Vergleichsfahrzeug - PUT erwartet alle vier Felder."""
+
+    fuel_type: FuelType
+    consumption_l_per_100km: float = Field(ge=1, le=30)
+    fuel_price_per_l: float = Field(ge=0.5, le=5)
+    grid_co2_kg_per_kwh: float = Field(ge=0, le=1.5)
+
+
+class CombustionVehicleOut(CombustionVehicleIn):
+    # false = Standardwerte, noch nie gespeichert.
+    configured: bool
+    updated_at: datetime | None = None
+
+
+class ReviewTotals(BaseModel):
+    sessions: int
+    kwh: float
+    # inkl. Grundgebuehr-Anteil und (ohne Fahrzeugfilter) nicht umgelegter
+    # Perioden, die im Zeitraum beginnen
+    cost: float
+    km: float
+    avg_price_per_kwh: float | None = None
+    price_per_100km: float | None = None
+    avg_consumption_kwh_per_100km: float | None = None
+
+
+class ReviewSavings(BaseModel):
+    fuel_type: FuelType
+    consumption_l_per_100km: float
+    fuel_price_per_l: float
+    grid_co2_kg_per_kwh: float
+    configured: bool
+    fuel_liters: float
+    fuel_cost: float
+    charging_cost: float
+    # darf negativ sein
+    saved_eur: float
+    co2_combustion_kg: float
+    co2_ev_kg: float
+    saved_co2_kg: float
+
+
+class ReviewSessionRecord(BaseModel):
+    session_id: str
+    start_time: datetime
+    value: float
+    place: str | None = None
+    vehicle_name: str | None = None
+    # nur bei longest_distance: der Vorgang, ab dem gezaehlt wurde
+    previous_start_time: datetime | None = None
+
+
+class ReviewRankRecord(BaseModel):
+    name: str
+    sessions: int
+    kwh: float
+
+
+class ReviewMonthRecord(BaseModel):
+    month: int
+    value: float
+
+
+class ReviewRecords(BaseModel):
+    cheapest_per_kwh: ReviewSessionRecord | None = None
+    most_expensive_per_kwh: ReviewSessionRecord | None = None
+    biggest_charge: ReviewSessionRecord | None = None
+    coldest: ReviewSessionRecord | None = None
+    warmest: ReviewSessionRecord | None = None
+    longest_distance: ReviewSessionRecord | None = None
+    top_location: ReviewRankRecord | None = None
+    top_provider: ReviewRankRecord | None = None
+    lowest_consumption_month: ReviewMonthRecord | None = None
+    highest_consumption_month: ReviewMonthRecord | None = None
+
+
+class ReviewSplit(BaseModel):
+    ac_kwh: float
+    dc_kwh: float
+    ac_share_pct: float | None = None
+    dc_share_pct: float | None = None
+    # wie StatsSummary.by_place - leer ohne einen Vorgang "Zuhause"/"Arbeit"
+    by_place: list[PlaceStat] = []
+
+
+class ReviewMonthRow(BaseModel):
+    month: int
+    sessions: int
+    kwh: float
+    cost: float
+    avg_consumption_kwh_per_100km: float | None = None
+
+
+class ReviewOut(BaseModel):
+    period: Literal["year", "month"]
+    year: int
+    month: int | None = None
+    start_date: date
+    end_date: date
+    vehicle_id: str | None = None
+    totals: ReviewTotals
+    # null, wenn die Vorperiode keinen einzigen Ladevorgang hat
+    previous: ReviewTotals | None = None
+    # null, wenn totals.km <= 0
+    savings: ReviewSavings | None = None
+    records: ReviewRecords
+    split: ReviewSplit
+    # nur bei period=year (immer 12 Zeilen), sonst leer
+    monthly: list[ReviewMonthRow] = []

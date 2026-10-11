@@ -1,6 +1,8 @@
 from collections import defaultdict
 from datetime import date, datetime, time
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
@@ -11,6 +13,7 @@ from ..consumption import compute_vehicle_consumptions
 from ..database import get_db
 from ..fees import load_allocation
 from ..range_estimate import build_range
+from ..review import build_review
 from ..vehicle_costs import cost_entries, has_cost_data, ownership_entries
 from ..temperature import (
     BUCKET_WIDTH_C,
@@ -572,3 +575,25 @@ def stats_battery(
             )
         )
     return schemas.BatteryStats(vehicles=result)
+
+
+@router.get("/review", response_model=schemas.ReviewOut)
+def stats_review(
+    period: Literal["year", "month"] = "year",
+    year: int | None = Query(default=None, ge=2000, le=2100),
+    month: int | None = Query(default=None, ge=1, le=12),
+    vehicle_id: str | None = None,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Jahres- bzw. Monatsrueckblick (review.py). Ohne Angabe: das laufende
+    Jahr bzw. der laufende Monat."""
+    today = date.today()
+    year = year or today.year
+    if period == "month":
+        month = month or (today.month if year == today.year else 12)
+    else:
+        # Beim Jahr ohne Bedeutung - still ignorieren statt 422, falls ein
+        # Client den Monat beim Umschalten einfach mitschickt.
+        month = None
+    return build_review(db, user, period, year, month, vehicle_id)

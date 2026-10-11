@@ -1066,6 +1066,30 @@ button.ghost:hover { border-color: var(--accent2); color: var(--accent2); opacit
 .rb-head dt { color: var(--muted); }
 .rb-head dd { margin: 0; }
 
+/* Jahres- und Monatsrueckblick (templates/review.html) und seine Kachel im
+   Dashboard. */
+.review-tile { display: block; margin: 0 0 24px; color: var(--text); text-decoration: none;
+  border-left: 3px solid var(--accent); }
+.review-tile:hover { border-color: var(--accent2); }
+.review-tile-title { font-weight: 600; font-size: 16px; }
+.review-tile-figures { margin-top: 4px; }
+.review-tile-more { color: var(--muted); font-size: 12px; margin-top: 6px; }
+.rv-kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px 20px; margin-bottom: 8px; }
+.rv-kpi-value { font-size: 22px; font-weight: 600; }
+.rv-delta, .rv-muted { color: var(--muted); font-size: 12px; }
+.rv-good { color: var(--accent); }
+.rv-bad { color: var(--danger); }
+.rv-records { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0 0 12px; }
+.rv-records dt { color: var(--muted); }
+.rv-records dd { margin: 0; }
+.rv-bar { display: flex; height: 22px; border-radius: 6px; overflow: hidden; gap: 2px; margin: 8px 0 6px; }
+.rv-bar-legend { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+@media (max-width: 720px) {
+  .rv-records { grid-template-columns: 1fr; gap: 2px; }
+  .rv-records dd { margin-bottom: 8px; }
+  .rv-kpi-value { font-size: 18px; }
+}
+
 /* PDF ueber "Drucken -> Als PDF sichern": nur der Bericht, schwarz auf weiss. */
 @media print {
   body { background: #fff; color: #000; }
@@ -1079,4 +1103,12 @@ button.ghost:hover { border-color: var(--accent2); color: var(--accent2); opacit
   .print-area th, .print-area td { border-color: #ccc; }
   .rb-table tr.rb-estimated td { color: #000; font-style: italic; }
   .tablewrap { overflow: visible; }
+  .print-area .rv-delta, .print-area .rv-muted, .print-area .rv-records dt,
+  .print-area .stat-label, .print-area .place-row small { color: #444; }
+  .print-area .rv-good, .print-area .rv-bad { color: #000; }
+  .print-area svg text.bar-value { fill: #000; }
+  .print-area svg text.bar-label { fill: #444; }
+  /* Balken behalten ihre Farbe auch im Druck (Browser lassen Hintergruende
+     sonst weg - dann bliebe vom AC/DC-Anteil nur ein leerer Rahmen). */
+  .rv-bar div, .place-dot { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }

@@ -5,7 +5,7 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
-        "version": "0.36.0",
+        "version": "0.37.0",
         "date": "2026-10-11",
         "title": "Ladehistorie von BMW (BMW CarData)",
         "changes": [
@@ -14,6 +14,18 @@ CHANGELOG = [
             "Anmeldung ohne Passwort: Client-ID aus dem MyBMW-Portal eintragen, „Mit BMW verbinden“ drücken und den angezeigten Code auf der BMW-Seite bestätigen. Die FIN wird danach automatisch ergänzt.",
             "BMW erlaubt 50 Abrufe am Tag je Konto. Lademonitor fragt standardmäßig alle 4 Stunden ab und lässt 10 Abrufe für andere Programme übrig, z.B. die Home-Assistant-Integration.",
             "Läuft die Anmeldung ab, kommt eine Mail (derselbe Schalter wie bei MyŠkoda).",
+        ],
+    },
+    {
+        "version": "0.36.0",
+        "date": "2026-10-11",
+        "title": "Jahres- und Monatsrückblick",
+        "changes": [
+            "Neue Seite „Rückblick“: ein Jahr oder ein Monat auf einen Blick – Ladevorgänge, kWh, Kosten (inkl. Grundgebühren), gefahrene km, Ø Preis je kWh und Ø Verbrauch, jeweils mit Vergleich zum Vorjahr bzw. Vormonat. Filter nach Fahrzeug, Druckansicht für PDF.",
+            "Ersparnis gegenüber einem Verbrenner in Euro und CO₂ für die gefahrenen km. Das Vergleichsfahrzeug (Benzin/Diesel, Verbrauch, Literpreis, Strommix) hinterlegst du einmal in den Einstellungen; es gilt auch in den Apps.",
+            "Rekorde: günstigste und teuerste Ladung je kWh, größte Ladung, längste Strecke zwischen zwei Ladungen, kältester und wärmster Ladetag, meistgenutzter Ladeort und Anbieter, im Jahr zusätzlich der sparsamste und der durstigste Monat. Dazu die Verteilung AC/DC und Zuhause/Arbeit/unterwegs sowie kWh je Monat.",
+            "Im Dashboard eine Kachel mit dem Jahresrückblick: ab 1. Dezember das laufende Jahr, sonst das Vorjahr.",
+            "Anfang Januar kommt der Jahresrückblick aufs Vorjahr per Mail (Standard an, abschaltbar unter Einstellungen → Benachrichtigungen). Der Monatsbericht enthält jetzt zusätzlich den Vergleich zum Vormonat, die Ersparnis und die Rekorde.",
         ],
     },
     {

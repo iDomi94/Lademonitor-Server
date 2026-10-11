@@ -1,0 +1,316 @@
+{% extends "base.html" %}
+{% block content %}
+{# Jahres- und Monatsrueckblick (review.py). Pfad genau EINE Ebene unter der
+   Basis (/review), alle fetch()-Aufrufe relativ - sonst zeigt die Seite unter
+   dem HA-Ingress ins Leere. Die Druckansicht blendet wie beim
+   Erstattungsbericht alles ausser #rv-report aus (@media print in style.css).
+   Zeilen ohne Daten fallen weg, statt "–" zu zeigen. Der Zustand (Jahr/Monat,
+   Fahrzeug) steht im Hash, damit Dashboard-Kachel und Mail direkt auf einen
+   bestimmten Rueckblick verlinken koennen. #}
+<a class="backlink no-print" href=".">{{ t('review.back') }}</a>
+<h1 class="no-print">{{ t('review.heading') }}</h1>
+
+<details class="help no-print">
+  <summary>{{ t('common.help') }}</summary>
+  <div class="inner">
+    <p>{{ t('review.help') }}</p>
+    <p>{{ t('review.help_savings') }}</p>
+  </div>
+</details>
+
+<form class="inline-form no-print" id="rv-controls" onsubmit="return false" style="margin:8px 0 16px">
+  <div><label>{{ t('review.period') }}</label>
+    <select id="rv-period">
+      <option value="year">{{ t('review.period_year') }}</option>
+      <option value="month">{{ t('review.period_month') }}</option>
+    </select>
+  </div>
+  <div><label>{{ t('review.year') }}</label><select id="rv-year"></select></div>
+  <div id="rv-month-row"><label>{{ t('review.month') }}</label><select id="rv-month"></select></div>
+  <div><label>{{ t('tires.vehicle_filter') }}</label>
+    <select id="rv-vehicle"><option value="">{{ t('review.all_vehicles') }}</option></select>
+  </div>
+  <div class="form-actions">
+    <button type="button" class="ghost" onclick="window.print()">{{ t('review.print') }}</button>
+  </div>
+</form>
+
+<section id="rv-report" class="card print-area"></section>
+
+<script>
+const T = {
+  titleYear: {{ t('review.title_year')|tojson }},
+  titleMonth: {{ t('review.title_month')|tojson }},
+  empty: {{ t('review.empty')|tojson }},
+  vsYear: {{ t('review.vs_year')|tojson }},
+  vsMonth: {{ t('review.vs_month')|tojson }},
+  kpi: {
+    sessions: {{ t('review.kpi.sessions')|tojson }},
+    kwh: {{ t('review.kpi.kwh')|tojson }},
+    cost: {{ t('review.kpi.cost')|tojson }},
+    km: {{ t('review.kpi.km')|tojson }},
+    price: {{ t('review.kpi.price')|tojson }},
+    consumption: {{ t('review.kpi.consumption')|tojson }},
+    price100: {{ t('review.kpi.price_100km')|tojson }},
+  },
+  savingsHeading: {{ t('review.savings.heading')|tojson }},
+  saved: {{ t('review.savings.saved')|tojson }},
+  extra: {{ t('review.savings.extra')|tojson }},
+  savedCo2: {{ t('review.savings.saved_co2')|tojson }},
+  savingsDetail: {{ t('review.savings.detail')|tojson }},
+  savingsDefaults: {{ t('review.savings.defaults')|tojson }},
+  fuel: { petrol: {{ t('review.fuel.petrol')|tojson }}, diesel: {{ t('review.fuel.diesel')|tojson }} },
+  recordsHeading: {{ t('review.records.heading')|tojson }},
+  record: {
+    cheapest: {{ t('review.record.cheapest')|tojson }},
+    mostExpensive: {{ t('review.record.most_expensive')|tojson }},
+    biggest: {{ t('review.record.biggest_charge')|tojson }},
+    longest: {{ t('review.record.longest_distance')|tojson }},
+    coldest: {{ t('review.record.coldest')|tojson }},
+    warmest: {{ t('review.record.warmest')|tojson }},
+    topLocation: {{ t('review.record.top_location')|tojson }},
+    topProvider: {{ t('review.record.top_provider')|tojson }},
+    lowestMonth: {{ t('review.record.lowest_month')|tojson }},
+    highestMonth: {{ t('review.record.highest_month')|tojson }},
+  },
+  since: {{ t('review.record.since')|tojson }},
+  rankValue: {{ t('review.record.rank_value')|tojson }},
+  splitHeading: {{ t('review.split.heading')|tojson }},
+  monthlyHeading: {{ t('review.monthly.heading')|tojson }},
+  place: {
+    home: {{ t('place.home')|tojson }},
+    work: {{ t('place.work')|tojson }},
+    public: {{ t('place.public')|tojson }},
+  },
+  perKwh: {{ t('dashboard.places.per_kwh')|tojson }},
+  createdAt: {{ t('reimbursement.report.created_at')|tojson }},
+  errorPrefix: {{ t('sessions.error.save_prefix')|tojson }},
+};
+const MONTH_NAMES = {{ t('dashboard.month_names')|tojson }}.split('|');
+const MONTH_NAMES_SHORT = {{ t('dashboard.month_names_short')|tojson }}.split('|');
+// Dieselben Toene wie im Dashboard (AC/DC-Balken, Zuhause/Arbeit/unterwegs).
+const PLACE_COLORS = { home: '#4fd1a5', work: '#5b8def', public: '#f2b84b' };
+
+const lang = window.LADEMONITOR_LANG;
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const num = (n, d = 0) => Number(n).toLocaleString(lang, { minimumFractionDigits: d, maximumFractionDigits: d });
+const money = (n, d = 2) => Number(n).toLocaleString(lang,
+  { style: 'currency', currency: 'EUR', minimumFractionDigits: d, maximumFractionDigits: d });
+const fmtDate = s => new Date(s).toLocaleDateString(lang, { dateStyle: 'medium' });
+let vehicles = [];
+
+function readHash() {
+  const p = new URLSearchParams(location.hash.slice(1));
+  const now = new Date();
+  // Ohne Angabe wie die Dashboard-Kachel: ab 1. Dezember das laufende Jahr,
+  // sonst das Vorjahr. Beim Monat der Vormonat - der laufende ist noch offen.
+  const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const period = p.get('period') === 'month' ? 'month' : 'year';
+  return {
+    period,
+    year: Number(p.get('year')) || (period === 'month' ? prev.getFullYear()
+      : (now.getMonth() === 11 ? now.getFullYear() : now.getFullYear() - 1)),
+    month: Number(p.get('month')) || prev.getMonth() + 1,
+    vehicle: p.get('vehicle') || '',
+  };
+}
+
+function writeHash() {
+  const state = currentState();
+  const p = new URLSearchParams({ period: state.period, year: state.year });
+  if (state.period === 'month') p.set('month', state.month);
+  if (state.vehicle) p.set('vehicle', state.vehicle);
+  history.replaceState(null, '', '#' + p.toString());
+}
+
+function currentState() {
+  return {
+    period: document.getElementById('rv-period').value,
+    year: Number(document.getElementById('rv-year').value),
+    month: Number(document.getElementById('rv-month').value),
+    vehicle: document.getElementById('rv-vehicle').value,
+  };
+}
+
+function fillPickers(state) {
+  const thisYear = new Date().getFullYear();
+  const first = Math.min(state.year, thisYear - 9);
+  const years = [];
+  for (let y = thisYear; y >= first; y--) years.push(y);
+  document.getElementById('rv-year').innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join('');
+  document.getElementById('rv-month').innerHTML = MONTH_NAMES
+    .map((name, i) => `<option value="${i + 1}">${name}</option>`).join('');
+  document.getElementById('rv-period').value = state.period;
+  document.getElementById('rv-year').value = state.year;
+  document.getElementById('rv-month').value = state.month;
+  document.getElementById('rv-month-row').style.display = state.period === 'month' ? '' : 'none';
+}
+
+async function loadVehicles(selected) {
+  const res = await fetch('api/vehicles');
+  vehicles = res.ok ? await res.json() : [];
+  const select = document.getElementById('rv-vehicle');
+  select.innerHTML += vehicles.map(v => `<option value="${v.id}">${esc(v.name)}</option>`).join('');
+  if (vehicles.some(v => v.id === selected)) select.value = selected;
+  // Mit nur einem Fahrzeug ist der Filter ohne Wirkung.
+  select.closest('div').style.display = vehicles.length > 1 ? '' : 'none';
+}
+
+async function loadReview() {
+  const state = currentState();
+  document.getElementById('rv-month-row').style.display = state.period === 'month' ? '' : 'none';
+  writeHash();
+  const q = new URLSearchParams({ period: state.period, year: state.year });
+  if (state.period === 'month') q.set('month', state.month);
+  if (state.vehicle) q.set('vehicle_id', state.vehicle);
+  const res = await fetch(`api/stats/review?${q}`);
+  const el = document.getElementById('rv-report');
+  if (!res.ok) { el.innerHTML = `<p>${T.errorPrefix} ${res.status}</p>`; return; }
+  renderReview(await res.json());
+}
+
+/** "+12 % ggue. Vorjahr" - nur, wenn es einen Vorwert gibt. */
+function delta(r, current, previous) {
+  if (current == null || !previous) return '';
+  const pct = (current - previous) / previous * 100;
+  const sign = pct > 0 ? '+' : pct < 0 ? '−' : '±';
+  const text = (r.period === 'year' ? T.vsYear : T.vsMonth).replace('{change}', `${sign}${num(Math.abs(pct))} %`);
+  return `<div class="rv-delta">${text}</div>`;
+}
+
+function renderKpis(r) {
+  const t = r.totals, p = r.previous || {};
+  const kpis = [
+    [T.kpi.sessions, num(t.sessions), delta(r, t.sessions, p.sessions)],
+    [T.kpi.kwh, `${num(t.kwh)} kWh`, delta(r, t.kwh, p.kwh)],
+    [T.kpi.cost, money(t.cost), delta(r, t.cost, p.cost)],
+    t.km > 0 ? [T.kpi.km, `${num(t.km)} km`, delta(r, t.km, p.km)] : null,
+    t.avg_price_per_kwh != null
+      ? [T.kpi.price, `${num(t.avg_price_per_kwh, 3)} €`, delta(r, t.avg_price_per_kwh, p.avg_price_per_kwh)] : null,
+    t.avg_consumption_kwh_per_100km != null
+      ? [T.kpi.consumption, `${num(t.avg_consumption_kwh_per_100km, 1)} kWh`,
+         delta(r, t.avg_consumption_kwh_per_100km, p.avg_consumption_kwh_per_100km)] : null,
+    t.price_per_100km != null
+      ? [T.kpi.price100, money(t.price_per_100km), delta(r, t.price_per_100km, p.price_per_100km)] : null,
+  ].filter(Boolean);
+  return `<div class="rv-kpis">${kpis.map(([label, value, d]) =>
+    `<div class="rv-kpi"><div class="stat-label">${label}</div><div class="rv-kpi-value">${value}</div>${d}</div>`).join('')}</div>`;
+}
+
+function renderSavings(r) {
+  const s = r.savings;
+  if (!s) return '';
+  const positive = s.saved_eur >= 0;
+  const co2 = Math.abs(s.saved_co2_kg) >= 1000 ? `${num(s.saved_co2_kg / 1000, 1)} t` : `${num(s.saved_co2_kg)} kg`;
+  const detail = T.savingsDetail
+    .replace('{fuel_type}', T.fuel[s.fuel_type])
+    .replace('{consumption}', num(s.consumption_l_per_100km, 1))
+    .replace('{price}', num(s.fuel_price_per_l, 2))
+    .replace('{liters}', num(s.fuel_liters))
+    .replace('{fuel_cost}', money(s.fuel_cost, 0))
+    .replace('{charging_cost}', money(s.charging_cost, 0));
+  return `<h3>${T.savingsHeading}</h3>
+    <div class="rv-kpis">
+      <div class="rv-kpi"><div class="stat-label">${positive ? T.saved : T.extra}</div>
+        <div class="rv-kpi-value ${positive ? 'rv-good' : 'rv-bad'}">${money(Math.abs(s.saved_eur), 0)}</div></div>
+      <div class="rv-kpi"><div class="stat-label">${T.savedCo2}</div><div class="rv-kpi-value">${co2} CO₂</div></div>
+    </div>
+    <p class="chartnote">${detail}</p>
+    ${s.configured ? '' : `<p class="chartnote no-print">${T.savingsDefaults} <a class="cost-link" href="settings">→</a></p>`}`;
+}
+
+function renderRecords(r) {
+  const rec = r.records;
+  const session = (x, value) => {
+    const parts = [fmtDate(x.start_time)];
+    if (x.place) parts.push(esc(x.place));
+    if (!r.vehicle_id && vehicles.length > 1 && x.vehicle_name) parts.push(esc(x.vehicle_name));
+    return `<strong>${value}</strong> <span class="rv-muted">${parts.join(' · ')}</span>`;
+  };
+  const rank = x => `<strong>${esc(x.name)}</strong> <span class="rv-muted">${T.rankValue
+    .replace('{sessions}', x.sessions).replace('{kwh}', num(x.kwh))}</span>`;
+  const month = x => `<strong>${MONTH_NAMES[x.month - 1]}</strong> <span class="rv-muted">${num(x.value, 1)} kWh/100 km</span>`;
+  const rows = [
+    rec.cheapest_per_kwh && [T.record.cheapest, session(rec.cheapest_per_kwh, `${num(rec.cheapest_per_kwh.value, 3)} €/kWh`)],
+    rec.most_expensive_per_kwh && [T.record.mostExpensive,
+      session(rec.most_expensive_per_kwh, `${num(rec.most_expensive_per_kwh.value, 3)} €/kWh`)],
+    rec.biggest_charge && [T.record.biggest, session(rec.biggest_charge, `${num(rec.biggest_charge.value, 1)} kWh`)],
+    rec.longest_distance && [T.record.longest, session(rec.longest_distance, `${num(rec.longest_distance.value)} km`)
+      + ` <span class="rv-muted">${T.since.replace('{date}', fmtDate(rec.longest_distance.previous_start_time))}</span>`],
+    rec.coldest && [T.record.coldest, session(rec.coldest, `${num(rec.coldest.value, 1)} °C`)],
+    rec.warmest && [T.record.warmest, session(rec.warmest, `${num(rec.warmest.value, 1)} °C`)],
+    rec.top_location && [T.record.topLocation, rank(rec.top_location)],
+    rec.top_provider && [T.record.topProvider, rank(rec.top_provider)],
+    rec.lowest_consumption_month && [T.record.lowestMonth, month(rec.lowest_consumption_month)],
+    rec.highest_consumption_month && [T.record.highestMonth, month(rec.highest_consumption_month)],
+  ].filter(Boolean);
+  if (!rows.length) return '';
+  return `<h3>${T.recordsHeading}</h3>
+    <dl class="rv-records">${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>`;
+}
+
+function renderSplit(r) {
+  const s = r.split;
+  const parts = [];
+  const typed = s.ac_kwh + s.dc_kwh;
+  if (typed > 0) {
+    parts.push(`
+      <div class="rv-bar">
+        <div style="width:${s.ac_share_pct}%; background:#5b8def"></div>
+        <div style="width:${s.dc_share_pct}%; background:#f2b84b"></div>
+      </div>
+      <div class="rv-bar-legend">
+        <span>AC · ${num(s.ac_share_pct)} % · ${num(s.ac_kwh)} kWh</span>
+        <span>DC · ${num(s.dc_share_pct)} % · ${num(s.dc_kwh)} kWh</span>
+      </div>`);
+  }
+  if (s.by_place.length) {
+    const total = s.by_place.reduce((sum, p) => sum + p.total_kwh, 0);
+    if (total > 0) {
+      parts.push(`<div class="rv-bar">${s.by_place.filter(p => p.total_kwh > 0).map(p =>
+        `<div style="width:${p.total_kwh / total * 100}%; background:${PLACE_COLORS[p.place]}"></div>`).join('')}</div>`);
+    }
+    parts.push(s.by_place.map(p => `
+      <div class="place-row">
+        <div class="place-name"><span class="place-dot" style="background:${PLACE_COLORS[p.place]}"></span>${T.place[p.place]}</div>
+        <div>${num(p.total_kwh)} kWh <small>${total > 0 ? num(p.total_kwh / total * 100) : 0} %</small></div>
+        <div>${money(p.total_cost)}</div>
+        <div class="place-price">${p.avg_price_per_kwh != null ? num(p.avg_price_per_kwh, 3) + ' €' : ''} <small>${p.avg_price_per_kwh != null ? T.perKwh : ''}</small></div>
+      </div>`).join(''));
+  }
+  return parts.length ? `<h3>${T.splitHeading}</h3>${parts.join('')}` : '';
+}
+
+function renderReview(r) {
+  const el = document.getElementById('rv-report');
+  const vehicle = vehicles.find(v => v.id === r.vehicle_id);
+  const title = r.period === 'year'
+    ? T.titleYear.replace('{year}', r.year)
+    : T.titleMonth.replace('{month}', MONTH_NAMES[r.month - 1]).replace('{year}', r.year);
+  const head = `<h2 style="margin-top:0">${title}${vehicle ? ` · ${esc(vehicle.name)}` : ''}</h2>`;
+  if (!r.totals.sessions) {
+    el.innerHTML = head + `<p class="rv-muted">${T.empty}</p>`;
+    return;
+  }
+  const hasMonthly = r.monthly.some(m => m.sessions);
+  el.innerHTML = head + renderKpis(r) + renderSavings(r) + renderRecords(r) + renderSplit(r)
+    + (hasMonthly ? `<h3>${T.monthlyHeading}</h3><div id="rv-monthly"></div>` : '')
+    + `<p class="chartnote">${T.createdAt.replace('{date}', new Date().toLocaleDateString(lang, { dateStyle: 'medium' }))}</p>`;
+  if (hasMonthly) {
+    // Monate ohne Ladevorgang als Luecke statt als Saeule der Hoehe 0.
+    renderVerticalBarChart('rv-monthly', MONTH_NAMES_SHORT,
+      r.monthly.map(m => m.sessions ? m.kwh : null), '#4fd1a5', 0);
+  }
+}
+
+['rv-period', 'rv-year', 'rv-month', 'rv-vehicle'].forEach(id =>
+  document.getElementById(id).addEventListener('change', loadReview));
+
+(async () => {
+  const state = readHash();
+  fillPickers(state);
+  await loadVehicles(state.vehicle);
+  await loadReview();
+})();
+</script>
+{% endblock %}

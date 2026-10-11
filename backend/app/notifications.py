@@ -10,11 +10,11 @@ Zwei Ausloeserarten, bewusst getrennt:
 * **Zeitgesteuert** - `run_due_notifications()` laeuft im Scheduler und
   entscheidet anhand von Zeitstempeln in der DB, was faellig ist
   (Ablaufwarnung des API-Keys, Sammelmeldung zu pruefender Ladevorgaenge,
-  Monatsbericht, faellige Erinnerungen).
+  Monatsbericht, Jahresrueckblick, faellige Erinnerungen).
 
 Warum die Merkerspalten (`last_failure_notified_at`,
 `api_key_expiry_notified_days`, `last_review_digest_at`,
-`last_monthly_report_at`): der Scheduler laeuft alle 15 Minuten. Ohne sie
+`last_monthly_report_at`, `last_yearly_review_year`): der Scheduler laeuft alle 15 Minuten. Ohne sie
 ginge dieselbe Mail bis zum naechsten Tageswechsel in jedem Durchlauf erneut
 raus.
 
@@ -23,7 +23,7 @@ Backup-Lauf noch einen API-Abruf noch den Scheduler abbrechen.
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -315,13 +315,150 @@ def _run_review_digests(db: Session) -> None:
         db.commit()
 
 
+def _fmt_pct_change(current: float | None, previous: float | None) -> str | None:
+    """"+12 %" bzw. "-5 %" gegenueber der Vorperiode; None, wenn es nichts zu
+    vergleichen gibt (kein Vorwert oder Vorwert 0)."""
+    if current is None or not previous:
+        return None
+    pct = (current - previous) / previous * 100
+    return f"{pct:+.0f} %"
+
+
+def _compare(value: str, current, previous, previous_key: str) -> str:
+    change = _fmt_pct_change(current, previous)
+    return f"{value} ({translate(previous_key, change=change)})" if change else value
+
+
+def _review_rows(review, *, totals: bool) -> list[tuple[str, str]]:
+    """Mailzeilen aus einem Rueckblick (review.py). Muss innerhalb eines
+    `language_context` laufen. `totals=False` laesst die grossen Zahlen weg -
+    der Monatsbericht hat sie schon in seinen eigenen Zeilen.
+
+    Wie auf der Seite: Zeilen ohne Daten fallen weg, statt "–" zu zeigen."""
+    month_names = translate("dashboard.month_names").split("|")
+    vs = "email.review.vs_year" if review.period == "year" else "email.review.vs_month"
+    t, p = review.totals, review.previous
+    rows: list[tuple[str, str]] = []
+
+    if totals:
+        rows.append((translate("email.monthly.row_sessions"),
+                     _compare(str(t.sessions), t.sessions, p and p.sessions, vs)))
+        rows.append((translate("email.monthly.row_kwh"),
+                     _compare(f"{t.kwh:.1f} kWh", t.kwh, p and p.kwh, vs)))
+        rows.append((translate("email.monthly.row_cost"),
+                     _compare(f"{t.cost:.2f} €", t.cost, p and p.cost, vs)))
+        if t.km > 0:
+            rows.append((translate("email.monthly.row_km"),
+                         _compare(f"{t.km:.0f} km", t.km, p and p.km, vs)))
+        if t.avg_price_per_kwh is not None:
+            rows.append((translate("email.monthly.row_price"), _compare(
+                f"{t.avg_price_per_kwh:.3f} €/kWh", t.avg_price_per_kwh, p and p.avg_price_per_kwh, vs)))
+        if t.avg_consumption_kwh_per_100km is not None:
+            rows.append((translate("email.monthly.row_consumption"), _compare(
+                f"{t.avg_consumption_kwh_per_100km:.1f} kWh/100km",
+                t.avg_consumption_kwh_per_100km, p and p.avg_consumption_kwh_per_100km, vs)))
+
+    if review.savings is not None:
+        sv = review.savings
+        rows.append((translate("email.review.row_saved_eur"), translate(
+            "email.review.saved_eur_value", saved=f"{sv.saved_eur:.2f} €",
+            fuel=f"{sv.fuel_cost:.2f} €", fuel_type=translate(f"review.fuel.{sv.fuel_type}"),
+        )))
+        rows.append((translate("email.review.row_saved_co2"), f"{sv.saved_co2_kg:.0f} kg CO₂"))
+
+    r = review.records
+
+    def session_value(record, text: str) -> str:
+        parts = [text, record.start_time.strftime("%d.%m.%Y")]
+        if record.place:
+            parts.append(record.place)
+        return " · ".join(parts)
+
+    if r.cheapest_per_kwh:
+        rows.append((translate("review.record.cheapest"),
+                     session_value(r.cheapest_per_kwh, f"{r.cheapest_per_kwh.value:.3f} €/kWh")))
+    if r.most_expensive_per_kwh:
+        rows.append((translate("review.record.most_expensive"),
+                     session_value(r.most_expensive_per_kwh, f"{r.most_expensive_per_kwh.value:.3f} €/kWh")))
+    if r.biggest_charge:
+        rows.append((translate("review.record.biggest_charge"),
+                     session_value(r.biggest_charge, f"{r.biggest_charge.value:.1f} kWh")))
+    if r.longest_distance:
+        rows.append((translate("review.record.longest_distance"),
+                     session_value(r.longest_distance, f"{r.longest_distance.value:.0f} km")))
+    if r.coldest:
+        rows.append((translate("review.record.coldest"),
+                     session_value(r.coldest, f"{r.coldest.value:.1f} °C")))
+    if r.warmest:
+        rows.append((translate("review.record.warmest"),
+                     session_value(r.warmest, f"{r.warmest.value:.1f} °C")))
+    for label, rank in (("review.record.top_location", r.top_location),
+                        ("review.record.top_provider", r.top_provider)):
+        if rank:
+            rows.append((translate(label), translate(
+                "email.review.rank_value", name=rank.name, sessions=rank.sessions, kwh=f"{rank.kwh:.0f}")))
+    for label, rec in (("review.record.lowest_month", r.lowest_consumption_month),
+                       ("review.record.highest_month", r.highest_consumption_month)):
+        if rec:
+            rows.append((translate(label), f"{month_names[rec.month - 1]} · {rec.value:.1f} kWh/100km"))
+    return rows
+
+
+def _run_yearly_reviews(db: Session, today: date | None = None) -> None:
+    """Jahresrueckblick (review.py) fuer das Vorjahr, einmal ab dem 1. Januar.
+    `last_yearly_review_year` haelt das zuletzt behandelte Jahr fest - auch
+    dann, wenn mangels Ladevorgaengen nichts verschickt wurde, sonst prueft der
+    Scheduler das viertelstuendlich neu."""
+    from .review import build_review  # lokal: vermeidet einen Importzyklus
+
+    today = today or date.today()
+    target = today.year - 1
+    users = (
+        db.query(models.User)
+        .filter(models.User.email.isnot(None), models.User.notify_yearly_review.is_(True))
+        .all()
+    )
+    for user in users:
+        if user.last_yearly_review_year is not None and user.last_yearly_review_year >= target:
+            continue
+        review = build_review(db, user, "year", target)
+        if review.totals.sessions == 0:
+            user.last_yearly_review_year = target
+            db.commit()
+            continue
+
+        config = mailer.get_config(db)
+        with language_context(user.language):
+            mail = mailer.Mail(
+                subject=translate("email.yearly.subject", year=target),
+                heading=translate("email.yearly.heading", year=target),
+                intro=[translate("email.yearly.intro", year=target)],
+                button=(
+                    mailer.MailButton(
+                        translate("email.yearly.button"),
+                        mailer.build_url(config, f"review#period=year&year={target}"),
+                    )
+                    if mailer.are_links_available(config) else None
+                ),
+                rows=_review_rows(review, totals=True),
+                note=(
+                    translate("email.yearly.note_defaults")
+                    if review.savings is not None and not review.savings.configured else None
+                ),
+            )
+        _send(db, user, mail, "yearly_review")
+        user.last_yearly_review_year = target
+        db.commit()
+
+
 def _run_monthly_reports(db: Session) -> None:
     """Kennzahlen des Vormonats. Nutzt denselben Aggregations-Code wie das
     Dashboard (`routers/stats.py::stats_summary`), damit Mail und Web-UI nicht
     unterschiedliche Zahlen zeigen koennen - der Endpunkt wird hier als
     gewoehnliche Funktion aufgerufen, die Depends-Parameter werden explizit
     uebergeben."""
-    from .routers.stats import stats_summary  # lokal: vermeidet einen Importzyklus
+    from .review import build_review  # lokal: vermeidet einen Importzyklus
+    from .routers.stats import stats_summary
 
     now = datetime.utcnow()
     first_of_this_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -347,14 +484,22 @@ def _run_monthly_reports(db: Session) -> None:
             db.commit()
             continue
 
+        # Seit v0.36.0 mit den Inhalten des Monatsrueckblicks (review.py):
+        # Vergleich zum Vormonat, Ersparnis, Rekorde.
+        review = build_review(db, user, "month", period_start.year, period_start.month)
+        previous = review.previous
         config = mailer.get_config(db)
         with language_context(user.language):
             month_names = translate("dashboard.month_names").split("|")
             period = f"{month_names[period_start.month - 1]} {period_start.year}"
+            vs = "email.review.vs_month"
             rows = [
-                (translate("email.monthly.row_sessions"), str(summary.total_sessions)),
-                (translate("email.monthly.row_kwh"), f"{summary.total_kwh:.1f} kWh"),
-                (translate("email.monthly.row_cost"), f"{summary.total_cost:.2f} €"),
+                (translate("email.monthly.row_sessions"), _compare(
+                    str(summary.total_sessions), review.totals.sessions, previous and previous.sessions, vs)),
+                (translate("email.monthly.row_kwh"), _compare(
+                    f"{summary.total_kwh:.1f} kWh", review.totals.kwh, previous and previous.kwh, vs)),
+                (translate("email.monthly.row_cost"), _compare(
+                    f"{summary.total_cost:.2f} €", review.totals.cost, previous and previous.cost, vs)),
             ]
             if summary.avg_price_per_kwh is not None:
                 rows.append((translate("email.monthly.row_price"), f"{summary.avg_price_per_kwh:.3f} €/kWh"))
@@ -379,13 +524,20 @@ def _run_monthly_reports(db: Session) -> None:
                 ))
             for entry in summary.by_provider[:5]:
                 rows.append((entry.provider_name, f"{entry.total_kwh:.1f} kWh · {entry.total_cost:.2f} €"))
+            rows.extend(_review_rows(review, totals=False))
 
             mail = mailer.Mail(
                 subject=translate("email.monthly.subject", period=period),
                 heading=translate("email.monthly.heading", period=period),
                 intro=[translate("email.monthly.intro", period=period)],
                 button=(
-                    mailer.MailButton(translate("email.monthly.button"), mailer.build_url(config, ""))
+                    mailer.MailButton(
+                        translate("email.monthly.button"),
+                        mailer.build_url(
+                            config,
+                            f"review#period=month&year={period_start.year}&month={period_start.month}",
+                        ),
+                    )
                     if mailer.are_links_available(config) else None
                 ),
                 rows=rows,
@@ -525,7 +677,7 @@ def run_due_notifications() -> None:
         if not mailer.is_sending_enabled(mailer.get_config(db)):
             return
         for step in (
-            _run_key_expiry_warnings, _run_review_digests, _run_monthly_reports,
+            _run_key_expiry_warnings, _run_review_digests, _run_monthly_reports, _run_yearly_reviews,
             _run_reminders, _run_reimbursement_reports,
         ):
             try:
