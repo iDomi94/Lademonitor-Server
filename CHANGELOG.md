@@ -6,6 +6,24 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.34.0] — 2026-10-11
+
+### Added
+- **Reale Reichweite je Temperatur** (`range_estimate.py`): `GET
+  /api/stats/temperature` liefert zusätzlich `range` (nur bei genau einem
+  Fahrzeug mit Akkukapazität): Reichweite 100 → 0 % in 5-°C-Schritten über den
+  gemessenen Bereich plus 0 und 20 °C (`extrapolated` außerhalb), dazu `curve`
+  mit dem Verbrauch ab Akku je ganzem Grad von −20 bis 40 °C für den
+  Reichweitenrechner der Apps. Der Ladeverlust (energiegewichtet aus
+  `battery.py`, mindestens 3 an der Ladesäule gemessene Vorgänge) wird je Fahrt
+  herausgerechnet, nur bei an der Ladesäule gemessener Energie.
+- Dashboard-Abschnitt „Reale Reichweite (100 → 0 %)“.
+
+### Fixed
+- `trend` in `GET /api/stats/temperature` enthielt `model`, `curve`,
+  `breakpoint_c`, `slope_cold`, `slope_warm` und `at_0c_is_extrapolated` nie
+  (seit v0.25.0 berechnet, aber nicht ausgeliefert).
+
 ## [0.33.0] — 2026-10-10
 
 ### Added
