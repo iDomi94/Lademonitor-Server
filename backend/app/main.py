@@ -26,6 +26,7 @@ from .myskoda_poller import SCHEDULER_INTERVAL_SECONDS as MYSKODA_SCHEDULER_INTE
 from .myskoda_poller import run_due_polls
 from .notifications import SCHEDULER_INTERVAL_SECONDS as NOTIFICATION_SCHEDULER_INTERVAL_SECONDS
 from .notifications import run_due_notifications
+from .reimbursement import DEFAULT_RATE_PER_KWH as DEFAULT_REIMBURSEMENT_RATE
 from .reminders import KINDS as REMINDER_KINDS
 from .vehicle_costs import CATEGORIES as COST_CATEGORIES
 from .routers import (
@@ -38,6 +39,7 @@ from .routers import (
     myskoda,
     provider_fees,
     providers,
+    reimbursement,
     reminders,
     sessions,
     stats,
@@ -179,6 +181,7 @@ app.include_router(auth.router)
 app.include_router(vehicles.router, dependencies=[Depends(get_current_user)])
 app.include_router(vehicle_costs.router, dependencies=[Depends(get_current_user)])
 app.include_router(reminders.router, dependencies=[Depends(get_current_user)])
+app.include_router(reimbursement.router, dependencies=[Depends(get_current_user)])
 app.include_router(providers.router, dependencies=[Depends(get_current_user)])
 app.include_router(provider_fees.router, dependencies=[Depends(get_current_user)])
 app.include_router(locations.router, dependencies=[Depends(get_current_user)])
@@ -273,6 +276,13 @@ def tires_page(request: Request, db: Session = Depends(get_db)):
 @app.get("/vehicle", response_class=HTMLResponse)
 def vehicle_page(request: Request, db: Session = Depends(get_db)):
     return _page(request, db, "vehicle.html")
+
+
+@app.get("/reimbursement", response_class=HTMLResponse)
+def reimbursement_page(request: Request, db: Session = Depends(get_db)):
+    return _page(
+        request, db, "reimbursement.html", reimbursement_default_rate=DEFAULT_REIMBURSEMENT_RATE
+    )
 
 
 @app.get("/import", response_class=HTMLResponse)

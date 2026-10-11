@@ -3,8 +3,8 @@
 Gedacht als Backup/Restore-Mechanismus (z.B. Neuaufsetzen des Servers), nicht
 als flexibles Datenaustauschformat - Reimport erwartet exakt die vom Export
 erzeugte ZIP-Struktur mit den vier festen Dateinamen (plus optional
-`fees.csv` seit v0.27.0, `costs.csv` seit v0.32.0 und `reminders.csv` seit
-v0.33.0 - aeltere ZIPs haben
+`fees.csv` seit v0.27.0, `costs.csv` seit v0.32.0, `reminders.csv` seit
+v0.33.0 und `reimbursement_rates.csv` seit v0.35.0 - aeltere ZIPs haben
 sie nicht und bleiben importierbar).
 
 Zwei Faelle, die der Import auseinanderhalten muss (siehe `_target_id`):
@@ -45,7 +45,14 @@ VEHICLE_FIELDS = [
     "ownership", "purchase_price", "purchase_date", "first_registration",
     "purchase_odometer_km", "depreciation_monthly_override",
     "leasing_rate_monthly", "leasing_start", "leasing_end", "leasing_down_payment",
+    # Seit v0.35.0 (Dienstwagen), beim Import optional (fehlt -> kein Dienstwagen).
+    "is_company_car", "reimbursement_mode", "reimbursement_include_fees",
+    "employee_name", "employee_number", "license_plate", "reimbursement_monthly_mail",
 ]
+COMPANY_CAR_BOOL_FIELDS = (
+    "is_company_car", "reimbursement_include_fees", "reimbursement_monthly_mail",
+)
+COMPANY_CAR_STR_FIELDS = ("employee_name", "employee_number", "license_plate")
 OWNERSHIP_FLOAT_FIELDS = (
     "purchase_price", "depreciation_monthly_override",
     "leasing_rate_monthly", "leasing_down_payment",
@@ -94,6 +101,9 @@ COST_FIELDS = [
     "start_date", "end_date", "odometer_km", "label", "notes", "created_at",
 ]
 
+# Seit v0.35.0 (Erstattungssaetze, siehe models.ReimbursementRate), optional.
+RATE_FIELDS = ["id", "vehicle_id", "vehicle_name", "valid_from", "rate_per_kwh", "created_at"]
+
 # Seit v0.33.0 (Erinnerungen, siehe models.Reminder), beim Import optional.
 REMINDER_FIELDS = [
     "id", "vehicle_id", "vehicle_name", "kind", "title", "due_date", "due_km",
@@ -114,6 +124,7 @@ Inhalt dieser ZIP-Datei:
 - fees.csv        - Grundgebuehren/Abos der Anbieter (seit v0.27.0)
 - costs.csv       - sonstige Fahrzeugkosten (seit v0.32.0)
 - reminders.csv   - Erinnerungen (HU, Inspektion, ...; seit v0.33.0)
+- reimbursement_rates.csv - Erstattungssaetze Dienstwagen (seit v0.35.0)
 
 Format:
 - Trennzeichen: Komma, UTF-8, Kopfzeile in der ersten Zeile
@@ -142,9 +153,9 @@ Reimport:
   von einem anderen Server stammt und alle IDs abweichen.
 - Die Reihenfolge (Fahrzeuge vor Anbietern vor Grundgebuehren, Ladeorten und
   Ladevorgaengen, wegen Fremdschluesseln) uebernimmt der Importer automatisch.
-- fees.csv, costs.csv und reminders.csv sind optional: ZIPs aus Versionen
-  vor 0.27.0, 0.32.0 bzw. 0.33.0 enthalten sie nicht und lassen sich
-  trotzdem einlesen.
+- fees.csv, costs.csv, reminders.csv und reimbursement_rates.csv sind
+  optional: ZIPs aus Versionen vor 0.27.0, 0.32.0, 0.33.0 bzw. 0.35.0
+  enthalten sie nicht und lassen sich trotzdem einlesen.
 
 Nicht enthalten:
 - Zugangsdaten. Insbesondere der MyŠkoda-API-Key und das WebDAV-Passwort sind
@@ -222,6 +233,12 @@ def build_backup_zip(db: Session, user: models.User) -> bytes:
         .order_by(models.Reminder.created_at)
         .all()
     )
+    rates = (
+        db.query(models.ReimbursementRate)
+        .filter(models.ReimbursementRate.user_id == user.id)
+        .order_by(models.ReimbursementRate.valid_from)
+        .all()
+    )
 
     vehicles_by_id = {v.id: v for v in vehicles}
     providers_by_id = {p.id: p for p in providers}
@@ -236,6 +253,8 @@ def build_backup_zip(db: Session, user: models.User) -> bytes:
             "ownership": _c(v.ownership),
             "purchase_odometer_km": _c(v.purchase_odometer_km),
             **{f: _c(getattr(v, f)) for f in OWNERSHIP_FLOAT_FIELDS + OWNERSHIP_DATE_FIELDS},
+            "reimbursement_mode": _c(v.reimbursement_mode),
+            **{f: _c(getattr(v, f)) for f in COMPANY_CAR_BOOL_FIELDS + COMPANY_CAR_STR_FIELDS},
         }
         for v in vehicles
     ]
@@ -325,6 +344,17 @@ def build_backup_zip(db: Session, user: models.User) -> bytes:
         for r in reminders
     ]
 
+    rate_rows = [
+        {
+            "id": _c(r.id),
+            "vehicle_id": _c(r.vehicle_id),
+            "vehicle_name": _c(vehicles_by_id[r.vehicle_id].name) if r.vehicle_id in vehicles_by_id else "",
+            "valid_from": _c(r.valid_from), "rate_per_kwh": _c(r.rate_per_kwh),
+            "created_at": _c(r.created_at),
+        }
+        for r in rates
+    ]
+
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("README.txt", README_TEMPLATE.format(timestamp=datetime.utcnow().isoformat()))
@@ -335,6 +365,7 @@ def build_backup_zip(db: Session, user: models.User) -> bytes:
         zf.writestr("fees.csv", _write_csv(FEE_FIELDS, fee_rows))
         zf.writestr("costs.csv", _write_csv(COST_FIELDS, cost_rows))
         zf.writestr("reminders.csv", _write_csv(REMINDER_FIELDS, reminder_rows))
+        zf.writestr("reimbursement_rates.csv", _write_csv(RATE_FIELDS, rate_rows))
     return buf.getvalue()
 
 
@@ -364,6 +395,8 @@ class BackupImportResult(BaseModel):
     costs_skipped: int = 0
     reminders_imported: int = 0
     reminders_skipped: int = 0
+    rates_imported: int = 0
+    rates_skipped: int = 0
 
 
 def _parse_bool(v: str | None) -> bool:
@@ -572,6 +605,9 @@ async def import_backup(
                 purchase_odometer_km=_parse_int(row.get("purchase_odometer_km")),
                 **{f: _parse_float(row.get(f)) for f in OWNERSHIP_FLOAT_FIELDS},
                 **{f: _parse_dt(row.get(f)) for f in OWNERSHIP_DATE_FIELDS},
+                reimbursement_mode="actual" if row.get("reimbursement_mode") == "actual" else "flat",
+                **{f: _parse_bool(row.get(f)) for f in COMPANY_CAR_BOOL_FIELDS},
+                **{f: _parse_str(row.get(f)) for f in COMPANY_CAR_STR_FIELDS},
             )
         )
         existing_vehicle_owners[new_id] = user.id
@@ -898,6 +934,52 @@ async def import_backup(
             reminders_imported += 1
         db.commit()
 
+    rates_imported = rates_skipped = 0
+    if "reimbursement_rates.csv" in names:
+        existing_rate_owners = {
+            row[0]: row[1]
+            for row in db.query(models.ReimbursementRate.id, models.ReimbursementRate.user_id).all()
+        }
+        own_rate_keys = {
+            (r.vehicle_id, r.valid_from)
+            for r in db.query(models.ReimbursementRate)
+            .filter(models.ReimbursementRate.user_id == user.id)
+            .all()
+        }
+        for row in _read_csv(zf.read("reimbursement_rates.csv")):
+            old_id = row["id"]
+            new_id = _target_id(old_id, existing_rate_owners.get(old_id), user.id)
+            vehicle_id = _parse_str(row.get("vehicle_id"))
+            if vehicle_id:
+                vehicle_id = vehicle_id_map.get(vehicle_id, vehicle_id)
+            valid_from = _parse_dt(row.get("valid_from"))
+            rate = _parse_float(row.get("rate_per_kwh"))
+            key = (vehicle_id, valid_from)
+            if (
+                new_id is None
+                or not vehicle_id
+                or existing_vehicle_owners.get(vehicle_id) != user.id
+                or valid_from is None
+                or rate is None
+                or key in own_rate_keys
+            ):
+                rates_skipped += 1
+                continue
+            db.add(
+                models.ReimbursementRate(
+                    id=new_id,
+                    user_id=user.id,
+                    vehicle_id=vehicle_id,
+                    valid_from=valid_from,
+                    rate_per_kwh=rate,
+                    created_at=_parse_dt(row.get("created_at")),
+                )
+            )
+            existing_rate_owners[new_id] = user.id
+            own_rate_keys.add(key)
+            rates_imported += 1
+        db.commit()
+
     return BackupImportResult(
         vehicles_imported=vehicles_imported,
         vehicles_skipped=vehicles_skipped,
@@ -913,4 +995,6 @@ async def import_backup(
         costs_skipped=costs_skipped,
         reminders_imported=reminders_imported,
         reminders_skipped=reminders_skipped,
+        rates_imported=rates_imported,
+        rates_skipped=rates_skipped,
     )

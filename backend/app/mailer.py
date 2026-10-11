@@ -181,6 +181,7 @@ def send(
     language: str | None = None,
     user_id: str | None = None,
     log_skipped: bool = False,
+    attachments: list[tuple[str, bytes, str]] | None = None,
 ) -> bool:
     """Verschickt eine Mail und protokolliert das Ergebnis.
 
@@ -193,6 +194,9 @@ def send(
     Normalfall und wuerde das Protokoll fluten. Dass eine angeforderte
     Reset-Mail nicht rausging, ist dagegen genau die Zeile, die man spaeter
     sucht.
+
+    `attachments`: (Dateiname, Inhalt, MIME-Typ) - z. B. der Erstattungsbericht
+    als CSV. Die Mail wird damit multipart/mixed um den alternative-Teil herum.
     """
     config = get_config(db)
 
@@ -219,6 +223,10 @@ def send(
     # Reihenfolge erwartet multipart/alternative.
     message.set_content(text)
     message.add_alternative(html, subtype="html")
+    for filename, content, mime in attachments or []:
+        maintype, _, subtype = mime.partition("/")
+        message.add_attachment(content, maintype=maintype, subtype=subtype or "octet-stream",
+                               filename=filename)
 
     try:
         _deliver(config, message)

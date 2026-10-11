@@ -304,9 +304,29 @@ class Vehicle(Base):
     leasing_end: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # Anzahlung/Sonderzahlung, gleichmaessig auf die Laufzeit verteilt.
     leasing_down_payment: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Dienstwagen und Erstattungsbericht (siehe reimbursement.py, ab v0.35.0).
+    # "flat" = Pauschale je kWh aus ReimbursementRate, "actual" = tatsaechliche
+    # Kosten der Heimladungen. String statt Enum wie ownership.
+    is_company_car: Mapped[bool] = mapped_column(Boolean, default=False)
+    reimbursement_mode: Mapped[str] = mapped_column(String, default="flat")
+    # Nur bei "actual": Grundgebuehren-Anteil (fees.py) mit erstatten.
+    reimbursement_include_fees: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Kopf des Berichts. Verschluesselt (siehe crypto.py) - Name, Personal-
+    # nummer und Kennzeichen sind personenbezogen, gefiltert wird nicht danach.
+    employee_name: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    employee_number: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    license_plate: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    # Monatsmail mit dem Bericht des Vormonats als CSV (Standard aus).
+    reimbursement_monthly_mail: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Merker "YYYY-MM" des zuletzt verschickten Monats - nur Serverzustand,
+    # nicht in der API und nicht im Sync (wie Reminder.notified_stage).
+    reimbursement_last_mailed: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     sessions: Mapped[list["ChargingSession"]] = relationship(
+        back_populates="vehicle", cascade="all, delete-orphan"
+    )
+    reimbursement_rates: Mapped[list["ReimbursementRate"]] = relationship(
         back_populates="vehicle", cascade="all, delete-orphan"
     )
     costs: Mapped[list["VehicleCost"]] = relationship(
@@ -446,6 +466,30 @@ class VehicleCost(Base):
     )
 
     vehicle: Mapped["Vehicle"] = relationship(back_populates="costs")
+
+
+class ReimbursementRate(Base):
+    """Erstattungssatz je kWh fuer einen Dienstwagen, gueltig ab einem Tag
+    (siehe reimbursement.py, ab v0.35.0).
+
+    Ein neuer Jahreswert ist eine zweite Zeile - so veraendert er die
+    Vormonate nicht. Vor dem ersten `valid_from` gilt kein Satz.
+    """
+
+    __tablename__ = "reimbursement_rates"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_uuid)
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    vehicle_id: Mapped[str] = mapped_column(ForeignKey("vehicles.id"), index=True)
+    # Naive datetime um Mitternacht wie ProviderFee.start_date.
+    valid_from: Mapped[datetime] = mapped_column(DateTime, index=True)
+    rate_per_kwh: Mapped[float] = mapped_column(Float)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    vehicle: Mapped["Vehicle"] = relationship(back_populates="reimbursement_rates")
 
 
 class Reminder(Base):
@@ -711,6 +755,8 @@ class SyncEntityType(str, enum.Enum):
     VEHICLE_COST = "vehicle_cost"
     # Seit v0.33.0.
     REMINDER = "reminder"
+    # Seit v0.35.0.
+    REIMBURSEMENT_RATE = "reimbursement_rate"
 
 
 class DeletedRecord(Base):

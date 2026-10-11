@@ -6,6 +6,27 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.35.0] — 2026-10-11
+
+### Added
+- **Erstattungsbericht für den Dienstwagen** (`reimbursement.py`,
+  `routers/reimbursement.py`): neue Fahrzeugfelder `is_company_car`,
+  `reimbursement_mode` (`flat`/`actual`), `reimbursement_include_fees`,
+  `employee_name`, `employee_number`, `license_plate` (die drei letzten
+  verschlüsselt) und `reimbursement_monthly_mail`; neue Tabelle
+  `reimbursement_rates` (Satz je kWh mit `valid_from`, CRUD unter
+  `/api/reimbursement/rates`, Grabstein-Typ `reimbursement_rate`).
+- `GET /api/reimbursement/report?vehicle_id=&from=&to=&format=json|csv`: nur
+  Heimladungen (`Provider.charging_place == "home"`), kWh-Herkunft
+  `charger`/`vehicle`/`estimated`, Summen je Monat; CSV auf Deutsch mit
+  Semikolon und Dezimalkomma.
+- Web-Seite `/reimbursement` (Unterseite von „Fahrzeug“) mit Einstellungen,
+  Sätzen, Bericht, CSV-Download und Druckansicht für PDF.
+- Optionale Monatsmail mit dem Bericht des Vormonats als CSV-Anhang
+  (`mailer.send` kann jetzt Anhänge).
+- Backup: Dienstwagen-Spalten in `vehicles.csv`, neue `reimbursement_rates.csv`
+  (beim Import optional).
+
 ## [0.34.0] — 2026-10-11
 
 ### Added

@@ -5,6 +5,19 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.35.0",
+        "date": "2026-10-11",
+        "title": "Erstattungsbericht für den Dienstwagen",
+        "changes": [
+            "Neue Unterseite „Erstattung Dienstwagen“ auf der Seite „Fahrzeug“: alle Heimladungen eines Dienstwagens (Anbieter mit Ladeort „Zuhause“) mit kWh, Herkunft der kWh (Wallbox, Fahrzeug oder geschätzt), km-Stand und Erstattungsbetrag, dazu Summen je Monat. Ladungen bei der Arbeit zählen nicht.",
+            "Erstattet wird je Fahrzeug wählbar pauschal je kWh (Vorschlag 0,34 €, mit „gültig ab“, damit ein neuer Jahreswert alte Monate nicht verändert) oder zu den tatsächlichen Kosten der Heimladungen, auf Wunsch inklusive Grundgebühr.",
+            "Geschätzte kWh (aus Ladestand × Akkukapazität) zählen mit, sind aber markiert und unten gezählt.",
+            "Bericht für einen Monat oder einen frei gewählten Zeitraum, als CSV zum Herunterladen oder als PDF über die Druckansicht. Name, Personalnummer und Kennzeichen stehen auf Wunsch im Kopf (verschlüsselt gespeichert, wenn die Feld-Verschlüsselung aktiv ist).",
+            "Optional kommt am Monatsanfang eine Mail mit dem Bericht des Vormonats als CSV im Anhang (Standard aus).",
+            "Dienstwagen-Einstellungen und Erstattungssätze sind Teil des Backups und werden mit den Apps synchronisiert.",
+        ],
+    },
+    {
         "version": "0.34.0",
         "date": "2026-10-11",
         "title": "Reale Reichweite je Temperatur",

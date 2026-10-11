@@ -191,7 +191,19 @@ class VehicleOwnershipFields(BaseModel):
     leasing_down_payment: float | None = Field(default=None, ge=0)
 
 
-class VehicleBase(VehicleOwnershipFields):
+# Erstattungsart eines Dienstwagens (siehe models.Vehicle, reimbursement.py).
+ReimbursementMode = Literal["flat", "actual"]
+
+
+class VehicleReimbursementFields(BaseModel):
+    """Kopf des Erstattungsberichts - optional, per null leerbar."""
+
+    employee_name: str | None = None
+    employee_number: str | None = None
+    license_plate: str | None = None
+
+
+class VehicleBase(VehicleOwnershipFields, VehicleReimbursementFields):
     external_id: str
     name: str
     brand: str | None = None
@@ -199,19 +211,28 @@ class VehicleBase(VehicleOwnershipFields):
     battery_capacity_kwh: float | None = None
     is_active: bool = True
     ownership: Ownership = "none"
+    is_company_car: bool = False
+    reimbursement_mode: ReimbursementMode = "flat"
+    reimbursement_include_fees: bool = False
+    reimbursement_monthly_mail: bool = False
 
 
 class VehicleCreate(VehicleBase):
     pass
 
 
-class VehicleUpdate(VehicleOwnershipFields):
+class VehicleUpdate(VehicleOwnershipFields, VehicleReimbursementFields):
     name: str | None = None
     brand: str | None = None
     model: str | None = None
     battery_capacity_kwh: float | None = None
     is_active: bool | None = None
     ownership: Ownership | None = None
+    # null = unveraendert (siehe routers/vehicles.py::_KEEP_ON_NULL).
+    is_company_car: bool | None = None
+    reimbursement_mode: ReimbursementMode | None = None
+    reimbursement_include_fees: bool | None = None
+    reimbursement_monthly_mail: bool | None = None
 
 
 class VehicleOut(VehicleBase):
@@ -272,6 +293,80 @@ class VehicleCostOut(VehicleCostBase):
     updated_at: datetime
     # Nur lesend: Summe aller Zahlungen bis heute.
     paid_to_date: float = 0
+
+
+# ---------- Erstattung Dienstwagen (siehe models.ReimbursementRate, reimbursement.py) ----------
+
+
+class ReimbursementRateBase(BaseModel):
+    vehicle_id: str
+    valid_from: datetime
+    rate_per_kwh: float = Field(ge=0, le=10)
+
+
+class ReimbursementRateCreate(ReimbursementRateBase):
+    pass
+
+
+class ReimbursementRateUpdate(BaseModel):
+    vehicle_id: str | None = None
+    valid_from: datetime | None = None
+    rate_per_kwh: float | None = Field(default=None, ge=0, le=10)
+
+
+class ReimbursementRateOut(ReimbursementRateBase):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    created_at: datetime
+    updated_at: datetime
+
+
+# charger = Wallbox/Ladesaeule gemessen, vehicle = im Fahrzeug abgelesen,
+# estimated = aus SoC-Hub x Akkukapazitaet geschaetzt.
+KwhSource = Literal["charger", "vehicle", "estimated"]
+
+
+class ReimbursementRowOut(BaseModel):
+    session_id: str
+    start_time: datetime
+    energy_kwh: float | None
+    kwh_source: KwhSource
+    odometer_km: int | None
+    # Satz bzw. tatsaechlicher Preis je kWh, mit dem gerechnet wurde.
+    rate_per_kwh: float | None
+    # Anteil Grundgebuehr (nur "actual" mit include_fees), im Betrag enthalten.
+    fee_share: float = 0
+    # None = nicht berechenbar (kein Satz zum Datum bzw. kein Preis).
+    amount: float | None
+
+
+class ReimbursementMonthOut(BaseModel):
+    month: str  # "YYYY-MM"
+    sessions: int
+    energy_kwh: float
+    estimated_kwh: float
+    amount: float
+
+
+class ReimbursementReportOut(BaseModel):
+    vehicle_id: str
+    vehicle_name: str
+    license_plate: str | None
+    employee_name: str | None
+    employee_number: str | None
+    mode: ReimbursementMode
+    include_fees: bool
+    date_from: date
+    date_to: date
+    rows: list[ReimbursementRowOut]
+    months: list[ReimbursementMonthOut]
+    total_kwh: float
+    estimated_kwh: float
+    estimated_sessions: int
+    # Vorgaenge ohne Betrag (kein Satz bzw. kein Preis) - gezaehlt, nicht
+    # still mit 0 verrechnet.
+    missing_amount_sessions: int
+    total_amount: float
 
 
 # ---------- Erinnerungen (siehe models.Reminder, reminders.py) ----------

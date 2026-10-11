@@ -430,6 +430,61 @@ def _run_reminders(db: Session) -> None:
         db.commit()
 
 
+def _run_reimbursement_reports(db: Session) -> None:
+    """Monatsmail mit dem Erstattungsbericht des Vormonats als CSV-Anhang
+    (reimbursement.py), je Dienstwagen mit eingeschalteter Monatsmail.
+    `Vehicle.reimbursement_last_mailed` haelt den zuletzt verschickten Monat
+    fest - wie beim Monatsbericht auch dann, wenn der Versand scheitert, sonst
+    ginge der Versuch viertelstuendlich erneut raus."""
+    from datetime import date
+
+    from .reimbursement import build_report, to_csv
+    from .routers.reimbursement import previous_month
+
+    start, end = previous_month(date.today())
+    key = start.strftime("%Y-%m")
+    vehicles = (
+        db.query(models.Vehicle)
+        .filter(
+            models.Vehicle.is_company_car.is_(True),
+            models.Vehicle.reimbursement_monthly_mail.is_(True),
+        )
+        .all()
+    )
+    for vehicle in vehicles:
+        if vehicle.reimbursement_last_mailed == key:
+            continue
+        user = db.get(models.User, vehicle.user_id) if vehicle.user_id else None
+        if not user or not user.email:
+            continue
+        report = build_report(db, user, vehicle, start, end)
+        with language_context(user.language):
+            body = to_csv(report, user.language or "de")
+            month_label = start.strftime("%m/%Y")
+            mail = mailer.Mail(
+                subject=translate("email.reimbursement.subject", month=month_label, vehicle=vehicle.name),
+                heading=translate("email.reimbursement.heading", month=month_label),
+                intro=[translate("email.reimbursement.intro")],
+                rows=[
+                    (translate("email.reimbursement.row_sessions"), str(len(report.rows))),
+                    (translate("email.reimbursement.row_kwh"), f"{report.total_kwh:.2f} kWh"),
+                    (translate("email.reimbursement.row_amount"), f"{report.total_amount:.2f} €"),
+                ],
+                note=(
+                    translate("email.reimbursement.estimated_note", count=report.estimated_sessions)
+                    if report.estimated_sessions else None
+                ),
+            )
+        filename = f"lademonitor-erstattung-{key}.csv"
+        mailer.send(
+            db, to_address=user.email, mail=mail, kind="reimbursement_report",
+            language=user.language, user_id=user.id,
+            attachments=[(filename, body.encode("utf-8"), "text/csv")],
+        )
+        vehicle.reimbursement_last_mailed = key
+        db.commit()
+
+
 def run_due_notifications() -> None:
     """Einstiegspunkt des Scheduler-Tasks (siehe main.py). Faengt pro Bereich
     ab, damit ein Fehler in einem die uebrigen nicht mitreisst."""
@@ -437,7 +492,10 @@ def run_due_notifications() -> None:
     try:
         if not mailer.is_sending_enabled(mailer.get_config(db)):
             return
-        for step in (_run_key_expiry_warnings, _run_review_digests, _run_monthly_reports, _run_reminders):
+        for step in (
+            _run_key_expiry_warnings, _run_review_digests, _run_monthly_reports,
+            _run_reminders, _run_reimbursement_reports,
+        ):
             try:
                 step(db)
             except Exception:  # noqa: BLE001

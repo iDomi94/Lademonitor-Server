@@ -76,6 +76,7 @@ const T = {
   backupResultFees: {{ t('settings.backup.result.fees')|tojson }},
   backupResultCosts: {{ t('settings.backup.result.costs')|tojson }},
   backupResultReminders: {{ t('settings.backup.result.reminders')|tojson }},
+  backupResultRates: {{ t('settings.backup.result.reimbursement_rates')|tojson }},
   backupResultImported: {{ t('settings.backup.result.imported')|tojson }},
   backupResultSkipped: {{ t('settings.backup.result.skipped')|tojson }},
 
@@ -117,7 +118,8 @@ document.getElementById('backup-import-form').addEventListener('submit', async (
       `${T.backupResultSessions}: ${r.sessions_imported} ${T.backupResultImported}, ${r.sessions_skipped} ${T.backupResultSkipped}. ` +
       `${T.backupResultFees}: ${r.fees_imported ?? 0} ${T.backupResultImported}, ${r.fees_skipped ?? 0} ${T.backupResultSkipped}. ` +
       `${T.backupResultCosts}: ${r.costs_imported ?? 0} ${T.backupResultImported}, ${r.costs_skipped ?? 0} ${T.backupResultSkipped}. ` +
-      `${T.backupResultReminders}: ${r.reminders_imported ?? 0} ${T.backupResultImported}, ${r.reminders_skipped ?? 0} ${T.backupResultSkipped}.`;
+      `${T.backupResultReminders}: ${r.reminders_imported ?? 0} ${T.backupResultImported}, ${r.reminders_skipped ?? 0} ${T.backupResultSkipped}. ` +
+      `${T.backupResultRates}: ${r.rates_imported ?? 0} ${T.backupResultImported}, ${r.rates_skipped ?? 0} ${T.backupResultSkipped}.`;
     e.target.reset();
   } catch (err) {
     resultDiv.textContent = T.backupErrorGeneric;
