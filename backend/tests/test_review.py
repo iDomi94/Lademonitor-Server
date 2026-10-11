@@ -425,7 +425,7 @@ def test_yearly_mail_sent_once_and_marker_written(client, db_session, monkeypatc
     assert user.last_yearly_review_year == 2025
 
 
-def test_yearly_mail_skips_empty_years_and_late_installs(client, db_session, monkeypatch):
+def test_yearly_mail_skips_empty_years_and_sends_late_once(client, db_session, monkeypatch):
     from app import mailer, models, notifications
 
     register(client, email="a@example.org")
@@ -438,12 +438,14 @@ def test_yearly_mail_skips_empty_years_and_late_installs(client, db_session, mon
     db_session.refresh(user)
     assert sent == [] and user.last_yearly_review_year == 2025
 
-    # Update im Oktober: kein Rueckblick auf ein laengst vergangenes Jahr.
+    # Update mitten im Jahr: der Rueckblick aufs Vorjahr geht trotzdem einmal
+    # raus (Entscheidung des Nutzers 11.10.2026), danach nicht erneut.
     car = create_vehicle(client)
     _session(client, car, "2026-05-01T10:00:00", kwh=40, price=12)
     notifications._run_yearly_reviews(db_session, today=date(2027, 10, 11))
+    notifications._run_yearly_reviews(db_session, today=date(2027, 10, 11))
     db_session.refresh(user)
-    assert sent == [] and user.last_yearly_review_year == 2026
+    assert len(sent) == 1 and user.last_yearly_review_year == 2026
 
 
 def test_monthly_report_contains_review_content(client, db_session, monkeypatch):

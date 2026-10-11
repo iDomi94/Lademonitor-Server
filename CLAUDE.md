@@ -2431,11 +2431,11 @@ Nicht im Backup - Nutzer-Spalten stehen dort generell nicht drin.
 (`notifications.py::_review_rows`). Jahresrueckblick
 (`_run_yearly_reviews`, 15-min-Scheduler): ab dem 1. Januar einmal fuers
 Vorjahr, nur mit mindestens einem Vorgang; Merker `last_yearly_review_year`
-auch ohne Versand. **Bewusste Ergaenzung zum Vertrag:** verschickt wird nur bis
-einschliesslich Maerz (`YEARLY_REVIEW_SEND_UNTIL_MONTH`), danach wird nur der
-Merker fortgeschrieben - sonst haette das Einspielen von v0.36.0 im Oktober
-jedem Bestandsnutzer (Standard an!) sofort einen Rueckblick auf 2025
-geschickt. Der Monatsbericht bekommt Vormonatsvergleich, Ersparnis und Rekorde
+auch ohne Versand. Bewusst OHNE Zeitfenster: wer das Update mitten im Jahr
+einspielt oder den Schalter spaeter einschaltet, bekommt den Rueckblick aufs
+Vorjahr einmal nachgereicht - so gewollt (Entscheidung des Nutzers
+11.10.2026: beim Einspielen von v0.36.0 im Oktober darf der Rueckblick auf
+2025 einmalig rausgehen). Der Monatsbericht bekommt Vormonatsvergleich, Ersparnis und Rekorde
 dazu, sein Knopf fuehrt auf `review#period=month&...`. `notify_yearly_review`
 ist in `NotificationSettingsUpdate` optional (aeltere Clients).
 

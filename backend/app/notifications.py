@@ -283,14 +283,6 @@ def _run_review_digests(db: Session) -> None:
         db.commit()
 
 
-# Jahresrueckblick: verschickt wird nur bis einschliesslich Maerz. Wer die
-# App erst im Laufe des Jahres aufsetzt (oder das Update im Oktober
-# einspielt), soll nicht ploetzlich den Rueckblick auf das Vorjahr bekommen -
-# dann wird nur der Merker fortgeschrieben. Drei Monate decken auch einen
-# Server ab, der ueber den Jahreswechsel eine Weile aus war.
-YEARLY_REVIEW_SEND_UNTIL_MONTH = 3
-
-
 def _fmt_pct_change(current: float | None, previous: float | None) -> str | None:
     """"+12 %" bzw. "-5 %" gegenueber der Vorperiode; None, wenn es nichts zu
     vergleichen gibt (kein Vorwert oder Vorwert 0)."""
@@ -398,7 +390,7 @@ def _run_yearly_reviews(db: Session, today: date | None = None) -> None:
         if user.last_yearly_review_year is not None and user.last_yearly_review_year >= target:
             continue
         review = build_review(db, user, "year", target)
-        if review.totals.sessions == 0 or today.month > YEARLY_REVIEW_SEND_UNTIL_MONTH:
+        if review.totals.sessions == 0:
             user.last_yearly_review_year = target
             db.commit()
             continue
