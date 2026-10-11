@@ -198,6 +198,38 @@ def _run_key_expiry_warnings(db: Session) -> None:
         db.commit()
 
 
+def notify_cardata_status(
+    db: Session, config: models.BmwCarDataConfig, previous_status: str | None
+) -> None:
+    """Gegenstueck zu notify_myskoda_status fuer BMW CarData: gemeldet wird nur
+    der Uebergang nach `auth_error` - dann ist die Anmeldung abgelaufen oder
+    widerrufen, und es kommen keine Ladevorgaenge mehr, bis jemand in den
+    Einstellungen neu mit BMW verbindet. Haengt am selben Schalter wie die
+    MyŠkoda-Meldung (beides ist "die automatische Erfassung steht still")."""
+    try:
+        if config.last_status != "auth_error" or previous_status == "auth_error":
+            return
+        user = db.get(models.User, config.user_id)
+        if not user or not user.email or not user.notify_myskoda_error:
+            return
+        vehicle = db.get(models.Vehicle, config.vehicle_id)
+        with language_context(user.language):
+            mail = mailer.Mail(
+                subject=translate("email.cardata_error.subject"),
+                heading=translate("email.cardata_error.heading"),
+                intro=[translate("email.cardata_error.intro")],
+                rows=[
+                    (translate("email.myskoda_error.row_vehicle"), vehicle.name if vehicle else "–"),
+                    (translate("email.myskoda_error.row_when"), _fmt_dt(config.last_poll_at)),
+                    (translate("email.myskoda_error.row_error"), config.last_error or "–"),
+                ],
+                note=translate("email.cardata_error.note"),
+            )
+        _send(db, user, mail, "cardata_error")
+    except Exception:  # noqa: BLE001
+        logger.exception("CarData-Benachrichtigung fehlgeschlagen")
+
+
 def _digest_due(user: models.User, now: datetime) -> bool:
     if user.review_digest == models.ReviewDigestFrequency.OFF:
         return False

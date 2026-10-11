@@ -1121,6 +1121,65 @@ class MySkodaLogOut(BaseModel):
     has_payload: bool
 
 
+# ---------- BMW CarData (Ladehistorie) ----------
+
+class BmwCarDataConfigIn(BaseModel):
+    enabled: bool = False
+    # None/leer = unveraendert lassen
+    client_id: str | None = None
+    vin: str | None = None
+    # 50 Anfragen je Tag und Konto - stuendlich waeren 24, das ist die
+    # sinnvolle Untergrenze
+    poll_interval_hours: int = Field(default=4, ge=1, le=48)
+    initial_history_days: int = Field(default=30, ge=1, le=365)
+
+    @field_validator("vin", "client_id", mode="before")
+    @classmethod
+    def _strip(cls, value: object) -> object:
+        return value.strip() or None if isinstance(value, str) else value
+
+
+class BmwCarDataConfigOut(BaseModel):
+    vehicle_id: str
+    vehicle_name: str
+    enabled: bool
+    has_client_id: bool
+    vin: str | None
+    poll_interval_hours: int
+    initial_history_days: int
+    connected: bool
+    refresh_expires_at: datetime | None
+    # Laufende Geraetebestaetigung (None = keine)
+    pending_user_code: str | None
+    pending_verification_uri: str | None
+    pending_expires_at: datetime | None
+    pending_interval: int | None
+
+    history_cursor: datetime | None
+    last_poll_at: datetime | None
+    next_poll_at: datetime | None
+    last_status: str | None
+    last_error: str | None
+    last_imported_count: int | None
+    requests_today: int
+    requests_left: int
+
+
+class BmwCarDataAuthResult(BaseModel):
+    # pending | connected | expired
+    status: str
+    config: BmwCarDataConfigOut
+
+
+class BmwCarDataLogOut(BaseModel):
+    id: str
+    created_at: datetime
+    level: str
+    event: str
+    message: str
+    has_payload: bool
+
+
 # ---------- E-Mail / SMTP ----------
 
 class SmtpConfigIn(BaseModel):

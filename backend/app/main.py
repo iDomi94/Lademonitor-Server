@@ -24,6 +24,8 @@ from .i18n import (
 from .mailer import are_links_available, get_config as get_smtp_config
 from .myskoda_poller import SCHEDULER_INTERVAL_SECONDS as MYSKODA_SCHEDULER_INTERVAL_SECONDS
 from .myskoda_poller import run_due_polls
+from .bmw_cardata_poller import SCHEDULER_INTERVAL_SECONDS as CARDATA_SCHEDULER_INTERVAL_SECONDS
+from .bmw_cardata_poller import run_due_polls as run_due_cardata_polls
 from .notifications import SCHEDULER_INTERVAL_SECONDS as NOTIFICATION_SCHEDULER_INTERVAL_SECONDS
 from .notifications import run_due_notifications
 from .reimbursement import DEFAULT_RATE_PER_KWH as DEFAULT_REIMBURSEMENT_RATE
@@ -32,6 +34,7 @@ from .vehicle_costs import CATEGORIES as COST_CATEGORIES
 from .routers import (
     auth,
     backup,
+    bmw_cardata,
     email,
     geocoding,
     importer,
@@ -97,6 +100,19 @@ async def _myskoda_scheduler_loop() -> None:
         await asyncio.sleep(MYSKODA_SCHEDULER_INTERVAL_SECONDS)
 
 
+async def _cardata_scheduler_loop() -> None:
+    """Ladehistorie ueber BMW CarData (siehe bmw_cardata_poller.py).
+
+    Welches Fahrzeug faellig ist, entscheidet `run_due_cardata_polls()` anhand
+    von `next_poll_at` - der Takt hier erzeugt keine Anfragen bei BMW."""
+    while True:
+        try:
+            await asyncio.to_thread(run_due_cardata_polls)
+        except Exception:
+            logger.exception("BMW-CarData-Durchlauf fehlgeschlagen")
+        await asyncio.sleep(CARDATA_SCHEDULER_INTERVAL_SECONDS)
+
+
 async def _notification_scheduler_loop() -> None:
     """Zeitgesteuerte Benachrichtigungen (Ablaufwarnung des MyŠkoda-API-Keys,
     Sammelmeldung zu pruefender Ladevorgaenge, Monatsbericht).
@@ -135,6 +151,7 @@ async def lifespan(app: FastAPI):
     tasks = [
         asyncio.create_task(_webdav_scheduler_loop()),
         asyncio.create_task(_myskoda_scheduler_loop()),
+        asyncio.create_task(_cardata_scheduler_loop()),
         asyncio.create_task(_notification_scheduler_loop()),
         asyncio.create_task(_weather_scheduler_loop()),
     ]
@@ -193,6 +210,7 @@ app.include_router(geocoding.router, dependencies=[Depends(get_current_user)])
 app.include_router(backup.router, dependencies=[Depends(get_current_user)])
 app.include_router(webdav_backup.router, dependencies=[Depends(get_current_user)])
 app.include_router(myskoda.router, dependencies=[Depends(get_current_user)])
+app.include_router(bmw_cardata.router, dependencies=[Depends(get_current_user)])
 app.include_router(weather.router, dependencies=[Depends(get_current_user)])
 app.include_router(tires.router, dependencies=[Depends(get_current_user)])
 # email.router prueft pro Endpunkt selbst auf Admin (require_admin), braucht

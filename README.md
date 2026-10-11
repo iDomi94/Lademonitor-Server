@@ -27,6 +27,9 @@ Beta über TestFlight: [testflight.apple.com/join/NMbyFTEK](https://testflight.a
   indem er die offizielle Škoda-API direkt abfragt – ganz ohne Home Assistant.
   Nur API-Key und FIN eintragen, siehe
   [Automatische Ladeerkennung](#automatische-ladeerkennung-über-die-myškoda-public-api)
+- **BMW CarData**: für BMW und MINI liest der Server die Ladehistorie direkt
+  bei BMW, mit gemessenen kWh, siehe
+  [Ladehistorie von BMW](#ladehistorie-von-bmw-bmw-cardata)
 - Verbrauchsberechnung (kWh/100km) pro Ladevorgang über eine priorisierte
   Fallback-Kette (Vollladungs-Intervalle als Goldstandard, SoC-Korrektur,
   naive Rechnung, Schätzung) – Details in `CLAUDE.md`
@@ -240,6 +243,33 @@ selbst ab, erkennt Beginn und Ende eines Ladevorgangs aus den Zustands-
 
 Vorerst nur über die Web-UI konfigurierbar; die Endpunkte (`/api/myskoda/...`)
 sind trotzdem regulärer Teil der REST-API und in `/docs` dokumentiert.
+
+## Ladehistorie von BMW (BMW CarData)
+
+Für BMW und MINI gibt es eine dritte automatische Quelle: die offizielle
+[BMW CarData API](https://bmw-cardata.bmwgroup.com/customer/public/api-documentation).
+BMW liefert dort abgeschlossene Ladevorgänge mit Start, Ende, Ladestand,
+km-Stand, Position und der aus dem Netz bezogenen Energie. Lademonitor legt
+daraus Ladevorgänge an (immer „zu prüfen“); die kWh gelten als gemessen.
+
+1. Im MyBMW-Portal unter dem Fahrzeug den Punkt **BMW CarData** öffnen, eine
+   Client-ID erzeugen und den Zugang **CarData API** beantragen.
+2. In der MyBMW-App prüfen, dass du Hauptnutzer des Fahrzeugs bist.
+3. In Lademonitor unter Einstellungen → API & Debug → „Ladehistorie von BMW“
+   die Client-ID eintragen und **Mit BMW verbinden** drücken. Auf der BMW-Seite
+   den angezeigten Code bestätigen. Die FIN wird danach automatisch ergänzt.
+4. Schalter „Automatischer Abruf“ einschalten.
+
+Hinweise:
+
+- BMW erlaubt **50 Anfragen am Tag je Konto**. Lademonitor nutzt höchstens 40
+  davon und fragt standardmäßig alle 4 Stunden ab. Ladevorgänge erscheinen also
+  mit Verzögerung.
+- Die Anmeldung bleibt gültig, solange mindestens alle zwei Wochen abgerufen
+  wird. Läuft sie ab, kommt eine Mail.
+- Pro Fahrzeug nur eine automatische Quelle (Home Assistant, MyŠkoda, BMW)
+  aktivieren, sonst entstehen doppelte Vorgänge.
+- Client-ID und Tokens werden nicht in die Backup-ZIP exportiert.
 
 ## Backup
 
