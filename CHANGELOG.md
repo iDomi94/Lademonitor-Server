@@ -6,6 +6,32 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.36.0] — 2026-10-11
+
+### Added
+- **Jahres- und Monatsrückblick** (`review.py`):
+  `GET /api/stats/review?period=year|month&year=&month=&vehicle_id=` mit
+  Kennzahlen (`totals`, Vorperiode `previous`), Ersparnis gegenüber einem
+  Verbrenner (`savings`), Rekorden (`records`), Verteilung AC/DC und
+  Zuhause/Arbeit/unterwegs (`split`) und – beim Jahr – zwölf Monatszeilen
+  (`monthly`). Regeln wie im Vertrag `schritt-11-vertrag.md`, die Apps rechnen
+  sie lokal nach.
+- **Vergleichsfahrzeug** je Nutzer: `GET`/`PUT /api/combustion-vehicle`
+  (`fuel_type` petrol/diesel, `consumption_l_per_100km`, `fuel_price_per_l`,
+  `grid_co2_kg_per_kwh`; ohne gespeicherte Werte Standardwerte mit
+  `configured: false`). Neue Spalten `combustion_*` am Nutzer.
+- Web-Seite `/review` (Jahr/Monat, Fahrzeugfilter, Druckansicht), Kachel im
+  Dashboard, Abschnitt „Vergleichsfahrzeug“ in den Einstellungen.
+- Jahresrückblick per Mail Anfang Januar (`User.notify_yearly_review`,
+  Standard an – auch für Bestandsnutzer; Merker `last_yearly_review_year`).
+  `NotificationSettingsUpdate.notify_yearly_review` ist optional.
+
+### Changed
+- Der Monatsbericht enthält zusätzlich Vormonatsvergleich, Ersparnis und
+  Rekorde; sein Knopf führt auf den Monatsrückblick.
+- `renderVerticalBarChart` liegt jetzt in `static/ui.js` (Dashboard und
+  Rückblick).
+
 ## [0.35.0] — 2026-10-11
 
 ### Added

@@ -169,6 +169,9 @@ class User(Base):
     notify_new_registration: Mapped[bool] = mapped_column(Boolean, default=True)
     # Faellige Erinnerungen (HU, Inspektion, ... siehe reminders.py).
     notify_reminders: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Jahresrueckblick (review.py) am 1. Januar fuer das Vorjahr. Standard an,
+    # auch fuer Bestandsnutzer - eine Mail im Jahr ist kein Rauschen.
+    notify_yearly_review: Mapped[bool] = mapped_column(Boolean, default=True)
 
     review_digest: Mapped[ReviewDigestFrequency] = mapped_column(
         Enum(ReviewDigestFrequency), default=ReviewDigestFrequency.OFF
@@ -178,6 +181,19 @@ class User(Base):
     # in jedem Durchlauf erneut rausgehen.
     last_review_digest_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_monthly_report_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Jahr des zuletzt verschickten (oder mangels Ladevorgaengen
+    # uebersprungenen) Jahresrueckblicks.
+    last_yearly_review_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # Vergleichsfahrzeug fuer die Ersparnis im Rueckblick (review.py). Global
+    # je Nutzer, damit Web, Mail und Apps mit denselben Werten rechnen. Alle
+    # NULL = noch nie gespeichert, dann gelten die Standardwerte aus
+    # review.COMBUSTION_DEFAULTS (die Antwort sagt das mit configured=false).
+    combustion_fuel_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    combustion_consumption_l_per_100km: Mapped[float | None] = mapped_column(Float, nullable=True)
+    combustion_fuel_price_per_l: Mapped[float | None] = mapped_column(Float, nullable=True)
+    combustion_grid_co2_kg_per_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
+    combustion_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # Aussentemperatur automatisch beim Wetterdienst nachschlagen (siehe
     # weather.py). Bewusst pro Nutzer und bewusst mit Standard AUS: dabei
