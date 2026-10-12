@@ -70,6 +70,13 @@ _ENCRYPTABLE_TEXT_COLUMNS = (
     ("vehicles", "employee_name"),
     ("vehicles", "employee_number"),
     ("vehicles", "license_plate"),
+    ("bmw_cardata_configs", "client_id"),
+    ("bmw_cardata_configs", "vin"),
+    ("bmw_cardata_configs", "access_token"),
+    ("bmw_cardata_configs", "refresh_token"),
+    ("bmw_cardata_configs", "pending_device_code"),
+    ("bmw_cardata_configs", "pending_code_verifier"),
+    ("bmw_cardata_log_entries", "payload"),
 )
 
 

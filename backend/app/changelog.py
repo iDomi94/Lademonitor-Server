@@ -5,6 +5,18 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.37.0",
+        "date": "2026-10-11",
+        "title": "Ladehistorie von BMW (BMW CarData)",
+        "changes": [
+            "Neue automatische Quelle für BMW und MINI: unter Einstellungen → API & Debug verbindest du Lademonitor über die offizielle BMW-CarData-Schnittstelle mit deinem BMW-Konto. Der Server liest danach regelmäßig die Ladehistorie des Fahrzeugs und legt jeden abgeschlossenen Ladevorgang an (zum Prüfen markiert).",
+            "Anders als bei MyŠkoda kommen die kWh dabei gemessen an (aus dem Netz bezogene Energie, inklusive Ladeverlust) und zählen damit in Akku-Index und Ladeverluste. Start, Ende, Ladestand von/bis, km-Stand und Position kommen direkt von BMW; AC/DC wird aus der Ladeleistung abgeleitet.",
+            "Anmeldung ohne Passwort: Client-ID aus dem MyBMW-Portal eintragen, „Mit BMW verbinden“ drücken und den angezeigten Code auf der BMW-Seite bestätigen. Die FIN wird danach automatisch ergänzt.",
+            "BMW erlaubt 50 Abrufe am Tag je Konto. Lademonitor fragt standardmäßig alle 4 Stunden ab und lässt 10 Abrufe für andere Programme übrig, z.B. die Home-Assistant-Integration.",
+            "Läuft die Anmeldung ab, kommt eine Mail (derselbe Schalter wie bei MyŠkoda).",
+        ],
+    },
+    {
         "version": "0.36.0",
         "date": "2026-10-11",
         "title": "Jahres- und Monatsrückblick",

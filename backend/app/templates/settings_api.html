@@ -67,6 +67,49 @@
   </div>
 </details>
 
+<div class="section-head" style="margin-top:40px">
+  <h2>{{ t('settings.cardata.heading') }}</h2>
+  <label class="switch">
+    {{ t('settings.cardata.enabled_label') }}
+    <input type="checkbox" id="bc-enabled">
+    <span class="track"></span>
+    <span class="state" id="bc-enabled-state"></span>
+  </label>
+</div>
+<details class="help">
+  <summary>{{ t('common.help') }}</summary>
+  <div class="inner">{{ t('settings.cardata.description')|safe }}</div>
+</details>
+<form class="inline-form" id="cardata-form">
+  <div><label>{{ t('settings.cardata.vehicle') }}</label><select id="bc-vehicle"></select></div>
+  <div><label>{{ t('settings.cardata.client_id') }}</label><input type="password" id="bc-client-id" placeholder="{{ t('settings.cardata.client_id') }}" autocomplete="off"></div>
+  <div><label>{{ t('settings.cardata.vin') }}</label><input id="bc-vin" placeholder="WBA..." maxlength="17" autocomplete="off"></div>
+  <div><label>{{ t('settings.cardata.interval') }}</label><input type="number" id="bc-interval" min="1" max="48" value="4"></div>
+  <div><label>{{ t('settings.cardata.history_days') }}</label><input type="number" id="bc-days" min="1" max="365" value="30"></div>
+  <div class="form-actions">
+    <button type="button" id="bc-delete-btn" style="background:var(--danger); display:none">{{ t('settings.cardata.delete_config') }}</button>
+    <button type="button" id="bc-disconnect-btn" style="background:var(--accent2); display:none">{{ t('settings.cardata.disconnect') }}</button>
+    <button type="button" id="bc-connect-btn" style="background:var(--accent2)">{{ t('settings.cardata.connect') }}</button>
+    <button type="button" id="bc-poll-btn" style="background:var(--accent2); display:none">{{ t('settings.cardata.poll_now') }}</button>
+    <button type="submit">{{ t('settings.cardata.save') }}</button>
+  </div>
+</form>
+<div id="bc-pending" style="display:none; margin-top:12px; padding:12px; background:var(--card); border:1px solid var(--border); border-radius:12px"></div>
+<div id="cardata-status" style="margin-top:8px; font-size:0.9em"></div>
+
+<details class="panel" id="bc-log-panel" style="margin-top:24px">
+  <summary>{{ t('settings.cardata.log_heading') }}</summary>
+  <div class="inner">
+    <p style="color:var(--muted); font-size:0.9em; margin-top:0">{{ t('settings.cardata.log_description') }}</p>
+    <div class="form-actions" style="margin-bottom:12px">
+      <button type="button" id="bc-log-refresh">{{ t('settings.myskoda.log_refresh') }}</button>
+      <button type="button" id="bc-log-clear" style="background:var(--danger)">{{ t('settings.myskoda.log_clear') }}</button>
+    </div>
+<div class="tablewrap"><table><thead><tr><th>{{ t('settings.myskoda.log.table.time') }}</th><th>{{ t('settings.myskoda.log.table.event') }}</th><th>{{ t('settings.myskoda.log.table.message') }}</th><th></th></tr></thead>
+<tbody id="bc-log-rows"></tbody></table></div>
+  </div>
+</details>
+
 <script>
 let vehicles = [];
 
@@ -114,6 +157,28 @@ const T = {
   msLogNoEntries: {{ t('settings.myskoda.log.no_entries')|tojson }},
   msLogRawLink: {{ t('settings.myskoda.log.raw_link')|tojson }},
   msLogConfirmClear: {{ t('settings.myskoda.log_confirm_clear')|tojson }},
+  bcOn: {{ t('settings.myskoda.polling_on')|tojson }},
+  bcOff: {{ t('settings.myskoda.polling_off')|tojson }},
+  bcConnected: {{ t('settings.cardata.status.connected')|tojson }},
+  bcNotConnected: {{ t('settings.cardata.status.not_connected')|tojson }},
+  bcRefreshUntil: {{ t('settings.cardata.status.refresh_until')|tojson }},
+  bcStatusOk: {{ t('settings.cardata.status.ok')|tojson }},
+  bcStatusError: {{ t('settings.cardata.status.error')|tojson }},
+  bcStatusAuthError: {{ t('settings.cardata.status.auth_error')|tojson }},
+  bcStatusRateLimited: {{ t('settings.cardata.status.rate_limited')|tojson }},
+  bcImported: {{ t('settings.cardata.status.imported')|tojson }},
+  bcCursor: {{ t('settings.cardata.status.cursor')|tojson }},
+  bcRequests: {{ t('settings.cardata.status.requests')|tojson }},
+  bcRequestsLeft: {{ t('settings.cardata.status.requests_left')|tojson }},
+  bcPendingIntro: {{ t('settings.cardata.pending_intro')|tojson }},
+  bcPendingOpen: {{ t('settings.cardata.pending_open')|tojson }},
+  bcPendingWaiting: {{ t('settings.cardata.pending_waiting')|tojson }},
+  bcPendingExpired: {{ t('settings.cardata.pending_expired')|tojson }},
+  bcClientIdSet: {{ t('settings.cardata.client_id_set')|tojson }},
+  bcClientId: {{ t('settings.cardata.client_id')|tojson }},
+  bcConfirmDelete: {{ t('settings.cardata.confirm_delete')|tojson }},
+  bcConfirmDisconnect: {{ t('settings.cardata.confirm_disconnect')|tojson }},
+  bcPolling: {{ t('settings.myskoda.polling')|tojson }},
 };
 
 // ---------- MyŠkoda Public API ----------
@@ -386,10 +451,251 @@ document.getElementById('ms-log-clear').addEventListener('click', async () => {
   await loadMyskodaLog();
 });
 
+// ---------- BMW CarData ----------
+// Kein Zustandsautomat wie bei MyŠkoda: BMW liefert fertige Ladevorgaenge.
+// Die Anmeldung laeuft ueber einen Geraetecode, den man im Browser bei BMW
+// bestaetigt - solange er offen ist, fragt die Seite im von BMW genannten
+// Intervall nach, ob er eingeloest werden kann.
+
+let bcPendingTimer = null;
+
+function bcVehicleId() {
+  return document.getElementById('bc-vehicle').value;
+}
+
+function bcFillVehicles() {
+  const select = document.getElementById('bc-vehicle');
+  const previous = select.value;
+  select.innerHTML = vehicles.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+  if (previous && vehicles.some(v => v.id === previous)) select.value = previous;
+}
+
+function bcRenderEnabledState() {
+  const on = document.getElementById('bc-enabled').checked;
+  document.getElementById('bc-enabled-state').textContent = on ? T.bcOn : T.bcOff;
+}
+
+function bcRenderPending(c) {
+  const box = document.getElementById('bc-pending');
+  if (!c.pending_user_code) {
+    box.style.display = 'none';
+    box.innerHTML = '';
+    return;
+  }
+  box.style.display = 'block';
+  const link = c.pending_verification_uri
+    ? `<a href="${c.pending_verification_uri}" target="_blank" rel="noopener">${T.bcPendingOpen}</a>`
+    : '';
+  box.innerHTML = `${T.bcPendingIntro}<br>`
+    + `<strong style="font-size:1.4em; letter-spacing:0.08em">${c.pending_user_code}</strong> ${link}`
+    + `<br><span style="color:var(--muted)">${T.bcPendingWaiting}</span>`;
+}
+
+function renderCardataStatus(c) {
+  const el = document.getElementById('cardata-status');
+  document.getElementById('bc-delete-btn').style.display = (c.has_client_id || c.vin) ? '' : 'none';
+  document.getElementById('bc-disconnect-btn').style.display = c.connected ? '' : 'none';
+  document.getElementById('bc-poll-btn').style.display = c.connected ? '' : 'none';
+  document.getElementById('bc-enabled').checked = c.enabled;
+  bcRenderEnabledState();
+  bcRenderPending(c);
+
+  const lines = [];
+  if (c.connected) {
+    lines.push(`<strong style="color:var(--accent)">${T.bcConnected}</strong>`
+      + (c.refresh_expires_at ? ` · ${T.bcRefreshUntil}${msFmt(c.refresh_expires_at)}` : ''));
+  } else {
+    lines.push(`<strong style="color:var(--muted)">${T.bcNotConnected}</strong>`);
+  }
+  const labels = {
+    ok: T.bcStatusOk, error: T.bcStatusError,
+    auth_error: T.bcStatusAuthError, rate_limited: T.bcStatusRateLimited,
+  };
+  const colors = {
+    ok: 'var(--accent)', error: 'var(--danger)',
+    auth_error: 'var(--danger)', rate_limited: 'var(--warn)',
+  };
+  if (labels[c.last_status]) {
+    lines.push(`<strong style="color:${colors[c.last_status]}">${labels[c.last_status]}</strong>`
+      + (c.last_poll_at ? ` – ${msFmt(c.last_poll_at)} (${msRelative(c.last_poll_at)})` : '')
+      + (c.last_status === 'ok' ? ` · ${c.last_imported_count ?? 0}${T.bcImported}` : ''));
+  }
+  if (c.last_error) lines.push(`<span style="color:var(--danger)">${c.last_error}</span>`);
+  if (c.history_cursor) lines.push(`${T.bcCursor}${msFmt(c.history_cursor)}`);
+  if (c.enabled && c.next_poll_at) lines.push(`${T.msNextPollPrefix}${msFmt(c.next_poll_at)}`);
+  else if (c.enabled) lines.push(T.msNextPollSoon);
+  if (c.connected) {
+    const low = c.requests_left <= 5;
+    lines.push(`<span style="color:${low ? 'var(--warn)' : 'inherit'}">`
+      + `${T.bcRequests}${c.requests_today}${T.bcRequestsLeft}${c.requests_left}</span>`);
+  }
+  el.innerHTML = lines.join('<br>');
+  el.style.color = 'var(--muted)';
+}
+
+async function loadCardataConfig() {
+  bcStopPending();
+  const vehicleId = bcVehicleId();
+  if (!vehicleId) {
+    document.getElementById('cardata-status').textContent = T.msPleaseAddVehicle;
+    return;
+  }
+  const c = await (await fetch(`api/bmw-cardata/configs/${vehicleId}`)).json();
+  document.getElementById('bc-client-id').value = '';
+  document.getElementById('bc-client-id').placeholder = c.has_client_id ? T.bcClientIdSet : T.bcClientId;
+  document.getElementById('bc-vin').value = c.vin || '';
+  document.getElementById('bc-interval').value = c.poll_interval_hours;
+  document.getElementById('bc-days').value = c.initial_history_days;
+  renderCardataStatus(c);
+  if (c.pending_user_code) bcSchedulePending(c.pending_interval);
+  await loadCardataLog();
+}
+
+function bcBuildPayload(enabled) {
+  return {
+    enabled: enabled ?? document.getElementById('bc-enabled').checked,
+    client_id: document.getElementById('bc-client-id').value || null,
+    vin: document.getElementById('bc-vin').value || null,
+    poll_interval_hours: parseInt(document.getElementById('bc-interval').value || 4),
+    initial_history_days: parseInt(document.getElementById('bc-days').value || 30),
+  };
+}
+
+async function bcSaveConfig(enabled) {
+  const res = await fetch(`api/bmw-cardata/configs/${bcVehicleId()}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(bcBuildPayload(enabled))
+  });
+  if (!res.ok) { alert(T.msErrorPrefix + await res.text()); return null; }
+  return await res.json();
+}
+
+function bcStopPending() {
+  if (bcPendingTimer) clearTimeout(bcPendingTimer);
+  bcPendingTimer = null;
+}
+
+function bcSchedulePending(intervalSeconds) {
+  bcStopPending();
+  bcPendingTimer = setTimeout(bcCheckPending, Math.max(intervalSeconds || 5, 3) * 1000);
+}
+
+async function bcCheckPending() {
+  bcPendingTimer = null;
+  const vehicleId = bcVehicleId();
+  const res = await fetch(`api/bmw-cardata/configs/${vehicleId}/auth/poll`, { method: 'POST' });
+  if (vehicleId !== bcVehicleId()) return;
+  if (!res.ok) {
+    alert(T.msErrorPrefix + await res.text());
+    await loadCardataConfig();
+    return;
+  }
+  const result = await res.json();
+  renderCardataStatus(result.config);
+  if (result.status === 'pending') {
+    bcSchedulePending(result.config.pending_interval);
+  } else if (result.status === 'expired') {
+    alert(T.bcPendingExpired);
+  } else {
+    // Verbunden: die FIN kann der Server selbst ergaenzt haben.
+    document.getElementById('bc-vin').value = result.config.vin || '';
+    await loadCardataLog();
+  }
+}
+
+document.getElementById('bc-vehicle').addEventListener('change', loadCardataConfig);
+
+document.getElementById('cardata-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!(await bcSaveConfig())) return;
+  await loadCardataConfig();
+});
+
+// Wie bei MyŠkoda speichert der Schalter sofort und springt bei Ablehnung
+// (nicht verbunden, keine FIN) zurueck.
+document.getElementById('bc-enabled').addEventListener('change', async (e) => {
+  bcRenderEnabledState();
+  const config = await bcSaveConfig(e.target.checked);
+  if (!config) {
+    e.target.checked = !e.target.checked;
+    bcRenderEnabledState();
+    return;
+  }
+  renderCardataStatus(config);
+});
+
+document.getElementById('bc-connect-btn').addEventListener('click', async () => {
+  // Erst speichern: eine gerade eingetippte Client-ID muss auf dem Server
+  // liegen, bevor er damit bei BMW einen Code anfordert. Aktivieren geht
+  // dabei noch nicht (noch nicht verbunden), also bleibt der Schalter wie er ist.
+  if (!(await bcSaveConfig(false))) return;
+  const config = await msRunAction('bc-connect-btn', `api/bmw-cardata/configs/${bcVehicleId()}/auth/start`, T.bcPolling);
+  if (!config) return;
+  renderCardataStatus(config);
+  if (config.pending_verification_uri) window.open(config.pending_verification_uri, '_blank', 'noopener');
+  bcSchedulePending(config.pending_interval);
+});
+
+document.getElementById('bc-disconnect-btn').addEventListener('click', async () => {
+  if (!confirm(T.bcConfirmDisconnect)) return;
+  const config = await msRunAction('bc-disconnect-btn', `api/bmw-cardata/configs/${bcVehicleId()}/disconnect`, T.bcPolling);
+  if (config) renderCardataStatus(config);
+});
+
+document.getElementById('bc-poll-btn').addEventListener('click', async () => {
+  const config = await msRunAction('bc-poll-btn', `api/bmw-cardata/configs/${bcVehicleId()}/poll`, T.bcPolling);
+  if (!config) return;
+  renderCardataStatus(config);
+  await loadCardataLog();
+});
+
+document.getElementById('bc-delete-btn').addEventListener('click', async () => {
+  if (!confirm(T.bcConfirmDelete)) return;
+  const res = await fetch(`api/bmw-cardata/configs/${bcVehicleId()}`, { method: 'DELETE' });
+  if (!res.ok) { alert(T.msErrorPrefix + await res.text()); return; }
+  await loadCardataConfig();
+});
+
+async function loadCardataLog() {
+  const panel = document.getElementById('bc-log-panel');
+  const rows = document.getElementById('bc-log-rows');
+  const vehicleId = bcVehicleId();
+  if (!vehicleId || !panel.open) { rows.innerHTML = ''; return; }
+  const entries = await (await fetch(`api/bmw-cardata/logs?vehicle_id=${vehicleId}&limit=200`)).json();
+  if (!entries.length) {
+    rows.innerHTML = `<tr><td colspan="4" style="color:var(--muted)">${T.msLogNoEntries}</td></tr>`;
+    return;
+  }
+  const levelColor = { error: 'var(--danger)', warning: 'var(--warn)' };
+  rows.innerHTML = entries.map(e => `
+    <tr>
+      <td style="white-space:nowrap">${msFmt(e.created_at)}</td>
+      <td><code>${e.event}</code></td>
+      <td style="color:${levelColor[e.level] || 'inherit'}">${e.message}</td>
+      <td>${e.has_payload
+        ? `<a href="api/bmw-cardata/logs/${e.id}/payload" target="_blank" rel="noopener">${T.msLogRawLink}</a>`
+        : ''}</td>
+    </tr>`).join('');
+}
+
+document.getElementById('bc-log-refresh').addEventListener('click', loadCardataLog);
+document.getElementById('bc-log-panel').addEventListener('toggle', () => {
+  if (document.getElementById('bc-log-panel').open) loadCardataLog();
+});
+document.getElementById('bc-log-clear').addEventListener('click', async () => {
+  if (!confirm(T.msLogConfirmClear)) return;
+  const res = await fetch(`api/bmw-cardata/logs?vehicle_id=${bcVehicleId()}`, { method: 'DELETE' });
+  if (!res.ok) { alert(T.msErrorPrefix + await res.text()); return; }
+  await loadCardataLog();
+});
+
 (async () => {
   await loadVehicles();
   msRenderEnabledState();
+  bcFillVehicles();
+  bcRenderEnabledState();
   await loadMyskodaConfig();
+  await loadCardataConfig();
 })();
 </script>
 {% endblock %}

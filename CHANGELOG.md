@@ -6,6 +6,26 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.37.0] — 2026-10-11
+
+### Added
+- **BMW CarData als dritte automatische Quelle** (`bmw_cardata.py`,
+  `bmw_cardata_poller.py`, `routers/bmw_cardata.py`): Anmeldung per Device
+  Code Flow mit PKCE (Scope `cardata:api:read`, kein Streaming), danach liest
+  der Server `/customers/vehicles/{vin}/chargingHistory` und legt jeden
+  abgeschlossenen Ladevorgang als `source=automatic`, `needs_review` an.
+- `energyConsumedFromPowerGridKwh` gilt als gemessen
+  (`energy_is_estimated=false`, `energy_meter="charger"`); AC/DC aus der
+  Ladeleistung (über 23 kW = DC); Anbieter über den Ladeort, sonst über den
+  von BMW erkannten Ladepunkt-Betreiber, wenn ein Anbieter genau so heißt.
+- Neue Tabellen `bmw_cardata_configs` und `bmw_cardata_log_entries`
+  (Client-ID, FIN, Tokens und Rohdaten verschlüsselt, wenn
+  `FIELD_ENCRYPTION_KEY` gesetzt ist). Eigenes Tageskontingent: 40 der 50
+  Anfragen je Konto, Abruf standardmäßig alle 4 Stunden, erster Abruf 30 Tage
+  zurück.
+- Web-UI: Abschnitt „Ladehistorie von BMW“ auf der Seite „API & Debug“ samt
+  Protokoll; Mail beim Übergang nach `auth_error`.
+
 ## [0.36.0] — 2026-10-11
 
 ### Added

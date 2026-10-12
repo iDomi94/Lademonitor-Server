@@ -129,6 +129,14 @@ def delete_vehicle(
         record_deletion(db, user.id, models.SyncEntityType.REMINDER, reminder.id)
     for rate in vehicle.reimbursement_rates:
         record_deletion(db, user.id, models.SyncEntityType.REIMBURSEMENT_RATE, rate.id)
+    # CarData-Anbindung haengt per Fremdschluessel am Fahrzeug, ist aber
+    # reiner Serverzustand (kein Sync, kein Grabstein).
+    db.query(models.BmwCarDataLogEntry).filter(
+        models.BmwCarDataLogEntry.vehicle_id == vehicle.id
+    ).delete(synchronize_session=False)
+    db.query(models.BmwCarDataConfig).filter(
+        models.BmwCarDataConfig.vehicle_id == vehicle.id
+    ).delete(synchronize_session=False)
     # Grabstein VOR dem Loeschen, im selben Commit - siehe sync.record_deletion().
     record_deletion(db, user.id, models.SyncEntityType.VEHICLE, vehicle.id)
     db.delete(vehicle)

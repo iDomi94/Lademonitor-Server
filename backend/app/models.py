@@ -1021,6 +1021,88 @@ class MySkodaLogEntry(Base):
     payload: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
 
 
+class BmwCarDataConfig(Base):
+    """Konfiguration UND Anmeldezustand der Ladehistorie ueber BMW CarData -
+    eine Zeile pro Fahrzeug (siehe bmw_cardata.py, bmw_cardata_poller.py).
+
+    Anders als bei MySkodaConfig gibt es keinen "laufenden Vorgang": BMW
+    liefert nur abgeschlossene Ladevorgaenge, die Zeile haelt deshalb neben
+    der Anmeldung nur einen Cursor (`history_cursor`), ab dem die Historie
+    beim naechsten Abruf gelesen wird.
+
+    Verschluesselt (siehe crypto.py) sind die FIN aus demselben Grund wie bei
+    MySkodaConfig.vin, sowie Client-ID, beide Tokens und die Daten des
+    laufenden Geraetecode-Flows - zusammen ergeben sie einen lesenden Zugang
+    zum BMW-Konto. Nichts davon geht in die Backup-ZIP.
+    """
+    __tablename__ = "bmw_cardata_configs"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    vehicle_id: Mapped[str] = mapped_column(ForeignKey("vehicles.id"), unique=True, index=True)
+
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    client_id: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    vin: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+
+    # Das Tageskontingent von 50 Anfragen (pro Konto, nicht pro Fahrzeug)
+    # bestimmt die Untergrenze; Standard 4 h = 6 Abrufe am Tag.
+    poll_interval_hours: Mapped[int] = mapped_column(Integer, default=4)
+    # So weit reicht der allererste Abruf zurueck (danach ab dem Cursor).
+    initial_history_days: Mapped[int] = mapped_column(Integer, default=30)
+
+    # --- Anmeldung ----------------------------------------------------------
+    access_token: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    refresh_token: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    access_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    refresh_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Laufender Device Code Flow (nur zwischen "Mit BMW verbinden" und der
+    # Bestaetigung im Browser gefuellt).
+    pending_device_code: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    pending_code_verifier: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    pending_user_code: Mapped[str | None] = mapped_column(String, nullable=True)
+    pending_verification_uri: Mapped[str | None] = mapped_column(String, nullable=True)
+    pending_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    pending_interval: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # --- Abrufzustand --------------------------------------------------------
+    # Naives UTC: ab hier wird die Historie beim naechsten Abruf gelesen.
+    history_cursor: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_poll_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    next_poll_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_status: Mapped[str | None] = mapped_column(String, nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_imported_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Eigene Buchfuehrung ueber das Tageskontingent ("YYYY-MM-DD" in UTC) -
+    # die API liefert keine Restanfragen im Header.
+    requests_day: Mapped[str | None] = mapped_column(String, nullable=True)
+    requests_today: Mapped[int] = mapped_column(Integer, default=0)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    vehicle: Mapped["Vehicle"] = relationship()
+
+
+class BmwCarDataLogEntry(Base):
+    """Protokoll der CarData-Abrufe pro Fahrzeug, schlanker als das
+    MyŠkoda-Protokoll: jeder Abruf liefert fertige Ladevorgaenge, es gibt
+    keinen Zwischenzustand zu beobachten. `payload` haelt optional die
+    Rohantwort eines Eintrags der Ladehistorie (verschluesselt, enthaelt
+    Position und Adresse)."""
+    __tablename__ = "bmw_cardata_log_entries"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    vehicle_id: Mapped[str] = mapped_column(ForeignKey("vehicles.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    # info | warning | error
+    level: Mapped[str] = mapped_column(String, default="info")
+    # poll | session_created | session_skipped | auth | api_error | rate_limit
+    event: Mapped[str] = mapped_column(String)
+    message: Mapped[str] = mapped_column(Text)
+    payload: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+
+
 class SmtpConfig(Base):
     """SMTP-Zugang der GESAMTEN Installation - genau eine Zeile, nur von
     Admins aenderbar.
@@ -1091,7 +1173,7 @@ class EmailLogEntry(Base):
     to_address: Mapped[str] = mapped_column(String)
     subject: Mapped[str] = mapped_column(String)
     # test | password_reset | email_verify | invite | backup_failed |
-    # myskoda_error | myskoda_key_expiring | review_digest | monthly_report |
+    # myskoda_error | myskoda_key_expiring | cardata_error | review_digest | monthly_report |
     # new_registration | reminders
     kind: Mapped[str] = mapped_column(String, index=True)
     # sent | failed | skipped

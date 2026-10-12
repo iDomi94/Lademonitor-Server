@@ -81,6 +81,8 @@ backend/app/
   battery.py         - Akku-Index und Ladeverluste (siehe Abschnitt "Akku und Ladeverluste")
   myskoda.py         - Client fuer die offizielle MyŠkoda Public API (sync httpx)
   myskoda_poller.py  - Zustandsmaschine der automatischen Ladeerkennung + Debug-Log
+  bmw_cardata.py     - Client fuer BMW CarData (Device Code Flow, Ladehistorie)
+  bmw_cardata_poller.py - Uebernahme der BMW-Ladehistorie (siehe Abschnitt "BMW CarData")
   mailer.py          - SMTP-Versand, Mail-Vorlagen, Versandprotokoll
   notifications.py   - Benachrichtigungen (ereignisgetrieben + zeitgesteuert)
   templates/          - Jinja2 Web-UI (index=Dashboard, sessions, map, tires, settings +
@@ -1434,6 +1436,9 @@ dieses Projekt real gestolpert ist:
   keiner.
 - `test_tire_dot_tread.py` - DOT-Parsing/-Alter, Profilmessungen inkl.
   Messung beider Saetze beim Wechsel und Minimum aus den Einzelwerten.
+- `test_bmw_cardata.py` - BMW CarData gegen einen nachgebauten BMW-Dienst:
+  PKCE und Geraetecode, Auswertung der Ladehistorie, Dubletten, Fenster und
+  Kontingent, Trennung pro Nutzer.
 - `test_review.py` - Jahres-/Monatsrueckblick nach dem Vertrag (km mit Anker,
   Kosten inkl. Gebuehren, Vorperiode, Ersparnis, jeder Rekord samt Schwellen
   und Gleichstand), Vergleichsfahrzeug und Jahresmail inkl. Merker.
@@ -2447,6 +2452,73 @@ Einstieg stehen), Abschnitt "Vergleichsfahrzeug" und Schalter "Jahresrueckblick
 per Mail" in den Einstellungen. Zeilen ohne Daten fallen weg statt "–".
 `renderVerticalBarChart` ist dafuer aus `index.html` nach `static/ui.js`
 gewandert.
+
+## BMW CarData (`bmw_cardata.py`, `bmw_cardata_poller.py`, `routers/bmw_cardata.py`, ab 2026-10-11, v0.37.0)
+
+Dritte automatische Quelle neben HA-Push und MyŠkoda-Poller, fuer BMW/MINI.
+Anlass: Recherche, wie die App EEVEE an Fahrzeugdaten kommt (offizielle
+Hersteller-Schnittstellen, bei BMW CarData) - Entscheidung des Nutzers
+11.10.2026: "bmw cardata bauen". Nur Server und Web-UI, Apps und HA
+unveraendert. **Nicht gegen die echte BMW-API getestet** (kein Konto in der
+Umgebung) - gebaut nach der oeffentlichen Doku und der Swagger-Beschreibung.
+
+**Warum die Ladehistorie und kein Streaming:** BMW bietet zusaetzlich einen
+MQTT-Stream. Der braeuchte einen dauerhaft offenen Client im Server und eine
+Zustandsmaschine wie beim MyŠkoda-Poller. `GET /customers/vehicles/{vin}/
+chargingHistory` liefert dagegen fertige Vorgaenge (Start, Ende, SoC,
+km-Stand, Position, `energyConsumedFromPowerGridKwh`) - also keine
+Zustandsmaschine, keine Rueckdatierung, keine Nacherkennung. Scope bewusst nur
+`authenticate_user openid cardata:api:read`.
+
+**Anmeldung:** Device Code Flow mit PKCE gegen `customer.bmwgroup.com/gcdm`.
+`POST .../auth/start` legt `pending_*` an (Device-Code und Verifier
+verschluesselt), die Web-UI fragt `POST .../auth/poll` im von BMW genannten
+Intervall, bis `connected`/`expired`. Danach EIN Abruf der
+Fahrzeugzuordnungen: BMW liefert nur fuer PRIMARY-Zuordnungen Daten; ist genau
+eine da und keine FIN eingetragen, wird sie uebernommen. Access-Token 1 h,
+Refresh-Token 2 Wochen, jede Erneuerung liefert einen neuen - der Abruf alle
+4 h haelt ihn also am Leben. Abgelehnte Erneuerung -> `auth_error`, Mail beim
+Uebergang (Schalter `notify_myskoda_error`, "automatische Erfassung steht
+still").
+
+**Kontingent:** 50 Anfragen je 24 h und KONTO (CU-429), geteilt mit allen
+Clients, z.B. der HA-Integration `bmw-cardata`. Der Poller zaehlt seine eigenen
+je UTC-Tag (`requests_today`) und laesst `RESERVE_REQUESTS` (10) uebrig; die
+Token-Erneuerung zaehlt nicht (Anmeldedienst, nicht Kunden-API).
+
+**Fenster und Cursor:** gelesen wird ab `history_cursor` (erstmals
+`initial_history_days`, Standard 30) in Fenstern von hoechstens 30 Tagen; liegt
+das Fenster noch in der Vergangenheit, geht es nach 2 min weiter. In der
+Gegenwart angekommen bleibt der Cursor 3 Tage zurueck, weil BMW Vorgaenge
+verspaetet nachreicht - die `external_session_id`
+(`bmw-<Vehicle.id>-<Epoch-Start>`, wie beim MyŠkoda-Poller ohne FIN) macht das
+zweite Lesen folgenlos. Mehr als `MAX_PAGES` Seiten: Cursor auf den juengsten
+gelesenen Vorgang.
+
+**Was aus einem Eintrag wird** (`HistorySession.parse`, Tests in
+`tests/test_bmw_cardata.py`):
+- Epoch-Sekunden -> naive LOKALZEIT (wie `start_time` ueberall).
+- `energyConsumedFromPowerGridKwh` ist netzseitig gemessen, also wie ein
+  Wallbox-Zaehler: `energy_is_estimated=false`, `energy_meter="charger"`. Das
+  Normalisieren gegen den Anbieter laeuft danach wie beim HA-Push - steht der
+  Anbieter auf "Fahrzeug", bleibt "charger" als Ausnahme stehen.
+- AC/DC liefert die API nicht: ueber 23 kW (Block-Leistung oder kWh/Dauer) ist
+  DC, ein BMW laedt AC mit hoechstens 22 kW.
+- Meilen werden umgerechnet; 0/0-Koordinaten verworfen; Energie ausserhalb
+  0-250 kWh verworfen (dann Schaetzung aus dem SoC).
+- Anbieter: erst Ladeort wie ueberall, sonst der von BMW erkannte
+  Ladepunkt-Betreiber, wenn ein eigener Anbieter genau so heisst. Es wird nie
+  ein Anbieter angelegt (sonst fuellte sich die Liste mit BMW-Schreibweisen).
+- Eintraege ohne Energie UND ohne SoC-Zuwachs (Vorklimatisierung am Kabel)
+  werden nur protokolliert.
+
+**Aufraeumen:** Config und Protokoll haengen per FK am Fahrzeug, kein Sync,
+kein Grabstein, nicht im Backup (wie der MyŠkoda-Key). `delete_vehicle` und
+`_purge_owned_data()` loeschen sie vorher mit.
+
+**Offen:** Praxistest mit einem echten BMW-Konto - insbesondere Form der
+Mappings-Antwort, ob BMW den `from`/`to`-Bereich begrenzt, und ob
+`averagePowerGridKw` fuer die AC/DC-Ableitung taugt.
 
 ## Verbrenner-Vergleich und Homescreen-Widget (nur Apps, ab 2026-09-29)
 
