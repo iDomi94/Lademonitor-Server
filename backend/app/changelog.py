@@ -5,6 +5,17 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.38.0",
+        "date": "2026-10-12",
+        "title": "Abgleich mit der MySkoda-App",
+        "changes": [
+            "Neuer Bereich „MySkoda-App“ auf der Import-Seite: den Ladeverlauf aus der MySkoda-App als CSV hochladen, Lademonitor gleicht ihn mit deinen Ladevorgängen ab. Die Vorschau zeigt jede vorgeschlagene Änderung mit Häkchen, übernommen wird nur, was angehakt ist.",
+            "Korrigiert werden Start- und End-SoC (bei mehr als 2 Punkten Abweichung oder wenn er fehlt) und die Zeiten: Importe ohne Uhrzeit bekommen die echte, automatisch erfasste Vorgänge werden korrigiert, wenn sie mehr als 30 Minuten danebenliegen. Fehlende Lade-Art und kWh werden ergänzt, vorhandene kWh, Preis, Ort und km-Stand bleiben unverändert. Jede Änderung steht danach in der Notiz.",
+            "Spritmonitor-Einträge, die mehrere Ladungen zusammenfassen, werden erkannt und mit allen zugehörigen Ladungen abgeglichen.",
+            "Ladungen, zu denen es gar keinen Vorgang gibt, werden neu angelegt (zum Prüfen markiert, ohne Ort und km-Stand). Ein zweiter Import derselben Datei legt nichts doppelt an. Was sich nicht eindeutig zuordnen lässt, bleibt unverändert und steht als Hinweis unter der Vorschau.",
+        ],
+    },
+    {
         "version": "0.37.0",
         "date": "2026-10-11",
         "title": "Ladehistorie von BMW (BMW CarData)",

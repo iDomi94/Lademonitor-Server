@@ -5,6 +5,7 @@
 <a class="backlink" href="settings">{{ t('nav.back_to_settings') }}</a>
 <h1>{{ t('import.heading') }}</h1>
 
+<h2>{{ t('import.spritmonitor.heading') }}</h2>
 <form class="inline-form" id="import-form">
   <div>
     <label>{{ t('import.form.vehicle') }}</label>
@@ -33,6 +34,43 @@
   </div>
 </div>
 
+<h2 id="myskoda" style="margin-top:32px">{{ t('import.myskoda.heading') }}</h2>
+<p style="color: var(--muted); font-size: 14px;">{{ t('import.myskoda.intro') }}</p>
+<details class="help"><summary>{{ t('import.myskoda.help.summary') }}</summary>
+  <p>{{ t('import.myskoda.help.body') }}</p>
+</details>
+<form class="inline-form" id="ms-form">
+  <div>
+    <label>{{ t('import.form.vehicle') }}</label>
+    <select id="ms-vehicle" required></select>
+  </div>
+  <div>
+    <label>{{ t('import.form.file') }}</label>
+    <input type="file" id="ms-file" accept=".csv" required>
+  </div>
+  <div class="form-actions">
+    <button type="submit">{{ t('import.form.submit') }}</button>
+  </div>
+</form>
+
+<div id="ms-area" style="display:none">
+  <h2>{{ t('import.preview.heading') }}</h2>
+  <p id="ms-summary" style="color: var(--muted); font-size: 14px;"></p>
+  <div class="tablewrap" id="ms-table-wrap">
+    <table>
+      <thead><tr><th><input type="checkbox" id="ms-all" checked aria-label="{{ t('import.myskoda.table.all') }}"></th><th>{{ t('import.preview.table.date') }}</th><th>{{ t('import.myskoda.table.session') }}</th><th>{{ t('import.myskoda.table.changes') }}</th></tr></thead>
+      <tbody id="ms-rows"></tbody>
+    </table>
+  </div>
+  <div id="ms-hints-wrap" style="display:none">
+    <h3>{{ t('import.myskoda.hints.heading') }}</h3>
+    <ul id="ms-hints" style="font-size: 14px;"></ul>
+  </div>
+  <div class="form-actions" style="margin-top:16px">
+    <button id="ms-commit">{{ t('import.myskoda.commit') }}</button>
+  </div>
+</div>
+
 <script>
 const T = {
   errorPrefix: {{ t('import.js.error_prefix')|tojson }},
@@ -40,12 +78,35 @@ const T = {
   willImport: {{ t('import.js.will_import')|tojson }},
   skippedDefault: {{ t('import.js.skipped_default')|tojson }},
   commitDone: {{ t('import.js.commit_done')|tojson }},
+  ms: {
+    summary: {{ t('import.myskoda.js.summary')|tojson }},
+    nothing: {{ t('import.myskoda.js.nothing')|tojson }},
+    fields: {
+      soc_start: {{ t('import.myskoda.field.soc_start')|tojson }},
+      soc_end: {{ t('import.myskoda.field.soc_end')|tojson }},
+      start_time: {{ t('import.myskoda.field.start_time')|tojson }},
+      end_time: {{ t('import.myskoda.field.end_time')|tojson }},
+      charging_type: {{ t('import.myskoda.field.charging_type')|tojson }},
+      energy_kwh: {{ t('import.myskoda.field.energy_kwh')|tojson }},
+    },
+    grouped: {{ t('import.myskoda.js.grouped')|tojson }},
+    newRow: {{ t('import.myskoda.js.new_row')|tojson }},
+    newLabel: {{ t('import.myskoda.js.new_label')|tojson }},
+    noProvider: {{ t('import.myskoda.js.no_provider')|tojson }},
+    hints: {
+      type_mismatch: {{ t('import.myskoda.hint.type_mismatch')|tojson }},
+      unassigned_charge: {{ t('import.myskoda.hint.unassigned_charge')|tojson }},
+      unmatched_session: {{ t('import.myskoda.hint.unmatched_session')|tojson }},
+    },
+    commitDone: {{ t('import.myskoda.js.commit_done')|tojson }},
+  },
 };
 
 async function loadVehicles() {
   const vehicles = await (await fetch('api/vehicles')).json();
-  document.getElementById('i-vehicle').innerHTML =
-    vehicles.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+  const options = vehicles.map(v => `<option value="${v.id}">${escapeHtml(v.name)}</option>`).join('');
+  document.getElementById('i-vehicle').innerHTML = options;
+  document.getElementById('ms-vehicle').innerHTML = options;
 }
 loadVehicles();
 
@@ -89,6 +150,134 @@ document.getElementById('import-form').addEventListener('submit', async (e) => {
     document.getElementById('preview-area').style.display = 'none';
     e.target.reset();
   };
+});
+
+// --- MySkoda-App -----------------------------------------------------------
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+}
+
+// Zeiten kommen naiv als lokale Zeit - so liest sie auch `new Date()`.
+function fmtDateTime(iso, withTime = true) {
+  if (!iso) return '–';
+  const d = new Date(iso);
+  const opts = withTime
+    ? {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'}
+    : {day: '2-digit', month: '2-digit', year: 'numeric'};
+  return d.toLocaleString(window.LADEMONITOR_LANG, opts);
+}
+
+function fmtValue(field, value) {
+  if (value === null || value === undefined) return '–';
+  if (field === 'start_time' || field === 'end_time') return fmtDateTime(value);
+  if (field === 'soc_start' || field === 'soc_end') return value + ' %';
+  if (field === 'energy_kwh') return value + ' kWh';
+  return String(value);
+}
+
+function chargeText(c) {
+  return `${c.soc_start} → ${c.soc_end} %` + (c.energy_kwh != null ? `, ${c.energy_kwh} kWh` : '');
+}
+
+function hintText(h) {
+  const tpl = T.ms.hints[h.kind] || h.kind;
+  return tpl
+    .replace('{date}', fmtDateTime(h.when))
+    .replace('{stored}', h.data.stored ?? '')
+    .replace('{derived}', h.data.derived ?? '')
+    .replace('{charge}', h.data.soc_start != null ? chargeText(h.data) : '');
+}
+
+let msFormData = null;
+let msVehicleId = null;
+
+document.getElementById('ms-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  msVehicleId = document.getElementById('ms-vehicle').value;
+  msFormData = new FormData();
+  msFormData.append('file', document.getElementById('ms-file').files[0]);
+
+  const res = await fetch(`api/import/myskoda/preview?vehicle_id=${msVehicleId}`, {
+    method: 'POST', body: msFormData
+  });
+  if (!res.ok) {
+    let detail = await res.text();
+    try { detail = JSON.parse(detail).detail ?? detail; } catch (_) {}
+    alert(T.errorPrefix + detail);
+    return;
+  }
+  const data = await res.json();
+
+  document.getElementById('ms-summary').textContent = T.ms.summary
+    .replace('{total}', data.charges_total)
+    .replace('{updates}', data.updates.length)
+    .replace('{created}', data.new_sessions.length)
+    .replace('{unchanged}', data.unchanged)
+    .replace('{already}', data.already_imported)
+    .replace('{ignored}', data.charges_ignored);
+
+  const rows = [];
+  for (const u of data.updates) {
+    const changes = u.changes.map(c =>
+      `${escapeHtml(T.ms.fields[c.field] || c.field)} ${escapeHtml(fmtValue(c.field, c.old))} → ${escapeHtml(fmtValue(c.field, c.new))}`
+    ).join('<br>');
+    const grouped = u.charges.length > 1
+      ? `<div style="color: var(--muted); font-size: 13px;">${escapeHtml(T.ms.grouped.replace('{count}', u.charges.length))}</div>`
+      : '';
+    rows.push({
+      sort: u.start_time,
+      html: `<tr>
+        <td><input type="checkbox" class="ms-pick" value="${escapeHtml(u.key)}" checked></td>
+        <td>${fmtDateTime(u.start_time, u.source !== 'import' || !u.start_time.endsWith('T00:00:00'))}</td>
+        <td>${escapeHtml(u.provider_name || T.ms.noProvider)}</td>
+        <td>${changes}${grouped}</td>
+      </tr>`,
+    });
+  }
+  for (const n of data.new_sessions) {
+    rows.push({
+      sort: n.charge.start,
+      html: `<tr>
+        <td><input type="checkbox" class="ms-pick" value="${escapeHtml(n.key)}" checked></td>
+        <td>${fmtDateTime(n.charge.start)}</td>
+        <td><span class="badge">${escapeHtml(T.ms.newLabel)}</span></td>
+        <td>${escapeHtml(T.ms.newRow.replace('{charge}', chargeText(n.charge)).replace('{type}', n.charging_type || '–'))}</td>
+      </tr>`,
+    });
+  }
+  rows.sort((a, b) => a.sort.localeCompare(b.sort));
+  document.getElementById('ms-rows').innerHTML = rows.map(r => r.html).join('');
+  document.getElementById('ms-table-wrap').style.display = rows.length ? '' : 'none';
+  document.getElementById('ms-commit').style.display = rows.length ? '' : 'none';
+  if (!rows.length) {
+    document.getElementById('ms-summary').textContent += ' ' + T.ms.nothing;
+  }
+
+  document.getElementById('ms-hints').innerHTML =
+    data.hints.map(h => `<li>${escapeHtml(hintText(h))}</li>`).join('');
+  document.getElementById('ms-hints-wrap').style.display = data.hints.length ? '' : 'none';
+  document.getElementById('ms-all').checked = true;
+  document.getElementById('ms-area').style.display = 'block';
+});
+
+document.getElementById('ms-all').addEventListener('change', (e) => {
+  document.querySelectorAll('.ms-pick').forEach(cb => { cb.checked = e.target.checked; });
+});
+
+document.getElementById('ms-commit').addEventListener('click', async () => {
+  if (!msFormData) return;
+  const accepted = [...document.querySelectorAll('.ms-pick:checked')].map(cb => cb.value);
+  const body = new FormData();
+  body.append('file', msFormData.get('file'));
+  body.append('accept', JSON.stringify(accepted));
+  const res = await fetch(`api/import/myskoda/commit?vehicle_id=${msVehicleId}`, {method: 'POST', body});
+  if (!res.ok) { alert(T.errorPrefix + await res.text()); return; }
+  const result = await res.json();
+  alert(T.ms.commitDone.replace('{updated}', result.updated).replace('{created}', result.created));
+  document.getElementById('ms-area').style.display = 'none';
+  document.getElementById('ms-form').reset();
+  msFormData = null;
 });
 </script>
 {% endblock %}

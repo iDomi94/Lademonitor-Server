@@ -6,6 +6,27 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.38.0] — 2026-10-12
+
+### Added
+- **Abgleich mit der MySkoda-App** (`myskoda_import.py`,
+  `POST /api/import/myskoda/preview` und `/commit`): liest den CSV-Export der
+  Ladestatistik und ordnet jede Ladung den vorhandenen Ladevorgängen zu.
+  Vorgänge mit Endzeit passen zu einer Ladung (Überschneidung oder Beginn
+  höchstens 3 h entfernt), Vorgänge ohne Endzeit zu bis zu vier
+  aufeinanderfolgenden Ladungen (Spritmonitor-Sammeleinträge), geprüft über
+  die kWh-Summe bzw. den SoC an beiden Enden.
+- Vorgeschlagen werden Start-/End-SoC (Abweichung über 2 Punkte oder leer),
+  Start-/Endzeit (Import ohne Uhrzeit oder Abweichung über 30 min), fehlende
+  Lade-Art (DC über 12 kW mittlere Leistung) und fehlende kWh. Jede
+  übernommene Änderung wird in der Notiz vermerkt.
+- Ladungen ohne Vorgang in der Nähe (±1/+3 Tage) werden mit `source=import`,
+  `needs_review`, `energy_meter="vehicle"` und
+  `external_session_id=myskoda-app-<Session ID>` angelegt; ein zweiter Lauf
+  ändert nichts mehr. Nicht eindeutig Zuordenbares erscheint nur als Hinweis.
+- Web-UI: Bereich „MySkoda-App“ auf der Import-Seite mit Vorschau und
+  Auswahl je Vorgang.
+
 ## [0.37.0] — 2026-10-11
 
 ### Added
