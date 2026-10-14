@@ -860,7 +860,83 @@ class WebdavBackupFile(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
 
 
-class MySkodaConfig(Base):
+class ChargeDetectionStateMixin:
+    """Einstellungen und Zustand der Ladeerkennung aus wiederholt abgefragten
+    Fahrzeugzustaenden (siehe charge_detection.py) - gemeinsam fuer jede Quelle,
+    die nur Zustaende liefert und keine fertigen Ladevorgaenge (MyŠkoda Public
+    API, VW-Datenportal). Ein Mixin statt einer eigenen Tabelle, damit jede
+    Quelle ihre Zeile behaelt und die Spaltennamen in `myskoda_configs` beim
+    Herausloesen unveraendert bleiben konnten. Neu dazugekommen sind nur die
+    drei Energie-Spalten (Migration in database.py)."""
+
+    # Nachtraegliche Erkennung: wenn das Fahrzeug zwischen zwei Abfragen
+    # geschlafen hat, kann ein kompletter Ladevorgang unbemerkt bleiben und sich
+    # nur als SoC-Sprung zeigen. Schwelle bewusst nicht zu klein - Rekuperation
+    # auf langer Gefaellestrecke hebt den SoC ebenfalls um ein paar Prozent.
+    detect_missed_sessions: Mapped[bool] = mapped_column(Boolean, default=True)
+    missed_session_min_soc_delta: Mapped[int] = mapped_column(Integer, default=5)
+
+    # Rueckdatierung des Ladebeginns auf den SoC des letzten Abrufs VOR dem
+    # Einstecken - der Teil des Ladevorgangs, den das Abfrageintervall sonst
+    # verschluckt (bei DC-Schnellladen zweistellige Prozentpunkte). Warum das
+    # zulaessig ist und welche zwei Waechter es begrenzen: ausfuehrlich in
+    # charge_detection.py, Abschnitt "Rueckdatierung des Ladebeginns".
+    backdate_session_start: Mapped[bool] = mapped_column(Boolean, default=True)
+    # 0 = automatisch, dann das Doppelte des Leerlaufintervalls. Bewusst kein
+    # fester Default in Minuten: wer selten abfragt, braucht ein groesseres
+    # Fenster, sonst greift die Korrektur nie.
+    backdate_max_gap_minutes: Mapped[int] = mapped_column(Integer, default=0)
+
+    # Debug-Protokoll der jeweiligen Quelle. Solange unklar ist, wie die API
+    # waehrend eines echten Ladevorgangs tatsaechlich antwortet, ist das der
+    # einzige Weg, die Erkennung nachtraeglich zu beurteilen.
+    log_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    log_raw_payload: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # --- Zustand des letzten verarbeiteten Berichts ---------------------------
+    last_charging_state: Mapped[str | None] = mapped_column(String, nullable=True)
+    last_soc: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    last_captured_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Letzter Stand des Energiezaehlers im Fahrzeug, falls die Quelle einen
+    # liefert (siehe charge_detection.py, "Gemessene Energie") - Ausgangswert
+    # fuer den naechsten Vorgang.
+    last_energy_raw_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # --- Laufender, noch nicht abgeschlossener Ladevorgang -------------------
+    open_start_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    open_soc_start: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # SoC direkt VOR dem ersten "steckt"-Abruf. Nur fuer die Diagnose: die
+    # Differenz zu open_soc_start ist genau der Teil des Ladevorgangs, den das
+    # Polling-Intervall verschluckt hat (bei DC-Schnellladen der relevante
+    # Fehler). Landet als Notiz am angelegten Ladevorgang.
+    open_soc_before: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    open_soc_last: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    open_charging_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    open_max_power_kw: Mapped[float | None] = mapped_column(Float, nullable=True)
+    open_odometer_km: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Aussentemperatur beim Einstecken - aus demselben Grund zwischengespeichert
+    # wie soc_start: beim Ladeende ist sie eine andere als die, unter der die
+    # Fahrt davor stattfand (siehe ChargingSession.outside_temp_c). Nicht
+    # verschluesselt, ebenfalls aus demselben Grund wie dort.
+    open_outside_temp_c: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Verschluesselt (siehe crypto.py) - dieselbe GPS-Position wie
+    # ChargingSession.latitude/longitude, nur als Zwischenspeicher fuer den
+    # noch laufenden Vorgang (wird 1:1 dorthin kopiert, sobald er
+    # abgeschlossen wird, siehe charge_detection.py::create_session()).
+    open_latitude: Mapped[float | None] = mapped_column(EncryptedFloat, nullable=True)
+    open_longitude: Mapped[float | None] = mapped_column(EncryptedFloat, nullable=True)
+    open_poll_count: Mapped[int] = mapped_column(Integer, default=0)
+    open_gap_before_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Beim EINSTECKEN erfasst, nicht beim Ausstecken: da steht das Fahrzeug
+    # sicher am Ladepunkt, waehrend es beim Ausstecken oft schon wieder faehrt
+    open_in_saved_location: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # Aufsummierte Zuwaechse des Energiezaehlers seit dem Einstecken und sein
+    # zuletzt gesehener Rohwert (siehe charge_detection.py::_add_energy).
+    open_energy_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
+    open_energy_raw_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
+class MySkodaConfig(ChargeDetectionStateMixin, Base):
     """Konfiguration UND Zustandsspeicher der automatischen Ladeerkennung ueber
     die MyŠkoda Public API - eine Zeile pro Fahrzeug.
 
@@ -904,38 +980,11 @@ class MySkodaConfig(Base):
     poll_interval_idle_minutes: Mapped[int] = mapped_column(Integer, default=20)
     poll_interval_active_minutes: Mapped[int] = mapped_column(Integer, default=5)
 
-    # Nachtraegliche Erkennung: wenn das Fahrzeug zwischen zwei Abfragen
-    # geschlafen hat, kann ein kompletter Ladevorgang unbemerkt bleiben und sich
-    # nur als SoC-Sprung zeigen. Schwelle bewusst nicht zu klein - Rekuperation
-    # auf langer Gefaellestrecke hebt den SoC ebenfalls um ein paar Prozent.
-    detect_missed_sessions: Mapped[bool] = mapped_column(Boolean, default=True)
-    missed_session_min_soc_delta: Mapped[int] = mapped_column(Integer, default=5)
-
-    # Rueckdatierung des Ladebeginns auf den SoC des letzten Abrufs VOR dem
-    # Einstecken - der Teil des Ladevorgangs, den das Abfrageintervall sonst
-    # verschluckt (bei DC-Schnellladen zweistellige Prozentpunkte). Warum das
-    # zulaessig ist und welche zwei Waechter es begrenzen: ausfuehrlich in
-    # myskoda_poller.py, Abschnitt "Rueckdatierung des Ladebeginns".
-    backdate_session_start: Mapped[bool] = mapped_column(Boolean, default=True)
-    # 0 = automatisch, dann das Doppelte des Leerlaufintervalls. Bewusst kein
-    # fester Default in Minuten: wer selten abfragt, braucht ein groesseres
-    # Fenster, sonst greift die Korrektur nie.
-    backdate_max_gap_minutes: Mapped[int] = mapped_column(Integer, default=0)
-
-    # Debug-Protokoll (siehe MySkodaLogEntry). Solange unklar ist, wie die API
-    # waehrend eines echten Ladevorgangs tatsaechlich antwortet, ist das der
-    # einzige Weg, die Erkennung nachtraeglich zu beurteilen.
-    log_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
-    log_raw_payload: Mapped[bool] = mapped_column(Boolean, default=True)
-
     # --- Zustand des letzten Abrufs (nur lesend fuer die Web-UI) -------------
     last_poll_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     next_poll_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_status: Mapped[str | None] = mapped_column(String, nullable=True)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    last_charging_state: Mapped[str | None] = mapped_column(String, nullable=True)
-    last_soc: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    last_captured_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     api_key_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # Welche Ablaufwarnung (14/7/1 Tage) schon per Mail rausging - ohne den
     # Merker wuerde der Scheduler die Warnung viertelstuendlich wiederholen.
@@ -944,35 +993,6 @@ class MySkodaConfig(Base):
     rate_limit_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
     rate_limit_remaining: Mapped[int | None] = mapped_column(Integer, nullable=True)
     rate_limit_resets_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-
-    # --- Laufender, noch nicht abgeschlossener Ladevorgang -------------------
-    open_start_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    open_soc_start: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    # SoC direkt VOR dem ersten "steckt"-Abruf. Nur fuer die Diagnose: die
-    # Differenz zu open_soc_start ist genau der Teil des Ladevorgangs, den das
-    # Polling-Intervall verschluckt hat (bei DC-Schnellladen der relevante
-    # Fehler). Landet als Notiz am angelegten Ladevorgang.
-    open_soc_before: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    open_soc_last: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    open_charging_type: Mapped[str | None] = mapped_column(String, nullable=True)
-    open_max_power_kw: Mapped[float | None] = mapped_column(Float, nullable=True)
-    open_odometer_km: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    # Aussentemperatur beim Einstecken - aus demselben Grund zwischengespeichert
-    # wie soc_start: beim Ladeende ist sie eine andere als die, unter der die
-    # Fahrt davor stattfand (siehe ChargingSession.outside_temp_c). Nicht
-    # verschluesselt, ebenfalls aus demselben Grund wie dort.
-    open_outside_temp_c: Mapped[float | None] = mapped_column(Float, nullable=True)
-    # Verschluesselt (siehe crypto.py) - dieselbe GPS-Position wie
-    # ChargingSession.latitude/longitude, nur als Zwischenspeicher fuer den
-    # noch laufenden Vorgang (wird 1:1 dorthin kopiert, sobald er
-    # abgeschlossen wird, siehe myskoda_poller.py::_create_session()).
-    open_latitude: Mapped[float | None] = mapped_column(EncryptedFloat, nullable=True)
-    open_longitude: Mapped[float | None] = mapped_column(EncryptedFloat, nullable=True)
-    open_poll_count: Mapped[int] = mapped_column(Integer, default=0)
-    open_gap_before_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    # Beim EINSTECKEN erfasst, nicht beim Ausstecken: da steht das Fahrzeug
-    # sicher am Ladepunkt, waehrend es beim Ausstecken oft schon wieder faehrt
-    open_in_saved_location: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
