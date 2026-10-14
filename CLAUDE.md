@@ -88,6 +88,7 @@ backend/app/
                           Rueckdatierung, Nacherkennung, gemessene Energie) fuer
                           MyŠkoda und VW-Datenportal
   myskoda_poller.py  - MyŠkoda-Abruf, Kontingent, Debug-Log (nutzt charge_detection.py)
+  myskoda_import.py  - Abgleich mit dem CSV-Export der MySkoda-App (siehe Abschnitt "MySkoda-Abgleich")
   bmw_cardata.py     - Client fuer BMW CarData (Device Code Flow, Ladehistorie)
   bmw_cardata_poller.py - Uebernahme der BMW-Ladehistorie (siehe Abschnitt "BMW CarData")
   vw_data_act.py     - Client fuer das VW-Datenportal (EU Data Act), Datensatz-Auswertung
@@ -1470,6 +1471,10 @@ dieses Projekt real gestolpert ist:
 - `test_review.py` - Jahres-/Monatsrueckblick nach dem Vertrag (km mit Anker,
   Kosten inkl. Gebuehren, Vorperiode, Ersparnis, jeder Rekord samt Schwellen
   und Gleichstand), Vergleichsfahrzeug und Jahresmail inkl. Merker.
+- `test_myskoda_import.py` - MySkoda-Abgleich an nachgebauten echten Faellen
+  (Start-SoC 20, Sammeleintrag mit gemessenen und mit geschaetzten kWh, um 2 h
+  verschobener Vorgang, verpasster Ladebeginn, neue Ladung, Hinweis statt
+  Duplikat, zweiter Lauf, nur angehakte Aenderungen, Trennung pro Nutzer).
 
 **Was bewusst NICHT getestet wird - und deshalb weiterhin von Hand gegen eine
 Kopie der Produktiv-DB geprueft werden MUSS:**
@@ -2663,6 +2668,61 @@ Monatsfilter). iOS braucht dafuer ein eigenes Widget-Target samt App Group
 
 **Offen:** beide Apps sind hier nicht kompilierbar; das iOS-Projekt
 (`project.pbxproj`) wurde fuer das Widget-Target von Hand erweitert.
+
+## MySkoda-Abgleich (`myskoda_import.py`, ab 2026-10-12, v0.40.0)
+
+Gleicht den CSV-Export der Ladestatistik aus der MySkoda-App mit den
+vorhandenen Vorgaengen ab. **Entscheidung des Nutzers (12.10.2026):** ein
+Abgleich speziell fuer dieses Format, KEIN allgemeiner CSV-Importer mit
+Spaltenzuordnung. Plan: `ideen/plan-myskoda-abgleich.md`, Analyse der echten
+Daten: `analysen/soc-abgleich-myskoda-2026-10-11.md`.
+
+Die Datei hat je Ladung Beginn/Ende (UTC mit "Z"), Start-/End-SoC und ganze
+kWh, aber keinen Ort, Preis, km-Stand oder AC/DC. Ihr Wert liegt deshalb im
+ABGLEICH - der SoC kommt direkt aus dem Fahrzeug und ist genauer als
+Spritmonitor-Importe (die falschen Start-SoC 20 aus dem App-Formular) und
+HA-Stundenmittel. Erkannt wird die Datei an ihren Spalten, nicht am Namen.
+
+**Zuordnung** (Bewertung je zulaessigem Paar, vergeben gierig vom besten an):
+Vorgaenge MIT Endzeit passen zu einer Ladung (Ueberschneidung oder Beginn
+hoechstens 3 h entfernt - deckt die mit UTC gespeicherten Vorgaenge vom
+12.-16.08. ab), Vorgaenge OHNE Endzeit zu bis zu 4 aufeinanderfolgenden
+Ladungen, deren letzte spaetestens am Ladetag beginnt und hoechstens 3 Tage
+davor endet. Bei gemessenen kWh muss die Summe passen (max(2,5 kWh, 6 %)),
+bei geschaetzten nur der SoC - eine Folge dann an BEIDEN Enden (18.05.: sonst
+haette die letzte Ladung allein den richtigen Start-SoC 21 auf 79
+"korrigiert"). Der Start-SoC zaehlt in der Bewertung nur schwach, weil gerade
+er oft falsch ist.
+
+**Konservativ beim Anlegen:** neu wird eine Ladung nur, wenn im Bereich
+-1/+3 Tage GAR KEIN Vorgang liegt. Eine Ladung neben einem Eintrag, der nur
+nicht passte (29.06.: 42,8 kWh gegen 19+17), ist mit hoher Wahrscheinlichkeit
+derselbe Vorgang mit anderen Zahlen - sie wird Hinweis, kein Duplikat. Neue
+Vorgaenge: `source=import`, `needs_review`, `energy_meter="vehicle"` (die
+App-kWh liegen 1-3 % unter dem Wallbox-Zaehler, so bleiben sie aus der
+Verlustrechnung), `external_session_id=myskoda-app-<Session ID>`. Solche
+Vorgaenge nehmen beim naechsten Lauf nicht am Abgleich teil.
+
+**Geaendert wird:** SoC bei mehr als 2 Punkten Abweichung oder wenn leer;
+Zeiten bei Importen ohne Uhrzeit bzw. mehr als 30 min Abweichung; Lade-Art
+und kWh nur, wenn leer. Vorhandene kWh bleiben (App-Werte ganzzahlig),
+`needs_review` wird nicht angefasst, jede Aenderung steht als Zeile in der
+Notiz. Die Vorschau zeigt eine Zeile je VORGANG (alle Felder darin), nicht je
+Feld - ein halb uebernommener Vorgang (SoC neu, Zeit alt) waere
+widerspruechlich. Vorschau und Uebernahme rechnen denselben Plan aus
+derselben Datei, `accept` ist die Liste der angehakten Schluessel; der Server
+merkt sich zwischen beiden nichts.
+
+**Bewusste Nebenwirkung:** eine korrigierte `start_time` verschiebt den
+Dublettenschluessel des Spritmonitor-Imports (Datum + km). Ein erneuter
+Import derselben Spritmonitor-Datei koennte den Vorgang dann doppelt anlegen,
+wenn sich das Datum aendert (Sammeleintraege) - der Spritmonitor-Import ist
+ein einmaliger Umstieg, das ist hingenommen.
+
+Gegen die echten Daten des Nutzers geprueft (67 Ladungen, 55 Vorgaenge): 46
+Vorgaenge mit Aenderungen, 7 stimmen schon, keine neuen, 5 Hinweise - die
+Sammeleintraege 31.03., 02.04., 26.04., 18.05., 19.07. und 04.08. werden
+erkannt. Nur im Web, die Apps haben auch den Spritmonitor-Import nicht.
 
 ## Backup-Export/-Import (`routers/backup.py`)
 

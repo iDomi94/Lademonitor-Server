@@ -2,11 +2,13 @@ import csv
 import io
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+import json
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from .. import models
+from .. import models, myskoda_import
 from ..auth import get_current_user
 from ..database import get_db
 
@@ -210,6 +212,157 @@ async def commit_import(
 
     db.commit()
     return ImportCommitResponse(imported=imported, skipped_duplicates=skipped)
+
+
+# --- MySkoda-App (Abgleich, siehe myskoda_import.py) ------------------------
+
+
+class MySkodaChangeOut(BaseModel):
+    field: str
+    old: object | None
+    new: object | None
+
+
+class MySkodaChargeOut(BaseModel):
+    start: datetime
+    end: datetime
+    soc_start: int
+    soc_end: int
+    energy_kwh: float | None
+
+
+class MySkodaUpdateOut(BaseModel):
+    key: str
+    session_id: str
+    start_time: datetime
+    provider_name: str | None
+    source: str
+    charges: list[MySkodaChargeOut]
+    changes: list[MySkodaChangeOut]
+
+
+class MySkodaNewOut(BaseModel):
+    key: str
+    charge: MySkodaChargeOut
+    charging_type: str | None
+
+
+class MySkodaHintOut(BaseModel):
+    kind: str
+    when: datetime
+    data: dict
+
+
+class MySkodaPreviewResponse(BaseModel):
+    charges_total: int
+    charges_ignored: int
+    unchanged: int
+    already_imported: int
+    updates: list[MySkodaUpdateOut]
+    new_sessions: list[MySkodaNewOut]
+    hints: list[MySkodaHintOut]
+
+
+class MySkodaCommitResponse(BaseModel):
+    updated: int
+    created: int
+
+
+def _myskoda_plan(db: Session, user: models.User, vehicle: models.Vehicle, content: bytes) -> myskoda_import.Plan:
+    try:
+        charges = myskoda_import.parse_export(content)
+    except UnicodeDecodeError:
+        raise HTTPException(422, "Die Datei ist keine UTF-8-CSV.")
+    except myskoda_import.ExportFormatError as exc:
+        raise HTTPException(
+            422,
+            f"Kein MySkoda-Export erkannt, es fehlen Spalten ({', '.join(exc.missing)}). "
+            f"Gefundene Spalten: {exc.header}",
+        )
+    return myskoda_import.build_plan(db, user, vehicle, charges)
+
+
+def _charge_out(charge: myskoda_import.Charge) -> MySkodaChargeOut:
+    return MySkodaChargeOut(
+        start=charge.start,
+        end=charge.end,
+        soc_start=charge.soc_start,
+        soc_end=charge.soc_end,
+        energy_kwh=charge.energy_kwh,
+    )
+
+
+def _json_value(value: object) -> object:
+    if isinstance(value, models.ChargingType):
+        return value.value
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return value
+
+
+@router.post("/myskoda/preview", response_model=MySkodaPreviewResponse)
+async def preview_myskoda(
+    vehicle_id: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Schreibt nichts - rechnet nur den Abgleich aus."""
+    vehicle = _get_owned_vehicle(db, user, vehicle_id)
+    plan = _myskoda_plan(db, user, vehicle, await file.read())
+    return MySkodaPreviewResponse(
+        charges_total=plan.charges_total,
+        charges_ignored=plan.charges_ignored,
+        unchanged=plan.unchanged,
+        already_imported=plan.already_imported,
+        updates=[
+            MySkodaUpdateOut(
+                key=u.key,
+                session_id=u.session.id,
+                start_time=u.session.start_time,
+                provider_name=u.session.provider.name if u.session.provider else None,
+                source=u.session.source.value,
+                charges=[_charge_out(c) for c in u.charges],
+                changes=[
+                    MySkodaChangeOut(field=c.field, old=_json_value(c.old), new=_json_value(c.new))
+                    for c in u.changes
+                ],
+            )
+            for u in plan.updates
+        ],
+        new_sessions=[
+            MySkodaNewOut(
+                key=n.key,
+                charge=_charge_out(n.charge),
+                charging_type=n.charging_type.value if n.charging_type else None,
+            )
+            for n in plan.new_sessions
+        ],
+        hints=[MySkodaHintOut(kind=h.kind, when=h.when, data=h.data) for h in plan.hints],
+    )
+
+
+@router.post("/myskoda/commit", response_model=MySkodaCommitResponse)
+async def commit_myskoda(
+    vehicle_id: str,
+    file: UploadFile = File(...),
+    accept: str = Form("[]"),
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """`accept` ist die JSON-Liste der angehakten Schluessel aus der Vorschau.
+    Der Plan wird aus derselben Datei neu gerechnet; ein Schluessel, den es
+    darin (nicht mehr) gibt, bleibt folgenlos."""
+    vehicle = _get_owned_vehicle(db, user, vehicle_id)
+    try:
+        accepted = json.loads(accept)
+    except json.JSONDecodeError:
+        raise HTTPException(422, "accept muss eine JSON-Liste sein")
+    if not isinstance(accepted, list) or not all(isinstance(k, str) for k in accepted):
+        raise HTTPException(422, "accept muss eine JSON-Liste sein")
+    plan = _myskoda_plan(db, user, vehicle, await file.read())
+    updated, created = myskoda_import.apply_plan(db, user, vehicle, plan, set(accepted))
+    return MySkodaCommitResponse(updated=updated, created=created)
 
 
 def _parse_date(raw: str) -> datetime:
