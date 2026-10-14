@@ -6,6 +6,32 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.39.0] — 2026-10-14
+
+### Added
+- **VW-Datenportal nach EU Data Act als vierte automatische Quelle**
+  (`vw_data_act.py`, `vw_data_act_poller.py`, `routers/vw_data_act.py`) für
+  alle Marken des VW-Konzerns außer Porsche. Anmeldung per nachgebautem
+  OIDC-Login mit E-Mail und Passwort (portiert aus den MIT-lizenzierten
+  Projekten HA_VAG-EU-Data-Act und carconnectivity-connector-vw-eu-data-act),
+  danach liest der Server alle 15 Minuten die neuen ZIP-Datensätze der
+  fortlaufenden Datenanfrage.
+- Die Ladeerkennung aus dem MyŠkoda-Poller liegt jetzt in
+  `charge_detection.py` und wird von beiden Quellen genutzt; die Zustands-
+  spalten sind ein Mixin (`ChargeDetectionStateMixin`). Neu ist gemessene
+  Energie aus einem Zähler im Fahrzeug (`last_energy_raw_kwh`,
+  `open_energy_kwh`, `open_energy_raw_kwh`, auch auf `myskoda_configs`):
+  aufsummiert werden nur Zuwächse, damit Gesamt- und Je-Vorgang-Zähler
+  dasselbe ergeben. Messort Fahrzeug (`energy_meter="vehicle"`).
+- Neue Tabellen `vw_data_act_configs` und `vw_data_act_log_entries` (E-Mail,
+  Passwort, FIN und Rohdaten verschlüsselt, wenn `FIELD_ENCRYPTION_KEY`
+  gesetzt ist). Nicht im Backup, nicht im Sync.
+- Web-UI: Abschnitt „VW-Konzern: Datenportal nach EU Data Act“ auf der Seite
+  „API & Debug“ samt Protokoll; Mail beim Übergang nach `auth_error` und nach
+  `no_request` (Datenanfrage abgelaufen).
+- Einschalten wird abgelehnt (422), wenn für dasselbe Fahrzeug MyŠkoda oder
+  BMW CarData aktiv ist.
+
 ## [0.37.0] — 2026-10-11
 
 ### Added

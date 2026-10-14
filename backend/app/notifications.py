@@ -230,6 +230,41 @@ def notify_cardata_status(
         logger.exception("CarData-Benachrichtigung fehlgeschlagen")
 
 
+def notify_vw_data_act_status(
+    db: Session, config: models.VwDataActConfig, previous_status: str | None
+) -> None:
+    """Gegenstueck zu notify_cardata_status fuer das VW-Datenportal. Gemeldet
+    wird der Uebergang nach `auth_error` (Passwort, offene Zustimmung bei VW,
+    geaenderter Login) und nach `no_request` (keine fortlaufende Datenanfrage
+    mehr - sie laeuft nach rund zwoelf Monaten ab). Beides heisst: es kommen
+    keine Ladevorgaenge mehr, bis jemand etwas tut. Haengt am selben Schalter
+    wie die MyŠkoda-Meldung."""
+    try:
+        status = config.last_status
+        if status not in ("auth_error", "no_request") or previous_status == status:
+            return
+        user = db.get(models.User, config.user_id)
+        if not user or not user.email or not user.notify_myskoda_error:
+            return
+        vehicle = db.get(models.Vehicle, config.vehicle_id)
+        key = "email.vwda_error" if status == "auth_error" else "email.vwda_no_request"
+        with language_context(user.language):
+            mail = mailer.Mail(
+                subject=translate(f"{key}.subject"),
+                heading=translate(f"{key}.heading"),
+                intro=[translate(f"{key}.intro")],
+                rows=[
+                    (translate("email.myskoda_error.row_vehicle"), vehicle.name if vehicle else "–"),
+                    (translate("email.myskoda_error.row_when"), _fmt_dt(config.last_poll_at)),
+                    (translate("email.myskoda_error.row_error"), config.last_error or "–"),
+                ],
+                note=translate(f"{key}.note"),
+            )
+        _send(db, user, mail, "vwda_error")
+    except Exception:  # noqa: BLE001
+        logger.exception("Benachrichtigung zum VW-Datenportal fehlgeschlagen")
+
+
 def _digest_due(user: models.User, now: datetime) -> bool:
     if user.review_digest == models.ReviewDigestFrequency.OFF:
         return False

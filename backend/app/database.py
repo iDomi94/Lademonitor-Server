@@ -47,6 +47,8 @@ _ENCRYPTABLE_COORDINATE_COLUMNS = (
     ("charging_locations", "longitude", True),
     ("myskoda_configs", "open_latitude", False),
     ("myskoda_configs", "open_longitude", False),
+    ("vw_data_act_configs", "open_latitude", False),
+    ("vw_data_act_configs", "open_longitude", False),
 )
 _ENCRYPTABLE_TEXT_COLUMNS = (
     ("charging_sessions", "notes"),
@@ -77,6 +79,10 @@ _ENCRYPTABLE_TEXT_COLUMNS = (
     ("bmw_cardata_configs", "pending_device_code"),
     ("bmw_cardata_configs", "pending_code_verifier"),
     ("bmw_cardata_log_entries", "payload"),
+    ("vw_data_act_configs", "email"),
+    ("vw_data_act_configs", "password"),
+    ("vw_data_act_configs", "vin"),
+    ("vw_data_act_log_entries", "payload"),
 )
 
 
@@ -574,6 +580,17 @@ def run_light_migrations() -> None:
                 "ADD COLUMN IF NOT EXISTS api_key_expiry_notified_days INTEGER"
             )
         )
+        # Energiezaehler des Fahrzeugs in der gemeinsamen Ladeerkennung (siehe
+        # charge_detection.py, "Gemessene Energie"). Die MyŠkoda-API liefert
+        # keinen, die Spalten bleiben dort also leer - sie kommen ueber
+        # models.ChargeDetectionStateMixin trotzdem in jede Quelle.
+        for energy_column in ("last_energy_raw_kwh", "open_energy_kwh", "open_energy_raw_kwh"):
+            conn.execute(
+                text(
+                    "ALTER TABLE myskoda_configs "
+                    f"ADD COLUMN IF NOT EXISTS {energy_column} DOUBLE PRECISION"
+                )
+            )
         conn.execute(
             text(
                 "ALTER TABLE webdav_backup_configs "
