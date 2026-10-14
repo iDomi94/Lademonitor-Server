@@ -110,6 +110,65 @@
   </div>
 </details>
 
+<div class="section-head" style="margin-top:40px">
+  <h2>{{ t('settings.vwda.heading') }}</h2>
+  <label class="switch">
+    {{ t('settings.vwda.enabled_label') }}
+    <input type="checkbox" id="vw-enabled">
+    <span class="track"></span>
+    <span class="state" id="vw-enabled-state"></span>
+  </label>
+</div>
+<details class="help">
+  <summary>{{ t('common.help') }}</summary>
+  <div class="inner">{{ t('settings.vwda.description')|safe }}</div>
+</details>
+<form class="inline-form" id="vwda-form">
+  <div><label>{{ t('settings.vwda.vehicle') }}</label><select id="vw-vehicle"></select></div>
+  <div><label>{{ t('settings.vwda.brand') }}</label><select id="vw-brand"></select></div>
+  <div><label>{{ t('settings.vwda.email') }}</label><input type="email" id="vw-email" autocomplete="off"></div>
+  <div><label>{{ t('settings.vwda.password') }}</label><input type="password" id="vw-password" placeholder="{{ t('settings.vwda.password') }}" autocomplete="new-password"></div>
+  <div><label>{{ t('settings.vwda.vin') }}</label><input id="vw-vin" placeholder="VSS..." maxlength="17" autocomplete="off"></div>
+  <div><label>{{ t('settings.vwda.country') }}</label><input id="vw-country" maxlength="2" value="de"></div>
+  <div><label>{{ t('settings.vwda.language') }}</label><input id="vw-language" maxlength="2" value="de"></div>
+  <div><label>{{ t('settings.vwda.interval') }}</label><input type="number" id="vw-interval" min="15" max="240" value="15"></div>
+  <div>
+    <label><input type="checkbox" id="vw-missed" style="width:auto; display:inline-block; margin-right:6px">{{ t('settings.myskoda.missed') }}</label>
+  </div>
+  <div><label>{{ t('settings.myskoda.missed_delta') }}</label><input type="number" id="vw-missed-delta" min="1" max="50" value="5"></div>
+  <div>
+    <label><input type="checkbox" id="vw-backdate" style="width:auto; display:inline-block; margin-right:6px">{{ t('settings.myskoda.backdate') }}</label>
+  </div>
+  <div><label>{{ t('settings.myskoda.backdate_gap') }}</label><input type="number" id="vw-backdate-gap" min="0" max="720" value="0"></div>
+  <div>
+    <label><input type="checkbox" id="vw-log" style="width:auto; display:inline-block; margin-right:6px">{{ t('settings.myskoda.log_checkbox') }}</label>
+  </div>
+  <div>
+    <label><input type="checkbox" id="vw-log-raw" style="width:auto; display:inline-block; margin-right:6px">{{ t('settings.vwda.log_raw') }}</label>
+  </div>
+  <div class="form-actions">
+    <button type="button" id="vw-delete-btn" style="background:var(--danger); display:none">{{ t('settings.vwda.delete_config') }}</button>
+    <button type="button" id="vw-test-btn" style="background:var(--accent2)">{{ t('settings.myskoda.test_connection') }}</button>
+    <button type="button" id="vw-poll-btn" style="background:var(--accent2)">{{ t('settings.myskoda.poll_now') }}</button>
+    <button type="submit">{{ t('settings.myskoda.save') }}</button>
+  </div>
+</form>
+<div id="vwda-status" style="margin-top:8px; font-size:0.9em"></div>
+<pre id="vwda-test-result" style="display:none; margin-top:12px; padding:12px; background:var(--card); border:1px solid var(--border); border-radius:12px; font-size:12px; overflow-x:auto"></pre>
+
+<details class="panel" id="vw-log-panel" style="margin-top:24px">
+  <summary>{{ t('settings.vwda.log_heading') }}</summary>
+  <div class="inner">
+    <p style="color:var(--muted); font-size:0.9em; margin-top:0">{{ t('settings.vwda.log_description') }}</p>
+    <div class="form-actions" style="margin-bottom:12px">
+      <button type="button" id="vw-log-refresh">{{ t('settings.myskoda.log_refresh') }}</button>
+      <button type="button" id="vw-log-clear" style="background:var(--danger)">{{ t('settings.myskoda.log_clear') }}</button>
+    </div>
+<div class="tablewrap"><table><thead><tr><th>{{ t('settings.myskoda.log.table.time') }}</th><th>{{ t('settings.myskoda.log.table.event') }}</th><th>{{ t('settings.myskoda.log.table.state') }}</th><th>{{ t('settings.myskoda.log.table.soc') }}</th><th>{{ t('settings.myskoda.log.table.power') }}</th><th>{{ t('settings.myskoda.log.table.message') }}</th><th></th></tr></thead>
+<tbody id="vw-log-rows"></tbody></table></div>
+  </div>
+</details>
+
 <script>
 let vehicles = [];
 
@@ -179,6 +238,17 @@ const T = {
   bcConfirmDelete: {{ t('settings.cardata.confirm_delete')|tojson }},
   bcConfirmDisconnect: {{ t('settings.cardata.confirm_disconnect')|tojson }},
   bcPolling: {{ t('settings.myskoda.polling')|tojson }},
+  vwStatusOk: {{ t('settings.vwda.status.ok')|tojson }},
+  vwStatusError: {{ t('settings.vwda.status.error')|tojson }},
+  vwStatusAuthError: {{ t('settings.vwda.status.auth_error')|tojson }},
+  vwStatusNoRequest: {{ t('settings.vwda.status.no_request')|tojson }},
+  vwStatusRateLimited: {{ t('settings.vwda.status.rate_limited')|tojson }},
+  vwLastDataset: {{ t('settings.vwda.status.last_dataset')|tojson }},
+  vwLastState: {{ t('settings.vwda.status.last_state')|tojson }},
+  vwEnergy: {{ t('settings.vwda.status.energy')|tojson }},
+  vwPasswordSet: {{ t('settings.vwda.password_set')|tojson }},
+  vwPassword: {{ t('settings.vwda.password')|tojson }},
+  vwConfirmDelete: {{ t('settings.vwda.confirm_delete')|tojson }},
 };
 
 // ---------- MyŠkoda Public API ----------
@@ -689,13 +759,218 @@ document.getElementById('bc-log-clear').addEventListener('click', async () => {
   await loadCardataLog();
 });
 
+// ---------------------------------------------------------------------------
+// VW-Datenportal (EU Data Act)
+// ---------------------------------------------------------------------------
+// Gleiche Ladeerkennung wie bei MyŠkoda, nur dass die Berichte als ZIPs aus
+// dem Portal kommen - deshalb dieselben Einstellungen und Protokollspalten.
+
+function vwVehicleId() {
+  return document.getElementById('vw-vehicle').value;
+}
+
+function vwFillVehicles() {
+  const select = document.getElementById('vw-vehicle');
+  const previous = select.value;
+  select.innerHTML = vehicles.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+  if (previous && vehicles.some(v => v.id === previous)) select.value = previous;
+}
+
+async function vwFillBrands() {
+  const brands = await (await fetch('api/vw-data-act/brands')).json();
+  document.getElementById('vw-brand').innerHTML =
+    brands.map(b => `<option value="${b.key}">${b.label}</option>`).join('');
+}
+
+function vwRenderEnabledState() {
+  const on = document.getElementById('vw-enabled').checked;
+  document.getElementById('vw-enabled-state').textContent = on ? T.bcOn : T.bcOff;
+}
+
+function renderVwdaStatus(c) {
+  const el = document.getElementById('vwda-status');
+  document.getElementById('vw-delete-btn').style.display = (c.email || c.vin) ? '' : 'none';
+  document.getElementById('vw-enabled').checked = c.enabled;
+  vwRenderEnabledState();
+  const labels = {
+    ok: T.vwStatusOk, error: T.vwStatusError, auth_error: T.vwStatusAuthError,
+    no_request: T.vwStatusNoRequest, rate_limited: T.vwStatusRateLimited,
+  };
+  const colors = {
+    ok: 'var(--accent)', error: 'var(--danger)', auth_error: 'var(--danger)',
+    no_request: 'var(--danger)', rate_limited: 'var(--warn)',
+  };
+  const lines = [];
+  if (labels[c.last_status]) {
+    lines.push(`<strong style="color:${colors[c.last_status]}">${labels[c.last_status]}</strong>`
+      + (c.last_poll_at ? ` – ${msFmt(c.last_poll_at)} (${msRelative(c.last_poll_at)})` : ''));
+  } else {
+    lines.push(T.msStatusNever);
+  }
+  if (c.last_error) lines.push(`<span style="color:var(--danger)">${c.last_error}</span>`);
+  if (c.last_dataset_at) lines.push(`${T.vwLastDataset}${msFmt(c.last_dataset_at)} (${msRelative(c.last_dataset_at)})`);
+  if (c.last_charging_state) lines.push(`${T.vwLastState}${c.last_charging_state}, SoC ${c.last_soc ?? '–'} %`);
+  if (c.open_start_time) {
+    lines.push(`<strong>${T.msChargingRunning}</strong> ${T.msSince}${msFmt(c.open_start_time)}, `
+      + `SoC ${c.open_soc_start ?? '–'} % → ${c.open_soc_last ?? '–'} %`
+      + (c.open_energy_kwh != null ? `, ${msFmtNum(c.open_energy_kwh, 1)}${T.vwEnergy}` : ''));
+  }
+  if (c.enabled && c.next_poll_at) lines.push(`${T.msNextPollPrefix}${msFmt(c.next_poll_at)}`);
+  else if (c.enabled) lines.push(T.msNextPollSoon);
+  el.innerHTML = lines.join('<br>');
+  el.style.color = 'var(--muted)';
+}
+
+async function loadVwdaConfig() {
+  const vehicleId = vwVehicleId();
+  if (!vehicleId) {
+    document.getElementById('vwda-status').textContent = T.msPleaseAddVehicle;
+    return;
+  }
+  const c = await (await fetch(`api/vw-data-act/configs/${vehicleId}`)).json();
+  document.getElementById('vw-brand').value = c.brand;
+  document.getElementById('vw-email').value = c.email || '';
+  document.getElementById('vw-password').value = '';
+  document.getElementById('vw-password').placeholder = c.has_password ? T.vwPasswordSet : T.vwPassword;
+  document.getElementById('vw-vin').value = c.vin || '';
+  document.getElementById('vw-country').value = c.country;
+  document.getElementById('vw-language').value = c.language;
+  document.getElementById('vw-interval').value = c.poll_interval_minutes;
+  document.getElementById('vw-missed').checked = c.detect_missed_sessions;
+  document.getElementById('vw-missed-delta').value = c.missed_session_min_soc_delta;
+  document.getElementById('vw-backdate').checked = c.backdate_session_start;
+  document.getElementById('vw-backdate-gap').value = c.backdate_max_gap_minutes;
+  document.getElementById('vw-log').checked = c.log_enabled;
+  document.getElementById('vw-log-raw').checked = c.log_raw_payload;
+  document.getElementById('vwda-test-result').style.display = 'none';
+  renderVwdaStatus(c);
+  await loadVwdaLog();
+}
+
+async function vwSaveConfig(enabled) {
+  const payload = {
+    enabled: enabled ?? document.getElementById('vw-enabled').checked,
+    brand: document.getElementById('vw-brand').value,
+    country: document.getElementById('vw-country').value || 'de',
+    language: document.getElementById('vw-language').value || 'de',
+    email: document.getElementById('vw-email').value || null,
+    password: document.getElementById('vw-password').value || null,
+    vin: document.getElementById('vw-vin').value || null,
+    poll_interval_minutes: parseInt(document.getElementById('vw-interval').value || 15),
+    detect_missed_sessions: document.getElementById('vw-missed').checked,
+    missed_session_min_soc_delta: parseInt(document.getElementById('vw-missed-delta').value || 5),
+    backdate_session_start: document.getElementById('vw-backdate').checked,
+    backdate_max_gap_minutes: parseInt(document.getElementById('vw-backdate-gap').value || 0),
+    log_enabled: document.getElementById('vw-log').checked,
+    log_raw_payload: document.getElementById('vw-log-raw').checked,
+  };
+  const res = await fetch(`api/vw-data-act/configs/${vwVehicleId()}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) { alert(T.msErrorPrefix + await res.text()); return null; }
+  const config = await res.json();
+  document.getElementById('vw-password').value = '';
+  document.getElementById('vw-password').placeholder = config.has_password ? T.vwPasswordSet : T.vwPassword;
+  return config;
+}
+
+document.getElementById('vw-vehicle').addEventListener('change', loadVwdaConfig);
+
+document.getElementById('vwda-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const config = await vwSaveConfig();
+  if (config) renderVwdaStatus(config);
+});
+
+document.getElementById('vw-enabled').addEventListener('change', async (e) => {
+  vwRenderEnabledState();
+  const config = await vwSaveConfig(e.target.checked);
+  if (!config) {
+    e.target.checked = !e.target.checked;
+    vwRenderEnabledState();
+    return;
+  }
+  renderVwdaStatus(config);
+});
+
+document.getElementById('vw-test-btn').addEventListener('click', async () => {
+  // Erst speichern, damit gerade eingetippte Zugangsdaten auf dem Server liegen.
+  if (!(await vwSaveConfig())) return;
+  const result = await msRunAction('vw-test-btn', `api/vw-data-act/configs/${vwVehicleId()}/test`, T.msTesting);
+  if (!result) return;
+  const box = document.getElementById('vwda-test-result');
+  box.style.display = 'block';
+  box.textContent = result.ok
+    ? JSON.stringify({ vehicles: result.vehicles, datasets: result.datasets, latest: result.summary }, null, 2)
+    : T.msTestFailedPrefix + result.error;
+  document.getElementById('vw-vin').value = result.config.vin || '';
+  renderVwdaStatus(result.config);
+  await loadVwdaLog();
+});
+
+document.getElementById('vw-poll-btn').addEventListener('click', async () => {
+  if (!(await vwSaveConfig())) return;
+  const config = await msRunAction('vw-poll-btn', `api/vw-data-act/configs/${vwVehicleId()}/poll`, T.msPolling);
+  if (!config) return;
+  renderVwdaStatus(config);
+  await loadVwdaLog();
+});
+
+document.getElementById('vw-delete-btn').addEventListener('click', async () => {
+  if (!confirm(T.vwConfirmDelete)) return;
+  const res = await fetch(`api/vw-data-act/configs/${vwVehicleId()}`, { method: 'DELETE' });
+  if (!res.ok) { alert(T.msErrorPrefix + await res.text()); return; }
+  await loadVwdaConfig();
+});
+
+async function loadVwdaLog() {
+  const panel = document.getElementById('vw-log-panel');
+  const rows = document.getElementById('vw-log-rows');
+  const vehicleId = vwVehicleId();
+  if (!vehicleId || !panel.open) { rows.innerHTML = ''; return; }
+  const entries = await (await fetch(`api/vw-data-act/logs?vehicle_id=${vehicleId}&limit=200`)).json();
+  if (!entries.length) {
+    rows.innerHTML = `<tr><td colspan="7" style="color:var(--muted)">${T.msLogNoEntries}</td></tr>`;
+    return;
+  }
+  const levelColor = { error: 'var(--danger)', warning: 'var(--warn)' };
+  rows.innerHTML = entries.map(e => `
+    <tr>
+      <td style="white-space:nowrap">${msFmt(e.created_at)}</td>
+      <td><code>${e.event}</code></td>
+      <td>${e.charging_state ?? ''}</td>
+      <td>${e.soc_percent ?? ''}</td>
+      <td>${e.charge_power_kw != null ? msFmtNum(e.charge_power_kw) : ''}</td>
+      <td style="color:${levelColor[e.level] || 'inherit'}">${e.message}</td>
+      <td>${e.has_payload
+        ? `<a href="api/vw-data-act/logs/${e.id}/payload" target="_blank" rel="noopener">${T.msLogRawLink}</a>`
+        : ''}</td>
+    </tr>`).join('');
+}
+
+document.getElementById('vw-log-refresh').addEventListener('click', loadVwdaLog);
+document.getElementById('vw-log-panel').addEventListener('toggle', () => {
+  if (document.getElementById('vw-log-panel').open) loadVwdaLog();
+});
+document.getElementById('vw-log-clear').addEventListener('click', async () => {
+  if (!confirm(T.msLogConfirmClear)) return;
+  const res = await fetch(`api/vw-data-act/logs?vehicle_id=${vwVehicleId()}`, { method: 'DELETE' });
+  if (!res.ok) { alert(T.msErrorPrefix + await res.text()); return; }
+  await loadVwdaLog();
+});
+
 (async () => {
   await loadVehicles();
   msRenderEnabledState();
   bcFillVehicles();
   bcRenderEnabledState();
+  vwFillVehicles();
+  vwRenderEnabledState();
+  await vwFillBrands();
   await loadMyskodaConfig();
   await loadCardataConfig();
+  await loadVwdaConfig();
 })();
 </script>
 {% endblock %}

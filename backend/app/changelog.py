@@ -5,14 +5,26 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
-        "version": "0.38.0",
-        "date": "2026-10-12",
+        "version": "0.40.0",
+        "date": "2026-10-14",
         "title": "Abgleich mit der MySkoda-App",
         "changes": [
             "Neuer Bereich „MySkoda-App“ auf der Import-Seite: den Ladeverlauf aus der MySkoda-App als CSV hochladen, Lademonitor gleicht ihn mit deinen Ladevorgängen ab. Die Vorschau zeigt jede vorgeschlagene Änderung mit Häkchen, übernommen wird nur, was angehakt ist.",
             "Korrigiert werden Start- und End-SoC (bei mehr als 2 Punkten Abweichung oder wenn er fehlt) und die Zeiten: Importe ohne Uhrzeit bekommen die echte, automatisch erfasste Vorgänge werden korrigiert, wenn sie mehr als 30 Minuten danebenliegen. Fehlende Lade-Art und kWh werden ergänzt, vorhandene kWh, Preis, Ort und km-Stand bleiben unverändert. Jede Änderung steht danach in der Notiz.",
             "Spritmonitor-Einträge, die mehrere Ladungen zusammenfassen, werden erkannt und mit allen zugehörigen Ladungen abgeglichen.",
             "Ladungen, zu denen es gar keinen Vorgang gibt, werden neu angelegt (zum Prüfen markiert, ohne Ort und km-Stand). Ein zweiter Import derselben Datei legt nichts doppelt an. Was sich nicht eindeutig zuordnen lässt, bleibt unverändert und steht als Hinweis unter der Vorschau.",
+        ],
+    },
+    {
+        "version": "0.39.0",
+        "date": "2026-10-14",
+        "title": "VW-Konzern: Ladevorgänge aus dem EU-Data-Act-Portal",
+        "changes": [
+            "Neue automatische Quelle für Volkswagen, VW Nutzfahrzeuge, Audi, Škoda, SEAT, Cupra und Bentley: unter Einstellungen → API & Debug liest der Server das Datenportal des VW-Konzerns, in dem jeder Halter nach EU Data Act seine Fahrzeugdaten abrufen kann. Daraus erkennt er Einstecken, Laden und Ausstecken wie bei MyŠkoda und legt die Ladevorgänge an (zum Prüfen markiert).",
+            "Die geladene Energie kommt dabei gemessen aus dem Fahrzeug (ohne Ladeverluste) statt geschätzt aus dem Ladestand. Dazu Ladestand von/bis, AC/DC, km-Stand und Außentemperatur. Eine Position liefert das Portal nicht, Ladeort und Anbieter trägst du beim Prüfen nach.",
+            "Einrichten: im Portal einmal eine fortlaufende Datenanfrage „All Data“ anlegen, dann hier Marke, E-Mail-Adresse und Passwort des Herstellerkontos eintragen. Passwort und FIN werden verschlüsselt gespeichert (mit FIELD_ENCRYPTION_KEY), nie angezeigt und nicht ins Backup übernommen.",
+            "Mail, wenn die Anmeldung scheitert (z.B. neue Nutzungsbedingungen bei VW) oder die Datenanfrage nach rund zwölf Monaten abgelaufen ist.",
+            "Für ein Fahrzeug lässt sich die Quelle nicht einschalten, solange dort schon MyŠkoda oder BMW CarData aktiv ist – sonst entstünde jeder Ladevorgang doppelt.",
         ],
     },
     {

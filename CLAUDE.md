@@ -63,12 +63,16 @@ backend/app/
                           ReimbursementRate (siehe Abschnitt "Erstattungsbericht Dienstwagen")
                           User.combustion_* (Vergleichsfahrzeug, siehe Abschnitt
                           "Jahres- und Monatsrueckblick")
+                          ChargeDetectionStateMixin (Zustand der Ladeerkennung,
+                          von MySkodaConfig und VwDataActConfig geteilt)
+                          VwDataActConfig/VwDataActLogEntry (siehe Abschnitt
+                          "VW-Datenportal nach EU Data Act")
   schemas.py          - Pydantic Request/Response-Schemas
   routers/
     vehicles.py, providers.py, locations.py, sessions.py, stats.py, importer.py,
     geocoding.py, backup.py, auth.py, webdav_backup.py, myskoda.py, email.py,
     sync.py, tires.py, provider_fees.py, vehicle_costs.py, reminders.py, reimbursement.py,
-    combustion_vehicle.py
+    combustion_vehicle.py, bmw_cardata.py, vw_data_act.py
   auth.py            - Passwort-Hashing, Token-Handling, Auth-Dependencies
   sync.py            - record_deletion(): Grabstein fuer eine geloeschte Zeile
   tires.py           - Reifensaetze, temperaturbereinigter Vergleich
@@ -80,10 +84,15 @@ backend/app/
   range_estimate.py  - Reale Reichweite je Temperatur (Verbrauch ab Akku)
   battery.py         - Akku-Index und Ladeverluste (siehe Abschnitt "Akku und Ladeverluste")
   myskoda.py         - Client fuer die offizielle MyŠkoda Public API (sync httpx)
-  myskoda_poller.py  - Zustandsmaschine der automatischen Ladeerkennung + Debug-Log
+  charge_detection.py - Zustandsmaschine der Ladeerkennung (Einstecken/Ausstecken,
+                          Rueckdatierung, Nacherkennung, gemessene Energie) fuer
+                          MyŠkoda und VW-Datenportal
+  myskoda_poller.py  - MyŠkoda-Abruf, Kontingent, Debug-Log (nutzt charge_detection.py)
   myskoda_import.py  - Abgleich mit dem CSV-Export der MySkoda-App (siehe Abschnitt "MySkoda-Abgleich")
   bmw_cardata.py     - Client fuer BMW CarData (Device Code Flow, Ladehistorie)
   bmw_cardata_poller.py - Uebernahme der BMW-Ladehistorie (siehe Abschnitt "BMW CarData")
+  vw_data_act.py     - Client fuer das VW-Datenportal (EU Data Act), Datensatz-Auswertung
+  vw_data_act_poller.py - ZIP-Abruf und Ladeerkennung ueber das VW-Datenportal
   mailer.py          - SMTP-Versand, Mail-Vorlagen, Versandprotokoll
   notifications.py   - Benachrichtigungen (ereignisgetrieben + zeitgesteuert)
   templates/          - Jinja2 Web-UI (index=Dashboard, sessions, map, tires, settings +
@@ -430,7 +439,9 @@ gefahren wurden (der 15 min alte Wert enthielt die Fahrt schon). Genau deshalb
 wird die Fahrstrecke (`odometer`) NICHT zusaetzlich abgezogen - das wuerde
 ueberkorrigieren.
 
-`_backdated_start()` in `myskoda_poller.py` setzt `soc_start` deshalb auf
+`_backdated_start()` in `myskoda_poller.py` (seit v0.39.0 ein duenner Wrapper
+um `charge_detection.backdated_start()`, das auch das VW-Datenportal nutzt)
+setzt `soc_start` deshalb auf
 `open_soc_before`, unter zwei Waechtern (ohne sie waere ein unbemerkter
 Ladevorgang zwischen den Abrufen - fahren, woanders laden, heimkommen,
 einstecken - als Zuwachs DIESES Vorgangs gezaehlt worden):
@@ -704,6 +715,17 @@ Icon/Tooltip-Logik in der SessionsList-View.
   Android-SDK), der App-Code ist also ungebaut; ausserdem ist die Umlage in den
   Apps nur gegen die Regeln aus `tests/test_fees.py` von Hand nachgebaut, nicht
   automatisch gegengeprueft.
+- **VW-Datenportal (v0.39.0) ist nicht gegen ein echtes Konto getestet.** Login
+  und Datensaetze sind nach HA_VAG-EU-Data-Act und carconnectivity nachgebaut.
+  Beim ersten echten Lauf im Debug-Protokoll pruefen: ob der Energiezaehler
+  (`battery_state_report.charge_energy`) je Vorgang oder insgesamt zaehlt
+  (beides wird verarbeitet), ob `plug_states.*` kommt oder nur der Ladezustand,
+  welches Temperaturfeld der Tavascan liefert, und wie dicht die Datensaetze
+  waehrend eines DC-Ladevorgangs kommen. Ausserdem offen: Ablaufdatum der
+  Datenanfrage aus den Metadaten lesen und 30 Tage vorher warnen (bisher kommt
+  die Mail erst, wenn sie abgelaufen ist), und die Sperre "nur eine Quelle je
+  Fahrzeug" gibt es bisher nur beim Einschalten dieser Quelle, nicht
+  umgekehrt bei MyŠkoda/BMW.
 - **Xcode-Beta-Umgebung des Nutzers:** macOS 27 Beta + Xcode 27 Beta
   (Erstbeta, Stand Aug 2026). Es gab einen `dyld_shared_cache_extract_dylibs`
   Bug beim Installieren auf echtem Gerät - gelöst durch Löschen von
@@ -1193,7 +1215,8 @@ wurden, plus eine bewusst wieder verworfene dritte:
   dieser Aenderung).
 
   **Versteckte Nebenwirkung beim VIN gefunden und mitkorrigiert:**
-  `myskoda_poller.py::_create_session()` baute die
+  `myskoda_poller.py::_create_session()` (seit v0.39.0
+  `charge_detection.create_session()`, Praefix je Quelle) baute die
   `external_session_id` als `f"myskoda-{config.vin}-{start_time}"` - waere
   die VIN trotz verschluesselter `vin`-Spalte ueber dieses zweite, fuer den
   Dublettencheck zwingend unverschluesselte Feld wieder im Klartext gelandet
@@ -1440,6 +1463,11 @@ dieses Projekt real gestolpert ist:
 - `test_bmw_cardata.py` - BMW CarData gegen einen nachgebauten BMW-Dienst:
   PKCE und Geraetecode, Auswertung der Ladehistorie, Dubletten, Fenster und
   Kontingent, Trennung pro Nutzer.
+- `test_vw_data_act.py` - VW-Datenportal gegen ein nachgebautes Portal:
+  Login-Varianten, Auswertung der Datensaetze (Enum-Index, Berichtskopien,
+  flaches Format), ZIP-Cursor, Ladevorgang mit gemessener Energie, Fehler.
+- `test_charge_detection.py` - gemeinsame Ladeerkennung mit Energiezaehler
+  (Gesamt- und Je-Vorgang-Zaehler ergeben dasselbe).
 - `test_review.py` - Jahres-/Monatsrueckblick nach dem Vertrag (km mit Anker,
   Kosten inkl. Gebuehren, Vorperiode, Ersparnis, jeder Rekord samt Schwellen
   und Gleichstand), Vergleichsfahrzeug und Jahresmail inkl. Merker.
@@ -2525,6 +2553,90 @@ kein Grabstein, nicht im Backup (wie der MyŠkoda-Key). `delete_vehicle` und
 Mappings-Antwort, ob BMW den `from`/`to`-Bereich begrenzt, und ob
 `averagePowerGridKw` fuer die AC/DC-Ableitung taugt.
 
+## VW-Datenportal nach EU Data Act (`vw_data_act.py`, `vw_data_act_poller.py`, `routers/vw_data_act.py`, ab 2026-10-14, v0.39.0)
+
+Vierte automatische Quelle, fuer alle Konzernmarken ausser Porsche (VW, VW
+Nutzfahrzeuge, Audi, Škoda, SEAT, Cupra, Bentley). Anlass: Cupra Tavascan -
+der markeneigene Cupra-Weg steckt seit 2026 hinter Geraete-Attestierung und
+ist vom Server aus nicht nutzbar. Plan und Recherche:
+`/mnt/project-files/ideen/plan-vw-eu-data-act.md`. Entscheidung des Nutzers
+14.10.2026: "so wie geplant" umsetzen, universell fuer den Konzern. Nur Server
+und Web-UI, Apps und HA unveraendert.
+
+**Uebernommen statt eingebunden:** Login und Auswertung sind aus den
+MIT-lizenzierten Projekten HA_VAG-EU-Data-Act (`api.py`) und
+carconnectivity-connector-vw-eu-data-act (`client.py`, `dataset.py`,
+`brands.py`) auf synchrones httpx portiert, mit Lizenzhinweis im
+Modul-Docstring. Eine Abhaengigkeit haette `requests` plus das
+CarConnectivity-Framework mitgebracht, und der nachgebaute Login muss bei
+Aenderungen durch VW ohnehin selbst geflickt werden.
+
+**Login:** OIDC gegen `identity.vwgroup.io` mit E-Mail und PASSWORT (je Marke
+eine `client_id`, `state = land__sprache__MARKE`), Formularfelder aus HTML und
+JS-`templateModel`. Nach VWs Bitte an Community-Clients (Oktober 2026):
+Produkt-User-Agent `lademonitor-server/<Version>`, kein Abruf der
+Portal-Startseite, hoechstens 10 Weiterleitungen nur auf Identity-/Portal-Host,
+Halt beim `/services/callbacklogin` (setzt das Cookie `access_token`), die
+optionale Marketing-Frage wird ueber ihren `callback` uebersprungen. Eine
+AGB-Zwischenseite oder andere Zustimmungsfrage wird **nie** beantwortet
+(anders als carconnectivity mit `accept_terms_on_login`) - das ist ein
+`auth_error` mit Hinweis, sich einmal im Browser anzumelden. Der angemeldete
+Client lebt im Prozess weiter (`vw_data_act_poller._clients`, je Config, ueber
+einen Fingerabdruck der Zugangsdaten verworfen), bei 401/403 genau einmal neu
+anmelden.
+
+**Ladeerkennung geteilt:** die Zustandsmaschine aus dem MyŠkoda-Poller liegt
+seitdem in `charge_detection.py` (`DetectionSource` liefert Bezeichnung,
+`external_session_id`-Praefix `vwda`, Protokollfunktion, Rueckdatierungsfenster),
+die Zustandsspalten als `models.ChargeDetectionStateMixin` - Spaltennamen in
+`myskoda_configs` unveraendert, neu nur die drei Energie-Spalten (Migration).
+
+**Ein Bericht je ZIP:** ein ZIP enthaelt mehrere Berichte ohne Reihenfolge;
+`Dataset.by_field()` nimmt je Feld den frischesten Wert (`timestampUtc`, sonst
+stabil der kleinste Schluessel), bekannte Ladeauftrags-Kopien nur als Notbehelf
+und beim SoC nie (die bedeuten "SoC bei Ladebeginn"). `captured_at` ist das
+juengste `car_captured_time`, im flachen Format das juengste `timestampUtc`.
+ZIPs werden nach `createdOn` aufsteigend verarbeitet, der Cursor
+(`last_dataset_created`/`_name`) rueckt NACH jedem ZIP vor und wird committet.
+Der erste Abruf liest nur das juengste ZIP (Ausgangszustand) - die rollierende
+Liste nachzuspielen wuerde alte Vorgaenge anlegen, die es vielleicht schon von
+Hand gibt. `_no_content_found.zip` wird nie geladen. Leere Liste: Kennung der
+Datenanfrage einmal neu holen (der Nutzer hat sie evtl. neu angelegt).
+
+**Kabel steckt?** Zuerst `plug_states.*.plug_connection_state` (bzw.
+`charging_plug1_connectionstate`), sonst aus dem Ladezustand (READY/CHARGING/
+PURPOSE_REACHED/CONSERVATION = steckt, NOT_READY/OFF/DISCHARGING = steckt
+nicht). Laesst sich beides nicht sagen, ist `charging_state` None und die
+Zustandsmaschine entscheidet nichts. Enum-Werte kommen manchmal als Index
+(`ENUM_MEMBERS`).
+
+**Gemessene Energie:** `battery_state_report.charge_energy` (flach
+`charged_energy` in 0,1 kWh). Ob er je Vorgang oder insgesamt zaehlt, ist
+nicht dokumentiert - `charge_detection._add_energy()` summiert nur Zuwaechse
+(faellt der Wert, hat er neu begonnen), Ausgangswert ist der letzte Stand VOR
+dem Einstecken. `tests/test_charge_detection.py` haelt beide Varianten fest.
+Messort `vehicle`, also ohne Ladeverluste: faellt aus der Verlustrechnung,
+zaehlt im Akku-Index in der eigenen Gruppe. Die Rueckdatierung aendert bei
+gemessener Energie nur SoC-Start und Startzeit.
+
+**Keine Position** - Geo-Matching greift nicht, Ort und Anbieter traegt man
+beim Pruefen nach. Temperatur: `outside_temperature` (dK), sonst die
+`outdoor_temperature*`-Varianten, plausibel -50..60 Grad.
+
+**Fehler:** `auth_error` -> 60 min Pause und Mail beim Uebergang; 404 auf die
+Metadaten -> `no_request` (Datenanfrage fehlt/abgelaufen, rund 12 Monate
+Laufzeit) -> 60 min und Mail; 429 -> `Retry-After` bzw. 15 min; sonst 5/15/30
+min (`error_streak`). Mails am Schalter `notify_myskoda_error`.
+
+**Sonstiges:** Einschalten wird mit 422 abgelehnt, wenn fuer das Fahrzeug
+MyŠkoda oder BMW CarData aktiv ist. E-Mail, Passwort, FIN und Rohdaten
+verschluesselt (`database.py`-Listen), Passwort nie in der Antwort
+(`has_password`), nicht im Backup, kein Sync; `delete_vehicle` und
+`_purge_owned_data()` loeschen Config und Protokoll mit. Tests:
+`tests/test_vw_data_act.py` gegen ein nachgebautes Portal (Login inkl.
+falschem Passwort, AGB, Marketing-Frage, abgelaufener Sitzung) und
+`tests/test_charge_detection.py`.
+
 ## Verbrenner-Vergleich und Homescreen-Widget (nur Apps, ab 2026-09-29)
 
 Beides ohne Beteiligung dieses Servers, wie der Tarifrechner.
@@ -2557,7 +2669,7 @@ Monatsfilter). iOS braucht dafuer ein eigenes Widget-Target samt App Group
 **Offen:** beide Apps sind hier nicht kompilierbar; das iOS-Projekt
 (`project.pbxproj`) wurde fuer das Widget-Target von Hand erweitert.
 
-## MySkoda-Abgleich (`myskoda_import.py`, ab 2026-10-12, v0.38.0)
+## MySkoda-Abgleich (`myskoda_import.py`, ab 2026-10-12, v0.40.0)
 
 Gleicht den CSV-Export der Ladestatistik aus der MySkoda-App mit den
 vorhandenen Vorgaengen ab. **Entscheidung des Nutzers (12.10.2026):** ein

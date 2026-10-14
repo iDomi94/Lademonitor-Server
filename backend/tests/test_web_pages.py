@@ -143,3 +143,16 @@ def test_vehicle_page_renders_with_only_relative_paths(client):
     assert 'href="vehicle"' in response.text
     # Kategorienamen kommen aus der Uebersetzung, nicht als roher Schluessel.
     assert "cost.category." not in response.text
+
+
+def test_api_page_has_the_vw_portal_section_with_relative_paths(client):
+    """Abschnitt VW-Datenportal auf der Unterseite API & Debug: relative
+    Aufrufe (Ingress) und alle Texte uebersetzt."""
+    register(client)
+
+    response = client.get("/api-debug")
+
+    assert response.status_code == 200
+    assert "api/vw-data-act/configs" in response.text
+    assert "'/api/vw-data-act" not in response.text
+    assert "settings.vwda." not in response.text
