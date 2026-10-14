@@ -137,6 +137,13 @@ def delete_vehicle(
     db.query(models.BmwCarDataConfig).filter(
         models.BmwCarDataConfig.vehicle_id == vehicle.id
     ).delete(synchronize_session=False)
+    # Ebenso die Anbindung ans VW-Datenportal.
+    db.query(models.VwDataActLogEntry).filter(
+        models.VwDataActLogEntry.vehicle_id == vehicle.id
+    ).delete(synchronize_session=False)
+    db.query(models.VwDataActConfig).filter(
+        models.VwDataActConfig.vehicle_id == vehicle.id
+    ).delete(synchronize_session=False)
     # Grabstein VOR dem Loeschen, im selben Commit - siehe sync.record_deletion().
     record_deletion(db, user.id, models.SyncEntityType.VEHICLE, vehicle.id)
     db.delete(vehicle)

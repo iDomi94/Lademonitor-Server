@@ -1123,6 +1123,80 @@ class BmwCarDataLogEntry(Base):
     payload: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
 
 
+class VwDataActConfig(ChargeDetectionStateMixin, Base):
+    """Konfiguration UND Zustandsspeicher der Ladeerkennung ueber das
+    Datenportal des VW-Konzerns nach EU Data Act (siehe vw_data_act.py) - eine
+    Zeile pro Fahrzeug. Gilt fuer alle Konzernmarken ausser Porsche.
+
+    Anders als BMW (Geraetecode) braucht das Portal E-Mail und PASSWORT des
+    Herstellerkontos. Beides liegt verschluesselt (wenn FIELD_ENCRYPTION_KEY
+    gesetzt ist), wird nie zurueckgegeben und landet nicht im Backup.
+    """
+    __tablename__ = "vw_data_act_configs"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    vehicle_id: Mapped[str] = mapped_column(ForeignKey("vehicles.id"), unique=True, index=True)
+
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Schluessel aus vw_data_act.BRANDS, z.B. CUPRA, SKODA. String statt Enum,
+    # damit eine weitere Marke keine Migration braucht.
+    brand: Mapped[str] = mapped_column(String, default="VOLKSWAGEN_PASSENGER_CARS")
+    # Land und Sprache des Kontos - stehen im OIDC-state und im
+    # Accept-Language-Header (siehe vw_data_act._accept_language).
+    country: Mapped[str] = mapped_column(String, default="de")
+    language: Mapped[str] = mapped_column(String, default="de")
+    email: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    password: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    vin: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+
+    # Kennung der fortlaufenden Datenanfrage im Portal - wird beim ersten Abruf
+    # geholt und erneut, wenn die ZIP-Liste leer oder unbekannt ist (der Nutzer
+    # hat die Anfrage neu angelegt).
+    identifier: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Cursor: das zuletzt verarbeitete ZIP. Verglichen wird ueber createdOn,
+    # bei Gleichstand ueber den Namen.
+    last_dataset_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    last_dataset_created: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_dataset_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    poll_interval_minutes: Mapped[int] = mapped_column(Integer, default=15)
+    last_poll_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    next_poll_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # ok | auth_error | rate_limited | no_request | error
+    last_status: Mapped[str | None] = mapped_column(String, nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Aufeinanderfolgende Fehler - bestimmt die Pause (5/15/30 min).
+    error_streak: Mapped[int] = mapped_column(Integer, default=0)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    vehicle: Mapped["Vehicle"] = relationship()
+
+
+class VwDataActLogEntry(Base):
+    """Protokoll der Abrufe aus dem VW-Datenportal, pro Fahrzeug - gleicher
+    Aufbau wie MySkodaLogEntry, `payload` haelt optional den kompletten
+    Datensatz (verschluesselt)."""
+    __tablename__ = "vw_data_act_log_entries"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    vehicle_id: Mapped[str] = mapped_column(ForeignKey("vehicles.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    level: Mapped[str] = mapped_column(String, default="info")
+    # poll | dataset | session_started | session_finished | session_discarded |
+    # session_backdated | missed_session | api_error | rate_limit | test
+    event: Mapped[str] = mapped_column(String)
+    message: Mapped[str] = mapped_column(Text)
+
+    charging_state: Mapped[str | None] = mapped_column(String, nullable=True)
+    soc_percent: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    charge_power_kw: Mapped[float | None] = mapped_column(Float, nullable=True)
+    captured_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    payload: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+
+
 class SmtpConfig(Base):
     """SMTP-Zugang der GESAMTEN Installation - genau eine Zeile, nur von
     Admins aenderbar.

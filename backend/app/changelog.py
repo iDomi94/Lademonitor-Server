@@ -5,6 +5,18 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.39.0",
+        "date": "2026-10-14",
+        "title": "VW-Konzern: Ladevorgänge aus dem EU-Data-Act-Portal",
+        "changes": [
+            "Neue automatische Quelle für Volkswagen, VW Nutzfahrzeuge, Audi, Škoda, SEAT, Cupra und Bentley: unter Einstellungen → API & Debug liest der Server das Datenportal des VW-Konzerns, in dem jeder Halter nach EU Data Act seine Fahrzeugdaten abrufen kann. Daraus erkennt er Einstecken, Laden und Ausstecken wie bei MyŠkoda und legt die Ladevorgänge an (zum Prüfen markiert).",
+            "Die geladene Energie kommt dabei gemessen aus dem Fahrzeug (ohne Ladeverluste) statt geschätzt aus dem Ladestand. Dazu Ladestand von/bis, AC/DC, km-Stand und Außentemperatur. Eine Position liefert das Portal nicht, Ladeort und Anbieter trägst du beim Prüfen nach.",
+            "Einrichten: im Portal einmal eine fortlaufende Datenanfrage „All Data“ anlegen, dann hier Marke, E-Mail-Adresse und Passwort des Herstellerkontos eintragen. Passwort und FIN werden verschlüsselt gespeichert (mit FIELD_ENCRYPTION_KEY), nie angezeigt und nicht ins Backup übernommen.",
+            "Mail, wenn die Anmeldung scheitert (z.B. neue Nutzungsbedingungen bei VW) oder die Datenanfrage nach rund zwölf Monaten abgelaufen ist.",
+            "Für ein Fahrzeug lässt sich die Quelle nicht einschalten, solange dort schon MyŠkoda oder BMW CarData aktiv ist – sonst entstünde jeder Ladevorgang doppelt.",
+        ],
+    },
+    {
         "version": "0.37.0",
         "date": "2026-10-11",
         "title": "Ladehistorie von BMW (BMW CarData)",
