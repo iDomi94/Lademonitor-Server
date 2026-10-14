@@ -30,6 +30,10 @@ Beta über TestFlight: [testflight.apple.com/join/NMbyFTEK](https://testflight.a
 - **BMW CarData**: für BMW und MINI liest der Server die Ladehistorie direkt
   bei BMW, mit gemessenen kWh, siehe
   [Ladehistorie von BMW](#ladehistorie-von-bmw-bmw-cardata)
+- **VW-Konzern (EU Data Act)**: für Volkswagen, Audi, Škoda, SEAT, Cupra,
+  Bentley und VW Nutzfahrzeuge liest der Server das Datenportal des Konzerns
+  und erkennt daraus die Ladevorgänge, mit gemessenen kWh aus dem Fahrzeug,
+  siehe [VW-Datenportal](#vw-konzern-datenportal-nach-eu-data-act)
 - Verbrauchsberechnung (kWh/100km) pro Ladevorgang über eine priorisierte
   Fallback-Kette (Vollladungs-Intervalle als Goldstandard, SoC-Korrektur,
   naive Rechnung, Schätzung) – Details in `CLAUDE.md`
@@ -270,6 +274,46 @@ Hinweise:
 - Pro Fahrzeug nur eine automatische Quelle (Home Assistant, MyŠkoda, BMW)
   aktivieren, sonst entstehen doppelte Vorgänge.
 - Client-ID und Tokens werden nicht in die Backup-ZIP exportiert.
+
+## VW-Konzern: Datenportal nach EU Data Act
+
+Für alle Marken des VW-Konzerns außer Porsche (Volkswagen, VW Nutzfahrzeuge,
+Audi, Škoda, SEAT, Cupra, Bentley) gibt es eine vierte automatische Quelle:
+das [Datenportal](https://eu-data-act.drivesomethinggreater.com), in dem jeder
+Halter nach EU Data Act seine Fahrzeugdaten abrufen kann. Das Portal stellt
+alle 15 Minuten einen Datensatz bereit; Lademonitor erkennt daraus wie bei
+MyŠkoda Einstecken, Laden und Ausstecken. Die kWh kommen dabei gemessen aus
+dem Fahrzeug (ohne Ladeverluste).
+
+1. Im Portal mit dem Konto der Marke anmelden (Cupra ID, Škoda-Konto, VW ID
+   usw.) und für das Fahrzeug eine fortlaufende Datenanfrage **All Data**
+   anlegen.
+2. In Lademonitor unter Einstellungen → API & Debug → „VW-Konzern“ Fahrzeug,
+   Marke, E-Mail-Adresse und Passwort eintragen und **Verbindung testen**
+   drücken. Die FIN wird ergänzt, wenn genau ein Fahrzeug freigegeben ist.
+3. Schalter „Automatischer Abruf“ einschalten.
+
+Hinweise:
+
+- Es gibt **keine offizielle Schnittstelle**. Der Server meldet sich wie ein
+  Browser an (nachgebaut nach den MIT-lizenzierten Projekten
+  [HA_VAG-EU-Data-Act](https://github.com/TommiG1/HA_VAG-EU-Data-Act) und
+  carconnectivity-connector-vw-eu-data-act). Ändert VW die Anmeldeseite,
+  bricht der Abruf, bis Lademonitor angepasst ist.
+- Verlangt VW die Zustimmung zu neuen Nutzungsbedingungen, einmal im Browser
+  im Portal anmelden und zustimmen. Lademonitor stimmt nie selbst zu.
+- Das Portal liefert **keine Position**. Ladeort und Anbieter trägst du beim
+  Prüfen nach.
+- Daten kommen nur, wenn das Fahrzeug wach ist; Lücken von Stunden sind
+  normal. Ein verpasster Ladevorgang wird über den Sprung im Ladestand
+  nachträglich erkannt.
+- Die Datenanfrage läuft nach rund zwölf Monaten ab. Dann kommt eine Mail,
+  und im Portal muss eine neue angelegt werden.
+- E-Mail, Passwort und FIN werden verschlüsselt gespeichert (mit
+  `FIELD_ENCRYPTION_KEY`), nie angezeigt und nicht in die Backup-ZIP
+  exportiert.
+- Pro Fahrzeug nur eine automatische Quelle. Solange MyŠkoda oder BMW CarData
+  für das Fahrzeug aktiv ist, lässt sich diese Quelle nicht einschalten.
 
 ## Backup
 
