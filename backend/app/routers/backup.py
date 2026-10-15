@@ -86,6 +86,8 @@ SESSION_FIELDS = [
     "outside_temp_source",
     # Seit v0.29.0 (Messort-Ausnahme, leer = wie der Anbieter).
     "energy_meter",
+    # Seit v0.41.0 (Netzbezug bei PV/Hausakku, leer = unbekannt).
+    "grid_energy_kwh",
 ]
 
 # Seit v0.27.0 (Grundgebuehren, siehe models.ProviderFee). Beim Import
@@ -303,6 +305,7 @@ def build_backup_zip(db: Session, user: models.User) -> bytes:
             "outside_temp_c": _c(s.outside_temp_c),
             "outside_temp_source": _c(s.outside_temp_source),
             "energy_meter": _c(s.energy_meter),
+            "grid_energy_kwh": _c(s.grid_energy_kwh),
         }
         for s in sessions
     ]
@@ -758,6 +761,7 @@ async def import_backup(
                 created_at=_parse_dt(row.get("created_at")),
                 updated_at=_parse_dt(row.get("updated_at")),
                 energy_meter=_parse_meter(row.get("energy_meter")),
+                grid_energy_kwh=_parse_float(row.get("grid_energy_kwh")),
             )
         )
         existing_session_owners[new_id] = user.id

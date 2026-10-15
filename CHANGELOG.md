@@ -6,6 +6,33 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.41.0] — 2026-10-15
+
+### Added
+- **Gemessene Kosten und Sonnenanteil bei der Heimladung** (PV-Anlage,
+  Hausakku): `POST /api/sessions/auto` nimmt optional `grid_energy_kwh`
+  (davon aus dem Netz, Rest von Sonne/Hausakku) und `price_total` (gemessene
+  Kosten, z.B. bei zeitabhängigem Tarif) an. Ein `price_total` ersetzt den
+  Preis aus dem Preis-Gedächtnis des Anbieters, `price_per_kwh` wird daraus
+  abgeleitet. Anbieter und Ladeort werden weiterhin über die Koordinaten
+  zugeordnet. Unbrauchbare Sensorwerte (`unknown`, negativ) lassen das Feld
+  weg, statt den Push abzulehnen.
+- Neue Spalte `ChargingSession.grid_energy_kwh` (leer = unbekannt), in
+  `SessionOut`, `SessionCreate`/`SessionUpdate` (Sync der Apps) und im
+  Backup (`sessions.csv`, Spalte am Ende, ältere ZIPs bleiben importierbar).
+  Ein Netzbezug über der geladenen Energie wird auf diese gekappt (nur gegen
+  echte, nicht gegen geschätzte kWh).
+- `StatsSummary.solar_kwh`: von Sonne/Hausakku geladene kWh im Zeitraum.
+- Web-UI: Sonnenanteil „☀ 78 % Sonne“ unter den Kosten in der
+  Ladevorgangsliste.
+
+### Changed
+- Das Preis-Gedächtnis des Anbieters (`last_price_ac/dc_per_kwh`) wird von
+  Vorgängen mit Sonnenanteil nicht mehr überschrieben, auch nicht beim
+  späteren Prüfen und Speichern: ihr Preis je kWh ist ein Mischwert aus
+  Netz- und Sonnenstrom und würde die nächste Ladung ohne Messung viel zu
+  billig vorschlagen.
+
 ## [0.40.0] — 2026-10-14
 
 ### Added

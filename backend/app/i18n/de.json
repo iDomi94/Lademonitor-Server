@@ -771,6 +771,8 @@
   "settings.backup.result.fees": "Grundgebühren",
   "sessions.fee_share": "+ {amount} Grundgebühr",
   "sessions.fee_share_tooltip": "Anteil an der Grundgebühr des Anbieters (nach kWh umgelegt), zusätzlich zum Säulenpreis",
+  "sessions.solar_share": "☀ {pct} % Sonne",
+  "sessions.solar_share_tooltip": "Anteil aus PV-Anlage bzw. Hausakku, von Home Assistant gemessen – der Rest kam aus dem Netz",
   "dashboard.stat.cost_fees": "davon {amount} Grundgebühren",
 
   "battery.heading": "Akku und Ladeverluste",

@@ -190,6 +190,27 @@ more than once. Sessions submitted this way are marked with
 a known charging location, they are automatically pre-filled with
 provider/price.
 
+Optional fields (all may be omitted): `charging_type` (`ac`/`dc`),
+`energy_kwh` with `energy_meter` (`charger`/`vehicle`, e.g. from the
+wallbox energy meter), `outside_temp_c` and – since v0.41.0, for home
+charging with solar panels/home battery – `grid_energy_kwh` (the part drawn
+from the grid; the rest came from solar or the home battery) and
+`price_total` (measured cost of the session, e.g. with a time-of-use
+tariff). If `price_total` is set, it replaces the price from the provider's
+price memory (price per kWh = `price_total / energy_kwh`); the provider's
+remembered price stays unchanged. A `grid_energy_kwh` above `energy_kwh` is
+clamped to `energy_kwh`. The session list then shows the solar share as
+"☀ 78 % solar" below the cost.
+
+```json
+{
+  "energy_kwh": 21.4,
+  "energy_meter": "charger",
+  "grid_energy_kwh": 4.7,
+  "price_total": 1.41
+}
+```
+
 ## Automatic charge detection via the MyŠkoda Public API
 
 A second source of automatically captured charging sessions, independent

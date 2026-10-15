@@ -200,6 +200,27 @@ feuert. Sessions über diesen Weg werden mit `source: automatic` und
 `needs_review: true` markiert und, falls die Koordinaten zu einem bekannten
 Ladeort passen, automatisch mit Anbieter/Preis vorbefüllt.
 
+Optionale Felder (alle dürfen fehlen): `charging_type` (`ac`/`dc`),
+`energy_kwh` mit `energy_meter` (`charger`/`vehicle`, z.B. aus dem
+Energiezähler der Wallbox), `outside_temp_c` und – seit v0.41.0 für die
+Heimladung mit PV-Anlage/Hausakku – `grid_energy_kwh` (davon aus dem Netz
+bezogen, der Rest kam von der Sonne bzw. aus dem Hausakku) und `price_total`
+(gemessene Kosten des Vorgangs, z.B. bei zeitabhängigem Tarif). Ist
+`price_total` gesetzt, ersetzt es den Preis aus dem Preis-Gedächtnis des
+Anbieters (Preis je kWh = `price_total / energy_kwh`); der zuletzt gemerkte
+Anbieterpreis bleibt dabei unverändert. Ein `grid_energy_kwh` über
+`energy_kwh` wird auf `energy_kwh` gekappt. Die Ladevorgangsliste zeigt den
+Sonnenanteil dann als „☀ 78 % Sonne“ unter den Kosten.
+
+```json
+{
+  "energy_kwh": 21.4,
+  "energy_meter": "charger",
+  "grid_energy_kwh": 4.7,
+  "price_total": 1.41
+}
+```
+
 ## Automatische Ladeerkennung über die MyŠkoda Public API
 
 Zweite, von Home Assistant unabhängige Quelle für automatisch erfasste

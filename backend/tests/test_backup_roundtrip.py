@@ -55,6 +55,7 @@ def _seed(client):
             "odometer_km": 12000,
             "price_total": 18.0,
             "energy_meter": "charger",
+            "grid_energy_kwh": 10.0,
         },
     )
     return vehicle, provider
@@ -87,6 +88,8 @@ def test_import_into_a_second_account_copies_the_data(client):
     # Messort des Anbieters UND die Ausnahme am Vorgang kommen mit
     assert client.get("/api/providers").json()[0]["energy_meter"] == "vehicle"
     assert copy["energy_meter"] == "charger"
+    # Netzanteil einer PV-Heimladung (v0.41.0) ebenso
+    assert copy["grid_energy_kwh"] == 10.0
     # Die Kopie gehoert dem zweiten Konto, das Original bleibt beim ersten.
     assert len(client.get("/api/vehicles").json()) == 1
 

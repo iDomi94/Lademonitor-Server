@@ -121,6 +121,8 @@ const T = {
   badgeManual: {{ t('sessions.badge.manual')|tojson }},
   feeShare: {{ t('sessions.fee_share')|tojson }},
   feeShareTooltip: {{ t('sessions.fee_share_tooltip')|tojson }},
+  solarShare: {{ t('sessions.solar_share')|tojson }},
+  solarShareTooltip: {{ t('sessions.solar_share_tooltip')|tojson }},
   badgeAutomatic: {{ t('sessions.badge.automatic')|tojson }},
   badgeImport: {{ t('sessions.badge.import')|tojson }},
   tooltipFullChargeInterval: {{ t('sessions.consumption.tooltip.full_charge_interval')|tojson }},
@@ -236,6 +238,12 @@ function sessionView(s) {
     // Anteil an Grundgebuehren des Anbieters (fees.py) - kommt ZUSAETZLICH
     // zum Saeulenpreis, der bleibt unveraendert stehen.
     feeShare: s.fee_share ? T.feeShare.replace('{amount}', s.fee_share.toFixed(2) + ' €') : null,
+    // Sonnenanteil einer Heimladung mit PV/Hausakku - nur wenn Home Assistant
+    // den Netzbezug gemessen hat (leer heisst unbekannt, nicht "alles Netz").
+    solarShare: s.grid_energy_kwh != null && s.energy_kwh
+      ? T.solarShare.replace('{pct}',
+          Math.round(Math.min(Math.max(1 - s.grid_energy_kwh / s.energy_kwh, 0), 1) * 100))
+      : null,
     odometer: s.odometer_km != null ? s.odometer_km.toLocaleString(LOCALE) : null,
   };
 }
@@ -251,7 +259,8 @@ function sessionRowHtml(s) {
     <td>${v.soc || '–'}</td>
     <td>${v.kwh ?? '–'}</td>
     <td>${v.priceTotal != null ? v.priceTotal + ' €' : '–'}${v.feeShare
-      ? `<div style="color:var(--muted); font-size:0.85em" title="${T.feeShareTooltip}">${v.feeShare}</div>` : ''}</td>
+      ? `<div style="color:var(--muted); font-size:0.85em" title="${T.feeShareTooltip}">${v.feeShare}</div>` : ''}${v.solarShare
+      ? `<div style="color:var(--muted); font-size:0.85em" title="${T.solarShareTooltip}">${v.solarShare}</div>` : ''}</td>
     <td>${v.odometer ?? '–'}</td>
     <td>${consumptionCell(s.consumption_kwh_per_100km, s.consumption_method)}</td>
     <td>${badgeFor(s.source)}</td>
@@ -296,6 +305,7 @@ function sessionCardHtml(s) {
       ${v.priceTotal != null ? `<span class="ssub">${v.priceTotal} €</span>` : ''}
       ${v.pricePerKwh != null ? `<span class="smeta">${v.pricePerKwh} €/kWh</span>` : ''}
       ${v.feeShare ? `<span class="smeta" title="${T.feeShareTooltip}">${v.feeShare}</span>` : ''}
+      ${v.solarShare ? `<span class="smeta" title="${T.solarShareTooltip}">${v.solarShare}</span>` : ''}
       <div class="sactions">
         <button type="button" title="${T.del}" aria-label="${T.del}"
                 onclick="event.stopPropagation(); deleteSession('${s.id}')">${ICON_DELETE}</button>

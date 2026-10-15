@@ -240,6 +240,17 @@ def run_light_migrations() -> None:
             text("ALTER TABLE charging_sessions ADD COLUMN IF NOT EXISTS energy_meter VARCHAR")
         )
 
+        # Netzbezug einer Heimladung mit PV/Hausakku (siehe
+        # models.ChargingSession.grid_energy_kwh, v0.41.0). Bewusst OHNE
+        # Backfill: NULL heisst "unbekannt", ein nachgetragenes "alles aus dem
+        # Netz" waere fuer Bestandsvorgaenge mit Sonnenstrom schlicht falsch.
+        conn.execute(
+            text(
+                "ALTER TABLE charging_sessions "
+                "ADD COLUMN IF NOT EXISTS grid_energy_kwh DOUBLE PRECISION"
+            )
+        )
+
         # Zuhause/Arbeit/Unterwegs (siehe models.Provider.charging_place):
         # Bestandsanbieter gelten als "unterwegs", bis der Nutzer seine
         # Wallbox umstellt.

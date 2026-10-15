@@ -604,6 +604,13 @@ class ChargingSession(Base):
     # alle seine Vorgaenge zurueck. Gesetzt ist der Wert nur, wenn er vom
     # Anbieter ABWEICHT (normalisiert in routers/sessions.py).
     energy_meter: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Davon aus dem Netz bezogen (kWh), gemessen von Home Assistant bei der
+    # Heimladung mit PV-Anlage/Hausakku. Der Rest von energy_kwh kam von der
+    # Sonne bzw. aus dem Hausakku. NULL = unbekannt (der Normalfall) - NICHT
+    # "alles aus dem Netz", deshalb rechnet niemand einen Sonnenanteil, wo
+    # der Wert fehlt. Nie groesser als energy_kwh (siehe
+    # routers/sessions.py::clamp_grid_energy).
+    grid_energy_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     odometer_km: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
