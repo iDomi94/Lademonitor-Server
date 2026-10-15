@@ -6,6 +6,17 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.40.1] — 2026-10-15
+
+### Fixed
+- **Ladeerkennung: Bericht ohne SoC löscht den letzten bekannten nicht mehr**
+  (`charge_detection.apply_snapshot`). Das VW-Datenportal liefert neben
+  vollständigen Berichten auch Teilberichte (nur Einstellungen und
+  Ladezustand). `last_soc` wurde dadurch auf `None` gesetzt; begann das Laden
+  im nächsten Bericht, fehlten Start-SoC und Rückdatierung. Fehlt der SoC beim
+  Einstecken, gilt jetzt der letzte bekannte Wert. Gefunden an echten
+  Skoda-Datensätzen.
+
 ## [0.40.0] — 2026-10-14
 
 ### Added
