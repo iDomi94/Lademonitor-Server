@@ -131,9 +131,41 @@ def apply_provider_price(session: models.ChargingSession, db: Session) -> None:
             session.price_total = round(price * session.energy_kwh, 2)
 
 
+def clamp_grid_energy(session: models.ChargingSession) -> None:
+    """Kappt den Netzbezug auf die geladene Energie. Zwei Zaehler (Wallbox und
+    Netzanschluss bzw. die Aufteilung in Home Assistant) driften gegeneinander,
+    ein Netzanteil ueber 100 % ist aber in keiner Auswertung sinnvoll.
+    Nur gegen ECHTE kWh: eine Schaetzung aus dem SoC-Delta liegt ohne
+    Ladeverluste naturgemaess unter dem, was an der Wallbox ankam - dagegen
+    zu kappen, hiesse eine Messung an einer Schaetzung zu verbiegen."""
+    if (
+        session.grid_energy_kwh is None
+        or session.energy_kwh is None
+        or session.energy_is_estimated
+    ):
+        return
+    if session.grid_energy_kwh > session.energy_kwh:
+        session.grid_energy_kwh = session.energy_kwh
+
+
 def sync_provider_last_price(session: models.ChargingSession, db: Session) -> None:
     """Merkt sich den zuletzt gezahlten Preis beim Anbieter (Preis-Gedaechtnis)."""
     if not session.provider_id or session.price_per_kwh is None:
+        return
+    # Mit gemessenem Netzanteil (Heimladung mit PV/Hausakku) ist der Preis je
+    # kWh ein Mischwert aus Netzstrom und kostenlosem Sonnenstrom - z.B.
+    # 0,08 EUR/kWh bei 75 % Sonne. Als "letzter Preis" des Anbieters wuerde er
+    # jede spaetere Ladung ohne Messung (Nacht, Winter, manuell erfasst) viel
+    # zu billig vorschlagen. Deshalb bleibt das Preis-Gedaechtnis bei solchen
+    # Vorgaengen unangetastet - auch beim spaeteren Pruefen/Speichern ueber
+    # update_session(), nicht nur beim Push selbst. Kam alles aus dem Netz,
+    # ist der Wert ein echter (ggf. ueber den Tarif gemittelter) Netzpreis und
+    # darf ins Gedaechtnis.
+    if (
+        session.grid_energy_kwh is not None
+        and session.energy_kwh is not None
+        and session.grid_energy_kwh < session.energy_kwh - 1e-6
+    ):
         return
     provider = db.get(models.Provider, session.provider_id)
     if not provider:
@@ -217,6 +249,7 @@ def create_session(
         resolve_location(session, user.id, db)
     normalize_energy_meter(session, db)
     estimate_energy_kwh(session, vehicle)
+    clamp_grid_energy(session)
     if session.price_total and session.energy_kwh and not session.price_per_kwh:
         session.price_per_kwh = round(session.price_total / session.energy_kwh, 4)
     elif session.price_per_kwh and session.energy_kwh and not session.price_total:
@@ -285,6 +318,8 @@ def update_session(
 
     vehicle = db.get(models.Vehicle, session.vehicle_id)
     estimate_energy_kwh(session, vehicle)
+    # Auch wenn nur energy_kwh nach unten korrigiert wurde.
+    clamp_grid_energy(session)
     if session.price_total and session.energy_kwh and not session.price_per_kwh:
         session.price_per_kwh = round(session.price_total / session.energy_kwh, 4)
     elif session.price_per_kwh and session.energy_kwh:
@@ -376,6 +411,7 @@ def push_auto_session(
         # Messort nur zusammen mit einer echten kWh-Angabe - eine Schaetzung
         # (estimate_energy_kwh) ist an keinem Ort gemessen.
         energy_meter=payload.energy_meter if payload.energy_kwh is not None else None,
+        grid_energy_kwh=payload.grid_energy_kwh,
         external_session_id=payload.external_session_id,
         source=models.SessionSource.AUTOMATIC,
         needs_review=True,
@@ -384,10 +420,28 @@ def push_auto_session(
     resolve_location(session, user.id, db)
 
     estimate_energy_kwh(session, vehicle)
+    clamp_grid_energy(session)
+    # Laeuft auch bei gemessenem Preis: hier wird ueber den Ladeort der
+    # Anbieter gesetzt, und der wird gebraucht (Messort, Zuhause/Arbeit,
+    # Grundgebuehren). Nur der vorgeschlagene Preis wird gleich ersetzt.
     apply_provider_price(session, db)
     # Erst NACH apply_provider_price: der Anbieter steht erst dann fest, und
     # gegen ihn wird der Messort normalisiert.
     normalize_energy_meter(session, db)
+
+    # Gemessene Kosten aus Home Assistant (PV/Hausakku, zeitabhaengiger Tarif)
+    # schlagen das Preis-Gedaechtnis des Anbieters: "letzter AC-Preis x kWh"
+    # unterstellt, dass jede kWh aus dem Netz kam und gleich viel kostete -
+    # bei Sonnenstrom ist beides falsch. Der Preis je kWh wird daraus
+    # abgeleitet (Mischpreis inkl. Sonnenanteil) und ist ohne kWh unbekannt.
+    # sync_provider_last_price() laeuft hier bewusst nicht - wie bei jedem
+    # automatischen Push, und fuer einen Mischpreis erst recht nicht (siehe
+    # dort).
+    if payload.price_total is not None:
+        session.price_total = round(payload.price_total, 2)
+        session.price_per_kwh = (
+            round(payload.price_total / session.energy_kwh, 4) if session.energy_kwh else None
+        )
 
     db.add(session)
     db.commit()

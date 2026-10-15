@@ -5,6 +5,17 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.41.0",
+        "date": "2026-10-15",
+        "title": "Heimladung mit Sonnenstrom: echte Kosten",
+        "changes": [
+            "Wer zuhause mit PV-Anlage oder Hausakku lädt, bekommt jetzt die tatsächlichen Kosten: Home Assistant kann beim automatischen Ladevorgang mitschicken, wie viel davon aus dem Netz kam und was die Ladung wirklich gekostet hat (auch bei zeitabhängigem Tarif). Dieser Betrag ersetzt dann den geschätzten Preis „letzter Preis des Anbieters × kWh“.",
+            "In der Ladevorgangsliste steht der Sonnenanteil unter den Kosten, z.B. „☀ 78 % Sonne“.",
+            "Der gemerkte Preis deines Heim-Anbieters bleibt dabei unverändert – ein Mischpreis mit Sonnenstrom würde die nächste Ladung ohne Messung sonst viel zu billig vorschlagen.",
+            "Der Netzanteil wird im Backup mitgesichert und steht den Apps über die Synchronisierung zur Verfügung.",
+        ],
+    },
+    {
         "version": "0.40.1",
         "date": "2026-10-15",
         "title": "VW-Datenportal: Berichte ohne Ladestand",

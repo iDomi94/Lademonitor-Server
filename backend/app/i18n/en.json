@@ -771,6 +771,8 @@
   "settings.backup.result.fees": "Base fees",
   "sessions.fee_share": "+ {amount} base fee",
   "sessions.fee_share_tooltip": "Share of the provider's base fee (split by kWh), on top of the charger price",
+  "sessions.solar_share": "☀ {pct} % solar",
+  "sessions.solar_share_tooltip": "Share from solar panels or home battery, measured by Home Assistant – the rest came from the grid",
   "dashboard.stat.cost_fees": "incl. {amount} base fees",
 
   "battery.heading": "Battery and charging losses",

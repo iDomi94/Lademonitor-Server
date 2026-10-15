@@ -773,6 +773,11 @@ class SessionBase(BaseModel):
     # Angabe, die dem Anbieter entspricht, als leer (routers/sessions.py), damit
     # eine spaetere Aenderung am Anbieter auf den Vorgang durchschlaegt.
     energy_meter: EnergyMeter | None = None
+    # Davon aus dem Netz bezogene kWh (Heimladung mit PV/Hausakku, gemessen
+    # von Home Assistant), der Rest von energy_kwh kam von der Sonne bzw. aus
+    # dem Hausakku. Leer = unbekannt, nicht "alles aus dem Netz". Der Server
+    # kappt den Wert auf energy_kwh (routers/sessions.py::clamp_grid_energy).
+    grid_energy_kwh: float | None = Field(default=None, ge=0)
     odometer_km: int | None = None
     # Aussentemperatur in Grad Celsius beim Ladebeginn. Grenzen bewusst weit
     # (-60..60): sie sollen einen vertauschten Wert oder eine Fahrenheit-Angabe
@@ -810,6 +815,7 @@ class SessionUpdate(BaseModel):
     energy_kwh: float | None = None
     energy_is_estimated: bool | None = None
     energy_meter: EnergyMeter | None = None
+    grid_energy_kwh: float | None = Field(default=None, ge=0)
     odometer_km: int | None = None
     outside_temp_c: float | None = Field(default=None, ge=-60, le=60)
     outside_temp_source: TemperatureSource | None = None
@@ -869,6 +875,33 @@ class AutoSessionPush(BaseModel):
     # Auto abgelesen) diese echte Ladesaeulenmessung faelschlich aus der
     # Verlustrechnung werfen. Ohne energy_kwh bedeutungslos und ignoriert.
     energy_meter: EnergyMeter | None = None
+    # Heimladung mit PV-Anlage/Hausakku (v0.41.0): Home Assistant misst, wie
+    # viel von energy_kwh aus dem Netz kam (Rest: Sonne/Hausakku), und was der
+    # Vorgang tatsaechlich gekostet hat - auch bei zeitabhaengigem Tarif.
+    # price_total hat Vorrang vor dem Preis-Gedaechtnis des Anbieters
+    # (routers/sessions.py::push_auto_session). Beide optional; ein
+    # unbrauchbarer Sensorwert verwirft den Push nicht (siehe unten).
+    grid_energy_kwh: float | None = Field(default=None, ge=0)
+    price_total: float | None = Field(default=None, ge=0)
+
+    @field_validator("grid_energy_kwh", "price_total", mode="before")
+    @classmethod
+    def _tolerate_unknown_measurement(cls, value: object) -> object:
+        """Wie bei der Temperatur: 'unknown'/'unavailable'/leer aus einem
+        HA-Sensor und ein negativer Wert (Zaehlerreset mitten im Vorgang)
+        lassen das Feld weg, statt den ganzen Push per 422 zu verwerfen. Dann
+        gilt das Bisherige: Preis vom Anbieter, Netzanteil unbekannt."""
+        if isinstance(value, str):
+            value = value.strip()
+            if not value:
+                return None
+            try:
+                value = float(value)
+            except ValueError:
+                return None
+        if isinstance(value, (int, float)) and not isinstance(value, bool) and value < 0:
+            return None
+        return value
 
     @field_validator("energy_meter", mode="before")
     @classmethod
@@ -1001,6 +1034,9 @@ class StatsSummary(BaseModel):
     dc_share_pct: float | None
     ac_kwh: float = 0
     dc_kwh: float = 0
+    # Von der Sonne bzw. aus dem Hausakku geladen (energy_kwh - grid_energy_kwh),
+    # nur ueber Vorgaenge mit gemessenem Netzanteil - 0, solange es keine gibt.
+    solar_kwh: float = 0
     total_km_driven: int | None = None
     by_provider: list[ProviderStat] = []
     # Zuhause/Arbeit/Unterwegs - leer, solange kein einziger Vorgang im

@@ -293,7 +293,9 @@ einloggen und das zurueckgegebene `token` statisch in den
 Endpunkt `POST /api/sessions/auto` nimmt Pushes entgegen (Schema
 `schemas.AutoSessionPush`: vehicle_external_id, external_session_id
 [Duplikatschutz], start_time, end_time, charging_type, soc_start, soc_end,
-odometer_km, latitude, longitude, energy_kwh optional).
+odometer_km, latitude, longitude, energy_kwh optional; dazu energy_meter,
+outside_temp_c und seit v0.41.0 grid_energy_kwh/price_total - siehe Abschnitt
+"Heimladung mit PV/Hausakku")).
 
 Datenquelle: MySkoda-Integration in Home Assistant liefert
 `sensor.skoda_enyaq_battery_percentage`, `sensor.skoda_enyaq_charging_state`
@@ -1471,6 +1473,9 @@ dieses Projekt real gestolpert ist:
 - `test_review.py` - Jahres-/Monatsrueckblick nach dem Vertrag (km mit Anker,
   Kosten inkl. Gebuehren, Vorperiode, Ersparnis, jeder Rekord samt Schwellen
   und Gleichstand), Vergleichsfahrzeug und Jahresmail inkl. Merker.
+- `test_home_solar.py` - gemessene Kosten/Netzanteil im HA-Push (Vorrang vor
+  dem Anbieterpreis, Preis-Gedaechtnis unangetastet, Kappung, Sensorwerte,
+  Rundlauf ueber die API, `solar_kwh`).
 - `test_myskoda_import.py` - MySkoda-Abgleich an nachgebauten echten Faellen
   (Start-SoC 20, Sammeleintrag mit gemessenen und mit geschaetzten kWh, um 2 h
   verschobener Vorgang, verpasster Ladebeginn, neue Ladung, Hinweis statt
@@ -2231,6 +2236,43 @@ Der Server speichert `energy_meter` aus dem Push nur zusammen mit echter
 Messort muss mitkommen, weil der typische Heim-Anbieter gerade auf "Fahrzeug"
 steht (Wallbox ohne Abrechnungszaehler) - ohne Angabe fiele die echte
 Wallbox-Messung genau dort aus der Verlustrechnung.
+
+### Heimladung mit PV/Hausakku: gemessene Kosten (ab 2026-10-15, v0.41.0)
+
+Wer mit PV-Anlage/Hausakku zuhause laedt, bekam bisher "letzter AC-Preis des
+Anbieters x kWh" - als kaeme jede kWh aus dem Netz zum selben Preis. Home
+Assistant misst das besser und schickt beim Push optional
+`grid_energy_kwh` (davon aus dem Netz, Rest Sonne/Hausakku) und
+`price_total` (gemessene Kosten, auch bei zeitabhaengigem Tarif). **Feldnamen
+sind Vertrag** mit Lademonitor-HA und den Apps - nicht umbenennen.
+
+- `price_total` aus dem Push gewinnt gegen `apply_provider_price()`; die
+  Funktion laeuft trotzdem, weil sie den Anbieter ueber den Ladeort setzt
+  (Messort, Zuhause/Arbeit, Grundgebuehren haengen daran). `price_per_kwh`
+  = `price_total / energy_kwh` (auch gegen geschaetzte kWh), ohne kWh NULL.
+  Nur `grid_energy_kwh` ohne Preis: Preisfindung wie bisher.
+- **Preis-Gedaechtnis bleibt unangetastet:** `sync_provider_last_price()`
+  ueberspringt Vorgaenge mit Sonnenanteil (`grid_energy_kwh < energy_kwh`) -
+  der Preis je kWh ist dort ein Mischwert (z.B. 0,08 EUR/kWh bei 75 % Sonne)
+  und wuerde jede Ladung ohne Messung viel zu billig vorschlagen. Wichtig ist
+  das vor allem in `update_session()`: der Push selbst ruft die Funktion nie
+  auf, aber das Pruefen/Speichern in Web-UI und Apps schon. 100 % Netz zaehlt
+  als echter Netzpreis und darf ins Gedaechtnis. Kommt `price_total` OHNE
+  `grid_energy_kwh`, ist ein Mischpreis nicht erkennbar - dann landet er beim
+  Speichern im Gedaechtnis (bewusst nicht weiter abgefangen).
+- `clamp_grid_energy()` kappt den Netzbezug auf `energy_kwh` (Zaehlerdrift) -
+  in Push, Anlegen und Aendern, aber nur gegen ECHTE kWh: eine SoC-Schaetzung
+  liegt ohne Ladeverluste unter dem Netzbezug und darf die Messung nicht
+  verbiegen.
+- NULL heisst "unbekannt", nicht "alles Netz": Sonnenanteil in der Liste und
+  `StatsSummary.solar_kwh` nur ueber Vorgaenge mit gemessenem Netzbezug.
+- Unbrauchbare Sensorwerte (`unknown`, leer, negativ) lassen das Feld weg,
+  statt den Push per 422 abzulehnen (wie bei Lade-Art und Temperatur).
+- Migration: `ADD COLUMN IF NOT EXISTS grid_energy_kwh`, kein Backfill.
+  Backup: Spalte hinten an `sessions.csv`. Tests: `tests/test_home_solar.py`.
+- **Offen:** die Apps muessen das Feld noch in ihr lokales Modell und den
+  Sync-Payload aufnehmen (Android: Room-Migration), und die Verlust-/Akku-
+  Auswertung nutzt den Netzbezug bisher nicht.
 
 ## Zuhause, Arbeit, unterwegs (`Provider.charging_place`, ab 2026-10-10, v0.31.0)
 

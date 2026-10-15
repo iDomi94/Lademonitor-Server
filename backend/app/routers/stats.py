@@ -88,6 +88,15 @@ def stats_summary(
     ac_share = round(ac_kwh / typed_kwh * 100, 1) if typed_kwh else None
     dc_share = round(dc_kwh / typed_kwh * 100, 1) if typed_kwh else None
 
+    # Sonnenstrom/Hausakku: nur wo Home Assistant den Netzbezug gemessen hat.
+    # Ein fehlender grid_energy_kwh heisst "unbekannt", nicht "alles Netz" -
+    # und auch nicht "alles Sonne".
+    solar_kwh = sum(
+        max(s.energy_kwh - s.grid_energy_kwh, 0)
+        for s in sessions
+        if s.energy_kwh is not None and s.grid_energy_kwh is not None
+    )
+
     # Verbrauch: kWh pro 100km ueber Kilometerstand-Differenzen zwischen aufeinanderfolgenden Sessions
     with_odo = [s for s in sessions if s.odometer_km is not None]
     consumption = None
@@ -226,6 +235,7 @@ def stats_summary(
         dc_share_pct=dc_share,
         ac_kwh=round(ac_kwh, 2),
         dc_kwh=round(dc_kwh, 2),
+        solar_kwh=round(solar_kwh, 2),
         total_km_driven=total_km_driven,
         by_provider=by_provider,
         by_place=by_place,
