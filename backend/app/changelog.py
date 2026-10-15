@@ -5,6 +5,15 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.41.1",
+        "date": "2026-10-15",
+        "title": "VW-Datenportal: kurze Ladevorgänge",
+        "changes": [
+            "Ein Datensatz des VW-Datenportals enthält je Wert nur den letzten Stand, keinen Verlauf. Ein kurzer Ladevorgang, der komplett zwischen zwei Datensätzen liegt, war deshalb nie als „Kabel steckt“ zu sehen und wurde erst ab 5 Prozentpunkten Ladestand-Zuwachs nachträglich erkannt – eine 10-minütige AC-Ladung fiel durch.",
+            "Meldet das Fahrzeug seinen Energiezähler, reicht jetzt ein Zuwachs ab 1 kWh: der Vorgang wird nachträglich angelegt, mit den gemessenen kWh. Start und Ende sind dabei nur die beiden Datensätze, der Vorgang steht wie immer zur Prüfung an.",
+        ],
+    },
+    {
         "version": "0.41.0",
         "date": "2026-10-15",
         "title": "Heimladung mit Sonnenstrom: echte Kosten",

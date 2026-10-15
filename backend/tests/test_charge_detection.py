@@ -117,3 +117,91 @@ def test_report_without_soc_keeps_the_last_known_value(db_session, config):
     assert sessions[0].soc_start == 52
     assert sessions[0].soc_end == 70
     assert config.last_soc == 70
+
+
+# --- Nacherkennung ueber den Energiezaehler ---------------------------------
+# Ein ZIP des VW-Portals enthaelt je Datenfeld nur den letzten Wert, keinen
+# Verlauf. Ein kurzer Vorgang, der komplett zwischen zwei Datensaetzen liegt,
+# zeigt sich also nie als "Kabel steckt" - nur am SoC und am Zaehler.
+
+
+def test_short_charge_between_reports_is_found_by_the_counter(db_session, config):
+    # 10 min AC: +2 kWh, +3 % - unter der SoC-Schwelle von 5 Punkten.
+    sessions = run(db_session, config, [
+        report(0, plugged=False, soc=40, energy=1200.0),
+        report(15, plugged=False, soc=43, energy=1202.0),
+    ])
+    assert len(sessions) == 1
+    s = sessions[0]
+    assert s.energy_kwh == pytest.approx(2.0)
+    assert s.energy_is_estimated is False
+    assert s.energy_meter == "vehicle"
+    assert (s.soc_start, s.soc_end) == (40, 43)
+    assert s.start_time == T0 and s.end_time == T0 + timedelta(minutes=15)
+    assert "Energiezähler" in s.notes
+    assert config.last_energy_raw_kwh == 1202.0
+
+
+def test_counter_restarting_from_zero_is_found_too(db_session, config):
+    sessions = run(db_session, config, [
+        report(0, plugged=False, soc=40, energy=25.0),  # Stand der letzten Ladung
+        report(15, plugged=False, soc=43, energy=1.8),
+    ])
+    assert len(sessions) == 1
+    assert sessions[0].energy_kwh == pytest.approx(1.8)
+
+
+def test_counter_found_session_without_soc(db_session, config):
+    # Teilbericht ohne SoC (Skoda-Muster) - der Zaehler allein reicht.
+    sessions = run(db_session, config, [
+        report(0, plugged=False, soc=40, energy=100.0),
+        report(15, plugged=False, soc=None, energy=103.5),
+    ])
+    assert len(sessions) == 1
+    assert sessions[0].energy_kwh == pytest.approx(3.5)
+    assert sessions[0].soc_end is None
+
+
+@pytest.mark.parametrize("energies", [
+    (100.0, 100.0),  # unveraendert
+    (100.0, 100.6),  # unter 1 kWh
+    (100.0, 0.0),    # Zaehler zurueckgesetzt, nichts geladen
+])
+def test_counter_without_real_gain_creates_nothing(db_session, config, energies):
+    sessions = run(db_session, config, [
+        report(0, plugged=False, soc=40, energy=energies[0]),
+        report(15, plugged=False, soc=41, energy=energies[1]),
+    ])
+    assert sessions == []
+
+
+def test_counter_ignored_when_missed_detection_is_off(db_session, config):
+    config.detect_missed_sessions = False
+    sessions = run(db_session, config, [
+        report(0, plugged=False, soc=40, energy=1200.0),
+        report(15, plugged=False, soc=43, energy=1202.0),
+    ])
+    assert sessions == []
+
+
+def test_counter_does_not_double_count_a_regular_session(db_session, config):
+    # Nach einem normal erkannten Vorgang steht der Ausgangswert auf dem
+    # Endstand - der naechste Bericht ohne Kabel legt nichts zusaetzlich an.
+    sessions = run(db_session, config, [
+        report(0, plugged=False, soc=40, energy=1200.0),
+        report(15, plugged=True, soc=42, energy=1201.5, power=11),
+        report(30, plugged=False, soc=50, energy=1205.0),
+        report(45, plugged=False, soc=49, energy=1205.0),
+    ])
+    assert len(sessions) == 1
+    assert sessions[0].energy_kwh == pytest.approx(5.0)
+
+
+def test_soc_jump_without_counter_still_works(db_session, config):
+    sessions = run(db_session, config, [
+        report(0, plugged=False, soc=40),
+        report(15, plugged=False, soc=60),
+    ])
+    assert len(sessions) == 1
+    assert sessions[0].energy_is_estimated is True
+    assert "SoC von 40 % auf 60 %" in sessions[0].notes
