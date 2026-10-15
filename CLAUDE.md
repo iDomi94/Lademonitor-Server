@@ -2670,6 +2670,19 @@ Metadaten -> `no_request` (Datenanfrage fehlt/abgelaufen, rund 12 Monate
 Laufzeit) -> 60 min und Mail; 429 -> `Retry-After` bzw. 15 min; sonst 5/15/30
 min (`error_streak`). Mails am Schalter `notify_myskoda_error`.
 
+**Erste echte Datensaetze (Skoda Enyaq, 15.10.2026):** Format wie erwartet
+(`{"vin", "user_id", "Data": [{key, dataFieldName, value}]}`), aber ohne
+`timestampUtc`. Es gibt zwei Arten von Berichten: vollstaendige (rund 80
+Felder: `battery_state_report.soc`, `battery_level_HV.value`, `mileage.value`,
+`battery_state_report.charge_power`, Ladezustand, `car_captured_time`) und
+Teilberichte (rund 20 Felder, nur Einstellungen und Ladezustand, KEIN SoC).
+Deshalb laesst `apply_snapshot()` seit v0.40.1 `last_soc` stehen, wenn ein
+Bericht keinen SoC hat. Nicht gesehen: `plug_states.*`, `charge_energy`,
+Aussentemperatur (`min_/max_temperature` = 15,5/17,0 sind vermutlich Klima- oder Akkuwerte,
+nicht aussen). Viele Felder kommen OHNE Praefix (`value`, `state`, `timestamp`,
+`car_captured_time` mehrfach) - mehrdeutig, deshalb nicht ausgewertet. Ein
+Ladevorgang war in den Daten noch nicht dabei.
+
 **Sonstiges:** Einschalten wird mit 422 abgelehnt, wenn fuer das Fahrzeug
 MyŠkoda oder BMW CarData aktiv ist. E-Mail, Passwort, FIN und Rohdaten
 verschluesselt (`database.py`-Listen), Passwort nie in der Antwort

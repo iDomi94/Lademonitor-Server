@@ -16,6 +16,14 @@ CHANGELOG = [
         ],
     },
     {
+        "version": "0.40.1",
+        "date": "2026-10-15",
+        "title": "VW-Datenportal: Berichte ohne Ladestand",
+        "changes": [
+            "Das Datenportal liefert neben vollständigen Berichten auch welche nur mit Einstellungen und Ladezustand, ohne Ladestand. So ein Bericht hat bisher den zuletzt bekannten Ladestand verworfen; begann das Laden genau dann, fehlte der Start-SoC und der Vorgang wurde im schlimmsten Fall gar nicht angelegt. Jetzt bleibt der letzte bekannte Ladestand stehen.",
+        ],
+    },
+    {
         "version": "0.40.0",
         "date": "2026-10-14",
         "title": "Abgleich mit der MySkoda-App",
