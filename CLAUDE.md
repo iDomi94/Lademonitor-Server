@@ -1469,7 +1469,8 @@ dieses Projekt real gestolpert ist:
   Login-Varianten, Auswertung der Datensaetze (Enum-Index, Berichtskopien,
   flaches Format), ZIP-Cursor, Ladevorgang mit gemessener Energie, Fehler.
 - `test_charge_detection.py` - gemeinsame Ladeerkennung mit Energiezaehler
-  (Gesamt- und Je-Vorgang-Zaehler ergeben dasselbe).
+  (Gesamt- und Je-Vorgang-Zaehler ergeben dasselbe) und Nacherkennung eines
+  kurzen Vorgangs ueber den Zaehler.
 - `test_review.py` - Jahres-/Monatsrueckblick nach dem Vertrag (km mit Anker,
   Kosten inkl. Gebuehren, Vorperiode, Ersparnis, jeder Rekord samt Schwellen
   und Gleichstand), Vergleichsfahrzeug und Jahresmail inkl. Merker.
@@ -2682,6 +2683,21 @@ Aussentemperatur (`min_/max_temperature` = 15,5/17,0 sind vermutlich Klima- oder
 nicht aussen). Viele Felder kommen OHNE Praefix (`value`, `state`, `timestamp`,
 `car_captured_time` mehrfach) - mehrdeutig, deshalb nicht ausgewertet. Ein
 Ladevorgang war in den Daten noch nicht dabei.
+
+**Kein Verlauf im ZIP (v0.41.1):** in den echten Daten kommt jeder Schluessel
+(Datenelement-UUID aus dem Datenkatalog) genau einmal vor, die Reihenfolge ist
+gemischt, und mehrere `car_captured_time` gehoeren zu verschiedenen
+Berichtsarten (`message_id` RPT_2, RPT_3 ...). Ein ZIP ist also der letzte
+Stand je Datenfeld, keine Zeitreihe - einzelne Berichte darin lassen sich
+nicht sauber trennen und nacheinander auswerten (HA_VAG versucht es ueber die
+Position im Array, Issue #45, und raeumt selbst ein, dass das nicht
+zuverlaessig ist). Ein kurzer Vorgang komplett zwischen zwei Datensaetzen
+bleibt deshalb unsichtbar fuer die Zustandsmaschine. Dagegen greift die
+Nacherkennung seitdem auch ueber den Energiezaehler (Zuwachs ab
+`MISSED_SESSION_MIN_ENERGY_KWH` = 1 kWh, gleiche Regel wie `_add_energy`),
+nicht nur ueber den SoC-Sprung ab 5 Punkten - ein 10-min-AC-Vorgang (rund 2
+kWh, 3 %) fiel vorher durch. Ohne Energiezaehler (der Skoda liefert bisher
+keinen) bleibt es beim SoC-Sprung.
 
 **Sonstiges:** Einschalten wird mit 422 abgelehnt, wenn fuer das Fahrzeug
 MyŠkoda oder BMW CarData aktiv ist. E-Mail, Passwort, FIN und Rohdaten

@@ -6,6 +6,19 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.41.1] — 2026-10-15
+
+### Fixed
+- **VW-Datenportal: kurze Ladevorgänge zwischen zwei Datensätzen.** Ein ZIP
+  enthält je Datenfeld nur den letzten Wert (in den echten Skoda-Daten kommt
+  jeder Schlüssel genau einmal vor), keinen Verlauf. Ein Vorgang, der
+  komplett zwischen zwei Datensätzen liegt, wurde deshalb nur über einen
+  SoC-Sprung ab 5 Punkten nacherkannt. Die Nacherkennung
+  (`charge_detection.detect_missed_session`) greift jetzt zusätzlich, wenn
+  der Energiezähler des Fahrzeugs um mindestens 1 kWh gestiegen ist
+  (`MISSED_SESSION_MIN_ENERGY_KWH`); die gemessenen kWh werden übernommen.
+  Ein Zähler, der je Vorgang bei null beginnt, wird wie bisher erkannt.
+
 ## [0.41.0] — 2026-10-15
 
 ### Added

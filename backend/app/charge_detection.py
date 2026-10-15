@@ -30,8 +30,11 @@ Ladung unterbrochen), gehoeren mit zum Vorgang.
   hat dann schon bis zu ein Abfrageintervall lang gelaufen. Bei AC-Laden ist
   das vernachlaessigbar (11 kW * 5 min ~ 1 kWh), bei DC-Schnellladen nicht
   (150 kW * 5 min ~ 12 kWh). Dagegen steht die Rueckdatierung, siehe unten.
-- **Ein schlafendes Fahrzeug kann einen ganzen Vorgang verstecken.** Dagegen
-  steht die Nacherkennung ueber einen SoC-Sprung (`detect_missed_sessions`).
+- **Ein schlafendes Fahrzeug kann einen ganzen Vorgang verstecken**, beim
+  VW-Portal auch ein kurzer Vorgang, der komplett zwischen zwei Datensaetzen
+  liegt (ein ZIP enthaelt je Datenfeld nur den letzten Wert, keinen Verlauf).
+  Dagegen steht die Nacherkennung (`detect_missed_sessions`) ueber einen
+  SoC-Sprung oder, wo vorhanden, den Energiezaehler.
 - **Alle Zeitstempel stammen wenn moeglich aus dem Fahrzeug** (MyŠkoda:
   `carCapturedTimestamp`, VW-Portal: `car_captured_time`), nicht aus der
   lokalen Uhr - die Antwort kann ein aelterer Cloud-Stand sein.
@@ -128,6 +131,11 @@ logger = logging.getLogger(__name__)
 #: Gemessene Energie ausserhalb dieses Bereichs gilt als Messfehler (Zaehler-
 #: sprung, falsche Einheit) - dann bleibt es bei der Schaetzung aus dem SoC.
 PLAUSIBLE_ENERGY_KWH = (0.1, 250.0)
+
+#: Ab diesem Zuwachs des Energiezaehlers legt die Nacherkennung einen Vorgang
+#: an, auch wenn der SoC-Sprung unter der Schwelle bleibt. 1 kWh sind rund
+#: 5 min AC mit 11 kW - darunter eher Rauschen als ein Ladevorgang.
+MISSED_SESSION_MIN_ENERGY_KWH = 1.0
 
 #: Signatur der Protokollfunktion einer Quelle.
 LogFn = Callable[..., None]
@@ -620,38 +628,84 @@ def detection_note(
     return "\n".join(lines)
 
 
+def missed_energy(config: Any, snapshot: Any) -> float | None:
+    """Zuwachs des Energiezaehlers seit dem letzten Bericht, wenn kein Vorgang
+    offen ist - dieselbe Regel wie `_add_energy` (faellt der Wert, hat der
+    Zaehler neu begonnen und zaehlt ab null). None ohne Zaehler oder
+    Ausgangswert."""
+    raw = _snapshot_energy(snapshot)
+    previous = config.last_energy_raw_kwh
+    if raw is None or previous is None:
+        return None
+    gained = raw - previous if raw >= previous else raw
+    return round(gained, 2)
+
+
 def detect_missed_session(
     db: Session, config: Any, snapshot: Any, source: DetectionSource
 ) -> bool:
-    """Nacherkennung ueber einen SoC-Sprung.
+    """Nacherkennung ueber einen SoC-Sprung oder den Energiezaehler.
 
     Greift nur, wenn zwischen zwei Berichten gar kein "verbunden"-Zustand
     gesehen wurde - typischerweise weil das Fahrzeug geschlafen hat und die
-    API zwischenzeitlich einen alten Stand ausgeliefert hat. Ergebnis ist
+    API zwischenzeitlich einen alten Stand ausgeliefert hat, oder (VW-Portal)
+    weil der ganze Vorgang zwischen zwei Datensaetzen lag. Ergebnis ist
     zwangslaeufig grob (Start- und Endzeit sind nur die beiden Berichte), aber
     besser als ein fehlender Vorgang; `needs_review` faengt das ab.
+
+    Zwei Ausloeser:
+
+    - **SoC-Sprung** ab `missed_session_min_soc_delta` Prozentpunkten. Die
+      Schwelle muss Rekuperation auf langer Gefaellestrecke ueberstehen, ein
+      kurzer AC-Vorgang (10 min bei 11 kW, rund 3 %) bleibt darunter.
+    - **Energiezaehler** des Fahrzeugs ab `MISSED_SESSION_MIN_ENERGY_KWH`.
+      Rekuperation zaehlt er nicht mit, er taugt deshalb genau fuer die
+      kurzen Vorgaenge, die der SoC-Sprung verpasst. Der Zuwachs wird dann
+      auch als gemessene Energie uebernommen.
     """
     if not config.detect_missed_sessions:
         return False
-    if config.last_soc is None or snapshot.soc_percent is None:
-        return False
     if config.last_captured_at is None:
         return False
-
-    delta = snapshot.soc_percent - config.last_soc
-    if delta < max(1, config.missed_session_min_soc_delta):
-        return False
-
     start_time = config.last_captured_at
     end_time = snapshot.captured_at
     if end_time <= start_time:
         return False
 
+    delta = None
+    if config.last_soc is not None and snapshot.soc_percent is not None:
+        delta = snapshot.soc_percent - config.last_soc
+    by_soc = delta is not None and delta >= max(1, config.missed_session_min_soc_delta)
+
+    energy = missed_energy(config, snapshot)
+    low, high = PLAUSIBLE_ENERGY_KWH
+    if energy is not None and not (low <= energy <= high):
+        energy = None
+    by_energy = energy is not None and energy >= MISSED_SESSION_MIN_ENERGY_KWH
+
+    if not by_soc and not by_energy:
+        return False
+
+    soc_text = (
+        f"der SoC von {config.last_soc} % auf {snapshot.soc_percent} % gestiegen"
+        if delta is not None
+        else "der SoC unbekannt geblieben"
+    )
+    if by_energy:
+        reason = (
+            f"Zwischen zwei Berichten hat der Energiezähler des Fahrzeugs "
+            f"{fmt_number(energy, 2)} kWh gezählt und {soc_text}, ohne dass ein "
+            "Ladezustand beobachtet wurde (der Vorgang lag vermutlich komplett "
+            "zwischen zwei Berichten)."
+        )
+    else:
+        reason = (
+            f"Zwischen zwei Abfragen ist {soc_text}, ohne dass ein Ladezustand "
+            "beobachtet wurde (Fahrzeug hat vermutlich geschlafen)."
+        )
     notes = (
         f"Automatisch nacherkannt über {source.label}.\n"
-        f"Zwischen zwei Abfragen ist der SoC von {config.last_soc} % auf "
-        f"{snapshot.soc_percent} % gestiegen, ohne dass ein Ladezustand beobachtet wurde "
-        "(Fahrzeug hat vermutlich geschlafen).\n"
+        f"{reason}\n"
         "Start- und Endzeit sind deshalb nur die Zeitpunkte der beiden Abfragen, "
         "die Lade-Art ist unbekannt."
     )
@@ -671,12 +725,18 @@ def detect_missed_session(
         latitude=snapshot.coordinates[0] if snapshot.coordinates else None,
         longitude=snapshot.coordinates[1] if snapshot.coordinates else None,
         notes=notes,
+        energy_kwh=energy if by_energy else None,
+    )
+    trigger = (
+        f"Energiezaehler +{fmt_number(energy, 2)} kWh"
+        if by_energy
+        else f"SoC-Sprung {config.last_soc}% -> {snapshot.soc_percent}%"
     )
     source.log(
         db,
         config,
         "missed_session",
-        f"SoC-Sprung {config.last_soc}% -> {snapshot.soc_percent}% ohne beobachteten "
+        f"{trigger} ohne beobachteten "
         + (
             "Ladezustand - Ladevorgang nachtraeglich angelegt."
             if session is not None
