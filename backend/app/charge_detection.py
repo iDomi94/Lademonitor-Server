@@ -387,9 +387,14 @@ def start_open_session(db: Session, config: Any, snapshot: Any, source: Detectio
         gap_seconds = max(0, int((snapshot.captured_at - config.last_captured_at).total_seconds()))
 
     config.open_start_time = snapshot.captured_at
-    config.open_soc_start = snapshot.soc_percent
+    # Das VW-Datenportal liefert manche Berichte ohne SoC (nur Einstellungen
+    # und Ladezustand). Dann ist der letzte bekannte Wert die beste Angabe -
+    # ohne Laden faellt der SoC nur, er liegt also hoechstens zu hoch, wie bei
+    # der Rueckdatierung.
+    soc_now = snapshot.soc_percent if snapshot.soc_percent is not None else config.last_soc
+    config.open_soc_start = soc_now
     config.open_soc_before = config.last_soc
-    config.open_soc_last = snapshot.soc_percent
+    config.open_soc_last = soc_now
     config.open_charging_type = snapshot.charge_type
     config.open_max_power_kw = snapshot.charge_power_kw
     config.open_odometer_km = snapshot.odometer_km
@@ -726,7 +731,10 @@ def apply_snapshot(db: Session, config: Any, snapshot: Any, source: DetectionSou
             )
 
     config.last_charging_state = state
-    config.last_soc = snapshot.soc_percent
+    # Ein Bericht ohne SoC loescht den letzten bekannten nicht - sonst fehlten
+    # beim naechsten Einstecken Start-SoC und Rueckdatierung.
+    if snapshot.soc_percent is not None:
+        config.last_soc = snapshot.soc_percent
     config.last_captured_at = snapshot.captured_at
     raw_energy = _snapshot_energy(snapshot)
     if raw_energy is not None:

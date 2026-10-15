@@ -101,3 +101,19 @@ def test_plugged_without_charging_is_discarded(db_session, config):
     ])
     assert sessions == []
     assert config.open_start_time is None
+
+
+def test_report_without_soc_keeps_the_last_known_value(db_session, config):
+    # Echtes Muster aus dem Skoda-Datenportal (15.10.2026): neben vollstaendigen
+    # Berichten kommen welche nur mit Einstellungen und Ladezustand, ohne SoC.
+    sessions = run(db_session, config, [
+        report(0, plugged=False, soc=52),
+        report(15, plugged=False, soc=None),
+        report(30, plugged=True, soc=None, power=11),
+        report(45, plugged=True, soc=70, power=11),
+        report(60, plugged=False, soc=None),
+    ])
+    assert len(sessions) == 1
+    assert sessions[0].soc_start == 52
+    assert sessions[0].soc_end == 70
+    assert config.last_soc == 70
