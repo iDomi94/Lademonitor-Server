@@ -28,6 +28,8 @@ from .bmw_cardata_poller import SCHEDULER_INTERVAL_SECONDS as CARDATA_SCHEDULER_
 from .bmw_cardata_poller import run_due_polls as run_due_cardata_polls
 from .vw_data_act_poller import SCHEDULER_INTERVAL_SECONDS as VWDA_SCHEDULER_INTERVAL_SECONDS
 from .vw_data_act_poller import run_due_polls as run_due_vwda_polls
+from .renault_poller import SCHEDULER_INTERVAL_SECONDS as RENAULT_SCHEDULER_INTERVAL_SECONDS
+from .renault_poller import run_due_polls as run_due_renault_polls
 from .notifications import SCHEDULER_INTERVAL_SECONDS as NOTIFICATION_SCHEDULER_INTERVAL_SECONDS
 from .notifications import run_due_notifications
 from .reimbursement import DEFAULT_RATE_PER_KWH as DEFAULT_REIMBURSEMENT_RATE
@@ -47,6 +49,7 @@ from .routers import (
     providers,
     reimbursement,
     reminders,
+    renault,
     sessions,
     stats,
     sync,
@@ -130,6 +133,19 @@ async def _vwda_scheduler_loop() -> None:
         await asyncio.sleep(VWDA_SCHEDULER_INTERVAL_SECONDS)
 
 
+async def _renault_scheduler_loop() -> None:
+    """Ladeerkennung ueber die Renault-API (siehe renault_poller.py).
+
+    Faellig ist ein Fahrzeug erst, wenn `next_poll_at` erreicht ist - der Takt
+    hier erzeugt keine Anfragen bei Renault."""
+    while True:
+        try:
+            await asyncio.to_thread(run_due_renault_polls)
+        except Exception:
+            logger.exception("Renault-Durchlauf fehlgeschlagen")
+        await asyncio.sleep(RENAULT_SCHEDULER_INTERVAL_SECONDS)
+
+
 async def _notification_scheduler_loop() -> None:
     """Zeitgesteuerte Benachrichtigungen (Ablaufwarnung des MyŠkoda-API-Keys,
     Sammelmeldung zu pruefender Ladevorgaenge, Monatsbericht).
@@ -170,6 +186,7 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(_myskoda_scheduler_loop()),
         asyncio.create_task(_cardata_scheduler_loop()),
         asyncio.create_task(_vwda_scheduler_loop()),
+        asyncio.create_task(_renault_scheduler_loop()),
         asyncio.create_task(_notification_scheduler_loop()),
         asyncio.create_task(_weather_scheduler_loop()),
     ]
@@ -231,6 +248,7 @@ app.include_router(webdav_backup.router, dependencies=[Depends(get_current_user)
 app.include_router(myskoda.router, dependencies=[Depends(get_current_user)])
 app.include_router(bmw_cardata.router, dependencies=[Depends(get_current_user)])
 app.include_router(vw_data_act.router, dependencies=[Depends(get_current_user)])
+app.include_router(renault.router, dependencies=[Depends(get_current_user)])
 app.include_router(weather.router, dependencies=[Depends(get_current_user)])
 app.include_router(tires.router, dependencies=[Depends(get_current_user)])
 # email.router prueft pro Endpunkt selbst auf Admin (require_admin), braucht

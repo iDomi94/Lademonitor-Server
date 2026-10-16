@@ -1204,6 +1204,83 @@ class VwDataActLogEntry(Base):
     payload: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
 
 
+class RenaultConfig(ChargeDetectionStateMixin, Base):
+    """Konfiguration UND Zustandsspeicher der Ladeerkennung ueber die
+    Fahrzeug-API der Renault-Gruppe (Renault, Dacia, Alpine; siehe renault.py)
+    - eine Zeile pro Fahrzeug.
+
+    Wie beim VW-Datenportal braucht die API E-Mail und PASSWORT des Kontos.
+    Zusaetzlich wird das Login-Token von Gigya gespeichert, damit nicht bei
+    jedem Neustart mit dem Passwort angemeldet werden muss (sonst kaeme jedes
+    Mal eine Bestaetigung per E-Mail-Code), und die Geraetekennung, die Gigya
+    nach einer Bestaetigung wiedererkennt. Alles davon verschluesselt (wenn
+    FIELD_ENCRYPTION_KEY gesetzt ist), nie in der Antwort, nicht im Backup.
+    """
+    __tablename__ = "renault_configs"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    vehicle_id: Mapped[str] = mapped_column(ForeignKey("vehicles.id"), unique=True, index=True)
+
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Schluessel aus renault.LOCALES, z.B. de_DE - bestimmt Anmeldedienst,
+    # API-Schluessel und den Parameter `country`.
+    locale: Mapped[str] = mapped_column(String, default="de_DE")
+    email: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    password: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    vin: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+
+    # --- Anmeldung ----------------------------------------------------------
+    login_token: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    # JSON {"gmid": ..., "ucid": ...}
+    device_ids: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    account_id: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+    # Modellkennung (z.B. X101VE = ZOE Phase 1, die die Leistung in Watt meldet)
+    # und Bezeichnung fuer die Anzeige - kein personenbezogenes Datum.
+    model_code: Mapped[str | None] = mapped_column(String, nullable=True)
+    model_label: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # --- Abrufzustand --------------------------------------------------------
+    # Wie bei MyŠkoda zwei Takte: ohne Kabel selten, waehrend des Ladens oft.
+    # Normal kostet ein Abruf EINE Anfrage (battery-status), siehe
+    # renault_poller.py.
+    poll_interval_idle_minutes: Mapped[int] = mapped_column(Integer, default=15)
+    poll_interval_active_minutes: Mapped[int] = mapped_column(Integer, default=5)
+    last_poll_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    next_poll_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # ok | auth_error | tfa_required | rate_limited | error
+    last_status: Mapped[str | None] = mapped_column(String, nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_streak: Mapped[int] = mapped_column(Integer, default=0)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    vehicle: Mapped["Vehicle"] = relationship()
+
+
+class RenaultLogEntry(Base):
+    """Protokoll der Abrufe bei Renault, pro Fahrzeug - gleicher Aufbau wie
+    MySkodaLogEntry, `payload` haelt optional die Rohantworten
+    (verschluesselt, enthalten u.a. die Position)."""
+    __tablename__ = "renault_log_entries"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    vehicle_id: Mapped[str] = mapped_column(ForeignKey("vehicles.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    level: Mapped[str] = mapped_column(String, default="info")
+    # poll | session_started | session_finished | session_discarded |
+    # session_backdated | missed_session | auth | api_error | rate_limit | test
+    event: Mapped[str] = mapped_column(String)
+    message: Mapped[str] = mapped_column(Text)
+
+    charging_state: Mapped[str | None] = mapped_column(String, nullable=True)
+    soc_percent: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    charge_power_kw: Mapped[float | None] = mapped_column(Float, nullable=True)
+    captured_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    payload: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
+
+
 class SmtpConfig(Base):
     """SMTP-Zugang der GESAMTEN Installation - genau eine Zeile, nur von
     Admins aenderbar.

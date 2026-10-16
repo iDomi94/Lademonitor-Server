@@ -1310,6 +1310,103 @@ class VwDataActLogOut(BaseModel):
     has_payload: bool
 
 
+# ---------- Renault (Renault, Dacia, Alpine) ----------
+
+class RenaultConfigIn(BaseModel):
+    enabled: bool = False
+    locale: str = "de_DE"
+    # None/leer = unveraendert lassen (Passwort wird nie zurueckgegeben)
+    email: str | None = None
+    password: str | None = None
+    vin: str | None = None
+    # Normal kostet ein Abruf eine Anfrage, bei 60 je Stunde und Konto
+    # (Richtwert aus Home Assistant) bleibt also viel Luft.
+    poll_interval_idle_minutes: int = Field(default=15, ge=5, le=240)
+    poll_interval_active_minutes: int = Field(default=5, ge=3, le=60)
+    detect_missed_sessions: bool = True
+    missed_session_min_soc_delta: int = Field(default=5, ge=1, le=50)
+    backdate_session_start: bool = True
+    backdate_max_gap_minutes: int = Field(default=0, ge=0, le=720)
+    log_enabled: bool = True
+    log_raw_payload: bool = True
+
+    @field_validator("email", "vin", mode="before")
+    @classmethod
+    def _strip(cls, value: object) -> object:
+        return value.strip() or None if isinstance(value, str) else value
+
+    @field_validator("password", mode="before")
+    @classmethod
+    def _empty_password(cls, value: object) -> object:
+        # Nicht strippen - Leerzeichen koennen zum Passwort gehoeren.
+        return value or None if isinstance(value, str) else value
+
+
+class RenaultConfigOut(BaseModel):
+    vehicle_id: str
+    vehicle_name: str
+    enabled: bool
+    locale: str
+    email: str | None
+    has_password: bool
+    vin: str | None
+    connected: bool
+    vehicle_model: str | None
+    poll_interval_idle_minutes: int
+    poll_interval_active_minutes: int
+    detect_missed_sessions: bool
+    missed_session_min_soc_delta: int
+    backdate_session_start: bool
+    backdate_max_gap_minutes: int
+    log_enabled: bool
+    log_raw_payload: bool
+
+    last_poll_at: datetime | None
+    next_poll_at: datetime | None
+    last_status: str | None
+    last_error: str | None
+    last_captured_at: datetime | None
+    last_charging_state: str | None
+    last_soc: int | None
+    open_start_time: datetime | None
+    open_soc_start: int | None
+    open_soc_last: int | None
+    open_charging_type: str | None
+
+
+class RenaultCodeIn(BaseModel):
+    code: str = Field(min_length=1, max_length=20)
+
+
+class RenaultLoginResult(BaseModel):
+    # connected | code_sent | failed | expired
+    status: str
+    email_hint: str | None
+    error: str | None
+    config: RenaultConfigOut
+
+
+class RenaultTestResult(BaseModel):
+    ok: bool
+    error: str | None
+    vehicles: list[dict]
+    summary: dict | None
+    config: RenaultConfigOut
+
+
+class RenaultLogOut(BaseModel):
+    id: str
+    created_at: datetime
+    level: str
+    event: str
+    message: str
+    charging_state: str | None
+    soc_percent: int | None
+    charge_power_kw: float | None
+    captured_at: datetime | None
+    has_payload: bool
+
+
 # ---------- E-Mail / SMTP ----------
 
 class SmtpConfigIn(BaseModel):

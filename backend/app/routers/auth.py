@@ -58,7 +58,7 @@ def _purge_owned_data(db: Session, user_id: str) -> None:
     und Provider haben KEINE Kaskade zum Nutzer (nur ChargingSession->Vehicle
     traegt eine), ein direktes Loeschen von Vehicle/Provider vor ihren
     Referenzen wuerde also an Postgres' Fremdschluessel-Constraint scheitern.
-    Reihenfolge: Sessions/Logs/MyŠkoda-, CarData- und VW-Portal-Konfig zuerst (haengen an Vehicle),
+    Reihenfolge: Sessions/Logs/MyŠkoda-, CarData-, VW-Portal- und Renault-Konfig zuerst (haengen an Vehicle),
     dann Ladeorte und Grundgebuehren (haengen an Provider) und Reifensaetze
     (haengen an Vehicle), erst danach Vehicle und Provider selbst.
     """
@@ -82,6 +82,12 @@ def _purge_owned_data(db: Session, user_id: str) -> None:
     ).delete(synchronize_session=False)
     db.query(models.VwDataActConfig).filter(
         models.VwDataActConfig.user_id == user_id
+    ).delete(synchronize_session=False)
+    db.query(models.RenaultLogEntry).filter(
+        models.RenaultLogEntry.user_id == user_id
+    ).delete(synchronize_session=False)
+    db.query(models.RenaultConfig).filter(
+        models.RenaultConfig.user_id == user_id
     ).delete(synchronize_session=False)
     db.query(models.ChargingLocation).filter(
         models.ChargingLocation.user_id == user_id

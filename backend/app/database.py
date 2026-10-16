@@ -49,6 +49,8 @@ _ENCRYPTABLE_COORDINATE_COLUMNS = (
     ("myskoda_configs", "open_longitude", False),
     ("vw_data_act_configs", "open_latitude", False),
     ("vw_data_act_configs", "open_longitude", False),
+    ("renault_configs", "open_latitude", False),
+    ("renault_configs", "open_longitude", False),
 )
 _ENCRYPTABLE_TEXT_COLUMNS = (
     ("charging_sessions", "notes"),
@@ -83,6 +85,13 @@ _ENCRYPTABLE_TEXT_COLUMNS = (
     ("vw_data_act_configs", "password"),
     ("vw_data_act_configs", "vin"),
     ("vw_data_act_log_entries", "payload"),
+    ("renault_configs", "email"),
+    ("renault_configs", "password"),
+    ("renault_configs", "vin"),
+    ("renault_configs", "login_token"),
+    ("renault_configs", "device_ids"),
+    ("renault_configs", "account_id"),
+    ("renault_log_entries", "payload"),
 )
 
 
