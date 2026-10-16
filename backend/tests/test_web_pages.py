@@ -156,3 +156,17 @@ def test_api_page_has_the_vw_portal_section_with_relative_paths(client):
     assert "api/vw-data-act/configs" in response.text
     assert "'/api/vw-data-act" not in response.text
     assert "settings.vwda." not in response.text
+
+
+def test_api_page_has_the_renault_section_with_relative_paths(client):
+    """Abschnitt Renault auf der Unterseite API & Debug: relative Aufrufe
+    (Ingress), das Feld fuer den Bestaetigungscode und alle Texte uebersetzt."""
+    register(client)
+
+    response = client.get("/api-debug")
+
+    assert response.status_code == 200
+    assert "api/renault/configs" in response.text
+    assert "'/api/renault" not in response.text
+    assert 'id="rn-code-form"' in response.text
+    assert "settings.renault." not in response.text

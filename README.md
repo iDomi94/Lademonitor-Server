@@ -34,6 +34,9 @@ Beta über TestFlight: [testflight.apple.com/join/NMbyFTEK](https://testflight.a
   Bentley und VW Nutzfahrzeuge liest der Server das Datenportal des Konzerns
   und erkennt daraus die Ladevorgänge, mit gemessenen kWh aus dem Fahrzeug,
   siehe [VW-Datenportal](#vw-konzern-datenportal-nach-eu-data-act)
+- **Renault und Dacia (My Renault)**: der Server fragt dieselbe Schnittstelle
+  ab wie die My-Renault-App und erkennt daraus die Ladevorgänge, siehe
+  [Renault und Dacia](#renault-und-dacia-my-renault)
 - Verbrauchsberechnung (kWh/100km) pro Ladevorgang über eine priorisierte
   Fallback-Kette (Vollladungs-Intervalle als Goldstandard, SoC-Korrektur,
   naive Rechnung, Schätzung) – Details in `CLAUDE.md`
@@ -335,6 +338,44 @@ Hinweise:
   exportiert.
 - Pro Fahrzeug nur eine automatische Quelle. Solange MyŠkoda oder BMW CarData
   für das Fahrzeug aktiv ist, lässt sich diese Quelle nicht einschalten.
+
+## Renault und Dacia (My Renault)
+
+Fünfte automatische Quelle, für Renault und Dacia mit My-Renault-Konto (z.B.
+Zoe, Megane E-Tech, Scenic E-Tech, Renault 5, Dacia Spring). Lademonitor
+spricht dieselbe Schnittstelle wie die My-Renault-App und die
+Home-Assistant-Integration `renault` (nachgebaut nach der MIT-lizenzierten
+Bibliothek [renault-api](https://github.com/hacf-fr/renault-api)) und erkennt
+wie bei MyŠkoda Einstecken, Laden und Ausstecken.
+
+1. In Lademonitor unter Einstellungen → API & Debug → „Renault und Dacia“
+   Fahrzeug, Land, E-Mail-Adresse und Passwort des My-Renault-Kontos
+   eintragen und **Anmelden** drücken.
+2. Verlangt Renault einen Bestätigungscode, kommt er per E-Mail; ihn in das
+   eingeblendete Feld eintragen.
+3. **Verbindung testen** drücken. Die FIN wird ergänzt, wenn genau ein
+   Fahrzeug im Konto ist.
+4. Schalter „Automatischer Abruf“ einschalten.
+
+Hinweise:
+
+- Es gibt **keine offizielle Schnittstelle**. Ändert Renault die Anmeldung,
+  bricht der Abruf, bis Lademonitor angepasst ist. **Noch nicht mit einem
+  echten Konto getestet.**
+- Renault erlaubt rund 60 Anfragen je Stunde und Konto, geteilt mit der App
+  und Home Assistant. Standard ist ein Abruf alle 15 Minuten ohne Kabel und
+  alle 5 Minuten mit Kabel.
+- Die kWh werden aus dem Ladestand geschätzt; Kilometerstand, Position und
+  Außentemperatur kommen mit, sofern das Modell sie liefert.
+- Die Anmeldung bleibt gespeichert, ein Neustart fragt nicht erneut nach dem
+  Code. Verlangt Renault im laufenden Betrieb einen neuen Code, kommt eine
+  Mail.
+- E-Mail, Passwort, Anmeldung und FIN werden verschlüsselt gespeichert (mit
+  `FIELD_ENCRYPTION_KEY`), nie angezeigt und nicht in die Backup-ZIP
+  exportiert.
+- Pro Fahrzeug nur eine automatische Quelle. Solange MyŠkoda, BMW CarData
+  oder das VW-Datenportal für das Fahrzeug aktiv ist, lässt sich diese Quelle
+  nicht einschalten.
 
 ## Backup
 

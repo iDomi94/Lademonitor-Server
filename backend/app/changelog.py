@@ -5,6 +5,16 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.42.0",
+        "date": "2026-10-16",
+        "title": "Renault und Dacia als Datenquelle",
+        "changes": [
+            "Neue automatische Quelle für Renault und Dacia (z.B. Zoe, Megane E-Tech, Renault 5, Dacia Spring): unter „API & Debug“ das My-Renault-Konto eintragen und anmelden. Der Server fragt Ladezustand, Kabel und Ladestand ab und legt daraus Ladevorgänge an, wie beim MyŠkoda-Abruf – mit Kilometerstand, Position und Außentemperatur, sofern das Fahrzeug sie liefert.",
+            "Verlangt Renault bei der Anmeldung einen Bestätigungscode per E-Mail, erscheint dafür ein Eingabefeld. Die Anmeldung bleibt danach gespeichert, ein Neustart des Servers fragt nicht erneut nach dem Code. Muss der Code im laufenden Betrieb neu eingegeben werden, kommt eine Mail.",
+            "Wie beim VW-Datenportal gibt es dafür keine offizielle Schnittstelle; der Server spricht dieselbe Schnittstelle wie die My-Renault-App. Noch nicht mit einem echten Renault-Konto getestet.",
+        ],
+    },
+    {
         "version": "0.41.1",
         "date": "2026-10-15",
         "title": "VW-Datenportal: kurze Ladevorgänge",

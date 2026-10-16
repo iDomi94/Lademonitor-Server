@@ -265,6 +265,40 @@ def notify_vw_data_act_status(
         logger.exception("Benachrichtigung zum VW-Datenportal fehlgeschlagen")
 
 
+def notify_renault_status(
+    db: Session, config: models.RenaultConfig, previous_status: str | None
+) -> None:
+    """Gegenstueck zu notify_vw_data_act_status fuer Renault. Gemeldet wird
+    der Uebergang nach `auth_error` (Passwort geaendert) und nach
+    `tfa_required` (Renault verlangt einen Bestaetigungscode, den nur der
+    Nutzer in den Einstellungen eingeben kann). Beides heisst: es kommen keine
+    Ladevorgaenge mehr. Haengt am selben Schalter wie die MyŠkoda-Meldung."""
+    try:
+        status = config.last_status
+        if status not in ("auth_error", "tfa_required") or previous_status == status:
+            return
+        user = db.get(models.User, config.user_id)
+        if not user or not user.email or not user.notify_myskoda_error:
+            return
+        vehicle = db.get(models.Vehicle, config.vehicle_id)
+        key = "email.renault_error" if status == "auth_error" else "email.renault_tfa"
+        with language_context(user.language):
+            mail = mailer.Mail(
+                subject=translate(f"{key}.subject"),
+                heading=translate(f"{key}.heading"),
+                intro=[translate(f"{key}.intro")],
+                rows=[
+                    (translate("email.myskoda_error.row_vehicle"), vehicle.name if vehicle else "–"),
+                    (translate("email.myskoda_error.row_when"), _fmt_dt(config.last_poll_at)),
+                    (translate("email.myskoda_error.row_error"), config.last_error or "–"),
+                ],
+                note=translate(f"{key}.note"),
+            )
+        _send(db, user, mail, "renault_error")
+    except Exception:  # noqa: BLE001
+        logger.exception("Benachrichtigung zu Renault fehlgeschlagen")
+
+
 def _digest_due(user: models.User, now: datetime) -> bool:
     if user.review_digest == models.ReviewDigestFrequency.OFF:
         return False

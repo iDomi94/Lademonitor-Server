@@ -6,6 +6,30 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.42.0] — 2026-10-16
+
+### Added
+- **Renault und Dacia als fünfte automatische Quelle** (`renault.py`,
+  `renault_poller.py`, `routers/renault.py`, Endpunkte unter `/api/renault`).
+  Login und Abruf sind aus `renault-api` (hacf-fr, MIT) nachgebaut, das auch
+  die Home-Assistant-Integration `renault` nutzt: Gigya-Anmeldung mit
+  E-Mail und Passwort, danach Kamereon `battery-status`, `cockpit`,
+  `location` und `hvac-status`. Die Ladevorgänge setzt die gemeinsame
+  Ladeerkennung (`charge_detection.py`) zusammen, wie bei MyŠkoda und dem
+  VW-Datenportal, inklusive Rückdatierung und Nacherkennung.
+- Zwei-Faktor-Anmeldung per E-Mail-Code in der Web-UI. Login-Token und
+  Geräte-Kennungen werden gespeichert (verschlüsselt, wenn
+  `FIELD_ENCRYPTION_KEY` gesetzt ist), damit ein Neustart keinen neuen Code
+  verlangt. Fällt die Anmeldung im Hintergrund weg (`auth_error` oder
+  `tfa_required`), kommt beim Übergang eine Mail.
+- Die Zusatzabrufe (Kilometerstand, Position, Temperatur) laufen nur beim
+  ersten Abruf, beim Ein- oder Ausstecken und bei einem SoC-Sprung, um das
+  Kontingent von rund 60 Anfragen je Stunde und Konto zu schonen.
+
+### Known issues
+- Nicht gegen ein echtes My-Renault-Konto getestet, nur gegen einen
+  nachgebauten Dienst (`tests/test_renault.py`).
+
 ## [0.41.1] — 2026-10-15
 
 ### Fixed

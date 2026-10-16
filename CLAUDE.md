@@ -67,12 +67,13 @@ backend/app/
                           von MySkodaConfig und VwDataActConfig geteilt)
                           VwDataActConfig/VwDataActLogEntry (siehe Abschnitt
                           "VW-Datenportal nach EU Data Act")
+                          RenaultConfig/RenaultLogEntry (siehe Abschnitt "Renault")
   schemas.py          - Pydantic Request/Response-Schemas
   routers/
     vehicles.py, providers.py, locations.py, sessions.py, stats.py, importer.py,
     geocoding.py, backup.py, auth.py, webdav_backup.py, myskoda.py, email.py,
     sync.py, tires.py, provider_fees.py, vehicle_costs.py, reminders.py, reimbursement.py,
-    combustion_vehicle.py, bmw_cardata.py, vw_data_act.py
+    combustion_vehicle.py, bmw_cardata.py, vw_data_act.py, renault.py
   auth.py            - Passwort-Hashing, Token-Handling, Auth-Dependencies
   sync.py            - record_deletion(): Grabstein fuer eine geloeschte Zeile
   tires.py           - Reifensaetze, temperaturbereinigter Vergleich
@@ -93,6 +94,8 @@ backend/app/
   bmw_cardata_poller.py - Uebernahme der BMW-Ladehistorie (siehe Abschnitt "BMW CarData")
   vw_data_act.py     - Client fuer das VW-Datenportal (EU Data Act), Datensatz-Auswertung
   vw_data_act_poller.py - ZIP-Abruf und Ladeerkennung ueber das VW-Datenportal
+  renault.py         - Client fuer My Renault (Gigya-Login, Kamereon), nach renault-api
+  renault_poller.py  - Abruf, Zwei-Faktor-Anmeldung und Ladeerkennung fuer Renault/Dacia
   mailer.py          - SMTP-Versand, Mail-Vorlagen, Versandprotokoll
   notifications.py   - Benachrichtigungen (ereignisgetrieben + zeitgesteuert)
   templates/          - Jinja2 Web-UI (index=Dashboard, sessions, map, tires, settings +
@@ -728,6 +731,13 @@ Icon/Tooltip-Logik in der SessionsList-View.
   die Mail erst, wenn sie abgelaufen ist), und die Sperre "nur eine Quelle je
   Fahrzeug" gibt es bisher nur beim Einschalten dieser Quelle, nicht
   umgekehrt bei MyŠkoda/BMW.
+- **Renault (v0.42.0) ist nicht gegen ein echtes Konto getestet.** Login und
+  Antworten sind nach renault-api nachgebaut. Beim ersten echten Lauf im
+  Debug-Protokoll pruefen: ob die Zwei-Faktor-Abfrage ueberhaupt kommt und
+  der gespeicherte Login-Token einen Neustart ueberlebt, ob `chargingStatus`
+  waehrend des Ladens wirklich 1.0 meldet, in welcher Einheit
+  `chargingInstantaneousPower` beim jeweiligen Modell kommt, und ob
+  `hvac-status`/`location` fuer das Modell freigeschaltet sind.
 - **Xcode-Beta-Umgebung des Nutzers:** macOS 27 Beta + Xcode 27 Beta
   (Erstbeta, Stand Aug 2026). Es gab einen `dyld_shared_cache_extract_dylibs`
   Bug beim Installieren auf echtem Gerät - gelöst durch Löschen von
@@ -1468,6 +1478,10 @@ dieses Projekt real gestolpert ist:
 - `test_vw_data_act.py` - VW-Datenportal gegen ein nachgebautes Portal:
   Login-Varianten, Auswertung der Datensaetze (Enum-Index, Berichtskopien,
   flaches Format), ZIP-Cursor, Ladevorgang mit gemessener Energie, Fehler.
+- `test_renault.py` - Renault gegen einen nachgebauten Gigya-/Kamereon-Dienst:
+  Auswertung der Antworten, Anmeldung inkl. Zwei-Faktor-Code und
+  abgelaufenem Token, Ladevorgang samt Zusatzabrufen, Kontingent, nicht
+  unterstuetzte Endpunkte, API-Ablauf, Trennung pro Nutzer.
 - `test_charge_detection.py` - gemeinsame Ladeerkennung mit Energiezaehler
   (Gesamt- und Je-Vorgang-Zaehler ergeben dasselbe) und Nacherkennung eines
   kurzen Vorgangs ueber den Zaehler.
@@ -2707,6 +2721,72 @@ verschluesselt (`database.py`-Listen), Passwort nie in der Antwort
 `tests/test_vw_data_act.py` gegen ein nachgebautes Portal (Login inkl.
 falschem Passwort, AGB, Marketing-Frage, abgelaufener Sitzung) und
 `tests/test_charge_detection.py`.
+
+## Renault (`renault.py`, `renault_poller.py`, `routers/renault.py`, ab 2026-10-16, v0.42.0)
+
+Fuenfte automatische Quelle, fuer Renault und Dacia mit My-Renault-Konto.
+Anlass: Dominique wollte die Home-Assistant-Integration `renault` (HA core,
+Bibliothek `renault-api` von hacf-fr, MIT) im Server nachgebaut haben. Nur
+Server und Web-UI, Apps und HA unveraendert. **Nicht gegen ein echtes Konto
+getestet** (keins in der Umgebung).
+
+**Uebernommen statt eingebunden**, wie beim VW-Datenportal: `renault-api`
+bringt aiohttp, marshmallow-dataclass und PyJWT mit und ist async; portiert
+ist nur der benoetigte Teil auf synchrones httpx, mit Lizenzhinweis im
+Modul-Docstring. Die Schluessel (Gigya-API-Key je Region, Kamereon-`apikey`)
+sind die oeffentlichen der My-Renault-App, wie in renault-api. `LOCALES`
+haelt sie je Land; fr_LU, en_AU und es_MX haben eigene.
+
+**Anmeldung:** Gigya `accounts.login` mit E-Mail und Passwort ergibt einen
+`login_token` (lange gueltig), daraus je Abruf ein JWT (`getJWT`, 15 min,
+gecacht) und einmal die `personId`; Kamereon liefert zur Person die Konten,
+genommen wird das `MYRENAULT`-Konto. Login-Token, Geraete-Kennungen
+(gmid/ucid aus `webSdkBootstrap`) und Konto-ID liegen verschluesselt in
+`RenaultConfig`, damit ein Neustart nicht neu anmeldet - und vor allem nicht
+erneut einen Code verlangt. Ein abgelaufener Login-Token (403005/403013) wird
+einmal per Passwort erneuert.
+
+**Zwei-Faktor:** antwortet Gigya mit 403101, verlangt Renault einen Code per
+E-Mail (initTFA -> getEmails -> sendVerificationCode -> completeVerification ->
+finalizeTFA, danach Login erneut; das Geraet ist dann vertraut). Den Code kann
+nur der Nutzer eintragen, deshalb startet ausschliesslich der Knopf
+"Anmelden" (`POST .../login`) diesen Weg und gibt `code_sent` zurueck;
+`POST .../login/code` schliesst ihn ab. Die offene Abfrage liegt nur im
+Prozess (`renault_poller._pending`, 15 min) - ein Neustart dazwischen heisst
+"erneut anmelden", das ist hingenommen. Stoesst der HINTERGRUND-Abruf auf
+403101, schickt er bewusst keinen Code (der Nutzer saehe ihn nie), sondern
+setzt `tfa_required`, 60 min Pause und Mail beim Uebergang.
+
+**Was abgefragt wird:** `battery-status` (v2) bei jedem Abruf - Kabel
+(`plugStatus`), Ladezustand (`chargingStatus` als Float, 1.0 = laedt),
+SoC, Leistung. `cockpit` (km), `location` und `hvac-status`
+(Aussentemperatur) nur beim ersten Abruf, beim Ein-/Ausstecken und bei einem
+SoC-Sprung fuer die Nacherkennung (`_needs_details()`) - Renault erlaubt rund
+60 Anfragen je Stunde und Konto, geteilt mit App und HA. Endpunkte, die ein
+Modell nicht kennt (`err.func.wired.notFound`, 404 usw.), werden
+uebersprungen und protokolliert; nur ein fehlender Akkustatus ist ein Fehler.
+`err.func.wired.overloaded`/429 -> `rate_limited`, 15 min.
+
+**Kabel steckt?** Zuerst `plugStatus`, sonst aus dem Ladezustand
+(`PLUGGED_STATES`). V2L/V2G (negative `chargingStatus`) zaehlt wie bei
+MyŠkoda als nicht verbunden. Laesst sich beides nicht sagen, entscheidet die
+Zustandsmaschine nichts. Zeitstempel (`lastUpdateTime`) werden naive UTC wie
+ueberall in der Ladeerkennung.
+
+**Leistung und AC/DC:** die Zoe der ersten Generation (`X101VE`) meldet Watt,
+alle anderen kW; Werte ueber 400 gelten ebenfalls als Watt. Lade-Art DC ab
+23 kW, der Vorgang wird nachtraeglich auf DC hochgestuft, sobald ein Abruf
+waehrenddessen mehr zeigt. Energie gibt die API nicht je Vorgang - es bleibt
+die Schaetzung aus dem SoC.
+
+**Sonstiges wie bei VW:** `external_session_id` mit Praefix `renault`, ohne
+FIN; Einschalten wird mit 422 abgelehnt, wenn MyŠkoda, BMW CarData oder das
+VW-Datenportal fuer das Fahrzeug aktiv ist; E-Mail, Passwort, FIN,
+Login-Token, Geraete-Kennungen, Konto-ID und Rohdaten verschluesselt
+(`database.py`-Listen), Passwort nie in der Antwort (`has_password`), nicht
+im Backup, kein Sync; `delete_vehicle` und `_purge_owned_data()` loeschen
+Config und Protokoll mit. Aendert sich Land, E-Mail oder Passwort, werden
+Login-Token und Konto-ID verworfen. Mails am Schalter `notify_myskoda_error`.
 
 ## Verbrenner-Vergleich und Homescreen-Widget (nur Apps, ab 2026-09-29)
 

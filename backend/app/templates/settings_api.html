@@ -169,6 +169,72 @@
   </div>
 </details>
 
+<div class="section-head" style="margin-top:40px">
+  <h2>{{ t('settings.renault.heading') }}</h2>
+  <label class="switch">
+    {{ t('settings.renault.enabled_label') }}
+    <input type="checkbox" id="rn-enabled">
+    <span class="track"></span>
+    <span class="state" id="rn-enabled-state"></span>
+  </label>
+</div>
+<details class="help">
+  <summary>{{ t('common.help') }}</summary>
+  <div class="inner">{{ t('settings.renault.description')|safe }}</div>
+</details>
+<form class="inline-form" id="renault-form">
+  <div><label>{{ t('settings.renault.vehicle') }}</label><select id="rn-vehicle"></select></div>
+  <div><label>{{ t('settings.renault.locale') }}</label><select id="rn-locale"></select></div>
+  <div><label>{{ t('settings.renault.email') }}</label><input type="email" id="rn-email" autocomplete="off"></div>
+  <div><label>{{ t('settings.renault.password') }}</label><input type="password" id="rn-password" placeholder="{{ t('settings.renault.password') }}" autocomplete="new-password"></div>
+  <div><label>{{ t('settings.renault.vin') }}</label><input id="rn-vin" placeholder="VF1..." maxlength="17" autocomplete="off"></div>
+  <div><label>{{ t('settings.renault.interval_idle') }}</label><input type="number" id="rn-interval-idle" min="5" max="240" value="15"></div>
+  <div><label>{{ t('settings.renault.interval_active') }}</label><input type="number" id="rn-interval-active" min="3" max="60" value="5"></div>
+  <div>
+    <label><input type="checkbox" id="rn-missed" style="width:auto; display:inline-block; margin-right:6px">{{ t('settings.myskoda.missed') }}</label>
+  </div>
+  <div><label>{{ t('settings.myskoda.missed_delta') }}</label><input type="number" id="rn-missed-delta" min="1" max="50" value="5"></div>
+  <div>
+    <label><input type="checkbox" id="rn-backdate" style="width:auto; display:inline-block; margin-right:6px">{{ t('settings.myskoda.backdate') }}</label>
+  </div>
+  <div><label>{{ t('settings.myskoda.backdate_gap') }}</label><input type="number" id="rn-backdate-gap" min="0" max="720" value="0"></div>
+  <div>
+    <label><input type="checkbox" id="rn-log" style="width:auto; display:inline-block; margin-right:6px">{{ t('settings.myskoda.log_checkbox') }}</label>
+  </div>
+  <div>
+    <label><input type="checkbox" id="rn-log-raw" style="width:auto; display:inline-block; margin-right:6px">{{ t('settings.renault.log_raw') }}</label>
+  </div>
+  <div class="form-actions">
+    <button type="button" id="rn-delete-btn" style="background:var(--danger); display:none">{{ t('settings.renault.delete_config') }}</button>
+    <button type="button" id="rn-login-btn" style="background:var(--accent2)">{{ t('settings.renault.login') }}</button>
+    <button type="button" id="rn-test-btn" style="background:var(--accent2)">{{ t('settings.myskoda.test_connection') }}</button>
+    <button type="button" id="rn-poll-btn" style="background:var(--accent2)">{{ t('settings.myskoda.poll_now') }}</button>
+    <button type="submit">{{ t('settings.myskoda.save') }}</button>
+  </div>
+</form>
+<form class="inline-form" id="rn-code-form" style="display:none; margin-top:12px">
+  <p id="rn-code-hint" style="margin:0 0 8px; grid-column:1/-1"></p>
+  <div><label>{{ t('settings.renault.code') }}</label><input id="rn-code" inputmode="numeric" autocomplete="one-time-code" maxlength="20"></div>
+  <div class="form-actions">
+    <button type="submit" id="rn-code-btn">{{ t('settings.renault.code_submit') }}</button>
+  </div>
+</form>
+<div id="renault-status" style="margin-top:8px; font-size:0.9em"></div>
+<pre id="renault-test-result" style="display:none; margin-top:12px; padding:12px; background:var(--card); border:1px solid var(--border); border-radius:12px; font-size:12px; overflow-x:auto"></pre>
+
+<details class="panel" id="rn-log-panel" style="margin-top:24px">
+  <summary>{{ t('settings.renault.log_heading') }}</summary>
+  <div class="inner">
+    <p style="color:var(--muted); font-size:0.9em; margin-top:0">{{ t('settings.renault.log_description') }}</p>
+    <div class="form-actions" style="margin-bottom:12px">
+      <button type="button" id="rn-log-refresh">{{ t('settings.myskoda.log_refresh') }}</button>
+      <button type="button" id="rn-log-clear" style="background:var(--danger)">{{ t('settings.myskoda.log_clear') }}</button>
+    </div>
+<div class="tablewrap"><table><thead><tr><th>{{ t('settings.myskoda.log.table.time') }}</th><th>{{ t('settings.myskoda.log.table.event') }}</th><th>{{ t('settings.myskoda.log.table.state') }}</th><th>{{ t('settings.myskoda.log.table.soc') }}</th><th>{{ t('settings.myskoda.log.table.power') }}</th><th>{{ t('settings.myskoda.log.table.message') }}</th><th></th></tr></thead>
+<tbody id="rn-log-rows"></tbody></table></div>
+  </div>
+</details>
+
 <script>
 let vehicles = [];
 
@@ -249,6 +315,21 @@ const T = {
   vwPasswordSet: {{ t('settings.vwda.password_set')|tojson }},
   vwPassword: {{ t('settings.vwda.password')|tojson }},
   vwConfirmDelete: {{ t('settings.vwda.confirm_delete')|tojson }},
+  rnStatusOk: {{ t('settings.renault.status.ok')|tojson }},
+  rnStatusError: {{ t('settings.renault.status.error')|tojson }},
+  rnStatusAuthError: {{ t('settings.renault.status.auth_error')|tojson }},
+  rnStatusTfa: {{ t('settings.renault.status.tfa_required')|tojson }},
+  rnStatusRateLimited: {{ t('settings.renault.status.rate_limited')|tojson }},
+  rnLastState: {{ t('settings.renault.status.last_state')|tojson }},
+  rnConnected: {{ t('settings.renault.connected')|tojson }},
+  rnNotConnected: {{ t('settings.renault.not_connected')|tojson }},
+  rnLoggingIn: {{ t('settings.renault.logging_in')|tojson }},
+  rnCodeSent: {{ t('settings.renault.code_sent')|tojson }},
+  rnCodeSentNoHint: {{ t('settings.renault.code_sent_no_hint')|tojson }},
+  rnCodeExpired: {{ t('settings.renault.code_expired')|tojson }},
+  rnPasswordSet: {{ t('settings.renault.password_set')|tojson }},
+  rnPassword: {{ t('settings.renault.password')|tojson }},
+  rnConfirmDelete: {{ t('settings.renault.confirm_delete')|tojson }},
 };
 
 // ---------- MyŠkoda Public API ----------
@@ -922,6 +1003,7 @@ document.getElementById('vw-delete-btn').addEventListener('click', async () => {
   const res = await fetch(`api/vw-data-act/configs/${vwVehicleId()}`, { method: 'DELETE' });
   if (!res.ok) { alert(T.msErrorPrefix + await res.text()); return; }
   await loadVwdaConfig();
+  await loadRenaultConfig();
 });
 
 async function loadVwdaLog() {
@@ -960,6 +1042,257 @@ document.getElementById('vw-log-clear').addEventListener('click', async () => {
   await loadVwdaLog();
 });
 
+// ---------------------------------------------------------------------------
+// Renault (My Renault)
+// ---------------------------------------------------------------------------
+// Gleiche Ladeerkennung wie bei MyŠkoda. Eigen ist nur die Anmeldung: sie
+// laeuft ueber einen eigenen Knopf, weil Renault dabei einen Code per E-Mail
+// verlangen kann, den nur der Nutzer eintragen kann.
+
+function rnVehicleId() {
+  return document.getElementById('rn-vehicle').value;
+}
+
+function rnFillVehicles() {
+  const select = document.getElementById('rn-vehicle');
+  const previous = select.value;
+  select.innerHTML = vehicles.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+  if (previous && vehicles.some(v => v.id === previous)) select.value = previous;
+}
+
+async function rnFillLocales() {
+  const locales = await (await fetch('api/renault/locales')).json();
+  document.getElementById('rn-locale').innerHTML =
+    locales.map(l => `<option value="${l}">${l.replace('_', ' / ')}</option>`).join('');
+}
+
+function rnRenderEnabledState() {
+  const on = document.getElementById('rn-enabled').checked;
+  document.getElementById('rn-enabled-state').textContent = on ? T.bcOn : T.bcOff;
+}
+
+function rnShowCodeForm(hint) {
+  const form = document.getElementById('rn-code-form');
+  if (hint === null) { form.style.display = 'none'; return; }
+  document.getElementById('rn-code-hint').textContent =
+    hint ? T.rnCodeSent.replace('{hint}', hint) : T.rnCodeSentNoHint;
+  document.getElementById('rn-code').value = '';
+  form.style.display = '';
+  document.getElementById('rn-code').focus();
+}
+
+function renderRenaultStatus(c) {
+  const el = document.getElementById('renault-status');
+  document.getElementById('rn-delete-btn').style.display = (c.email || c.vin) ? '' : 'none';
+  document.getElementById('rn-enabled').checked = c.enabled;
+  rnRenderEnabledState();
+  const labels = {
+    ok: T.rnStatusOk, error: T.rnStatusError, auth_error: T.rnStatusAuthError,
+    tfa_required: T.rnStatusTfa, rate_limited: T.rnStatusRateLimited,
+  };
+  const colors = {
+    ok: 'var(--accent)', error: 'var(--danger)', auth_error: 'var(--danger)',
+    tfa_required: 'var(--danger)', rate_limited: 'var(--warn)',
+  };
+  const lines = [
+    (c.connected ? T.rnConnected : T.rnNotConnected) + (c.vehicle_model ? ` – ${c.vehicle_model}` : ''),
+  ];
+  if (labels[c.last_status]) {
+    lines.push(`<strong style="color:${colors[c.last_status]}">${labels[c.last_status]}</strong>`
+      + (c.last_poll_at ? ` – ${msFmt(c.last_poll_at)} (${msRelative(c.last_poll_at)})` : ''));
+  } else {
+    lines.push(T.msStatusNever);
+  }
+  if (c.last_error) lines.push(`<span style="color:var(--danger)">${c.last_error}</span>`);
+  if (c.last_charging_state) {
+    lines.push(`${T.rnLastState}${c.last_charging_state}, SoC ${c.last_soc ?? '–'} %`
+      + (c.last_captured_at ? ` (${msFmt(c.last_captured_at)})` : ''));
+  }
+  if (c.open_start_time) {
+    lines.push(`<strong>${T.msChargingRunning}</strong> ${T.msSince}${msFmt(c.open_start_time)}, `
+      + `SoC ${c.open_soc_start ?? '–'} % → ${c.open_soc_last ?? '–'} %`
+      + (c.open_charging_type ? `, ${c.open_charging_type}` : ''));
+  }
+  if (c.enabled && c.next_poll_at) lines.push(`${T.msNextPollPrefix}${msFmt(c.next_poll_at)}`);
+  else if (c.enabled) lines.push(T.msNextPollSoon);
+  el.innerHTML = lines.join('<br>');
+  el.style.color = 'var(--muted)';
+}
+
+async function loadRenaultConfig() {
+  const vehicleId = rnVehicleId();
+  if (!vehicleId) {
+    document.getElementById('renault-status').textContent = T.msPleaseAddVehicle;
+    return;
+  }
+  const c = await (await fetch(`api/renault/configs/${vehicleId}`)).json();
+  document.getElementById('rn-locale').value = c.locale;
+  document.getElementById('rn-email').value = c.email || '';
+  document.getElementById('rn-password').value = '';
+  document.getElementById('rn-password').placeholder = c.has_password ? T.rnPasswordSet : T.rnPassword;
+  document.getElementById('rn-vin').value = c.vin || '';
+  document.getElementById('rn-interval-idle').value = c.poll_interval_idle_minutes;
+  document.getElementById('rn-interval-active').value = c.poll_interval_active_minutes;
+  document.getElementById('rn-missed').checked = c.detect_missed_sessions;
+  document.getElementById('rn-missed-delta').value = c.missed_session_min_soc_delta;
+  document.getElementById('rn-backdate').checked = c.backdate_session_start;
+  document.getElementById('rn-backdate-gap').value = c.backdate_max_gap_minutes;
+  document.getElementById('rn-log').checked = c.log_enabled;
+  document.getElementById('rn-log-raw').checked = c.log_raw_payload;
+  document.getElementById('renault-test-result').style.display = 'none';
+  rnShowCodeForm(null);
+  renderRenaultStatus(c);
+  await loadRenaultLog();
+}
+
+async function rnSaveConfig(enabled) {
+  const payload = {
+    enabled: enabled ?? document.getElementById('rn-enabled').checked,
+    locale: document.getElementById('rn-locale').value,
+    email: document.getElementById('rn-email').value || null,
+    password: document.getElementById('rn-password').value || null,
+    vin: document.getElementById('rn-vin').value || null,
+    poll_interval_idle_minutes: parseInt(document.getElementById('rn-interval-idle').value || 15),
+    poll_interval_active_minutes: parseInt(document.getElementById('rn-interval-active').value || 5),
+    detect_missed_sessions: document.getElementById('rn-missed').checked,
+    missed_session_min_soc_delta: parseInt(document.getElementById('rn-missed-delta').value || 5),
+    backdate_session_start: document.getElementById('rn-backdate').checked,
+    backdate_max_gap_minutes: parseInt(document.getElementById('rn-backdate-gap').value || 0),
+    log_enabled: document.getElementById('rn-log').checked,
+    log_raw_payload: document.getElementById('rn-log-raw').checked,
+  };
+  const res = await fetch(`api/renault/configs/${rnVehicleId()}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) { alert(T.msErrorPrefix + await res.text()); return null; }
+  const config = await res.json();
+  document.getElementById('rn-password').value = '';
+  document.getElementById('rn-password').placeholder = config.has_password ? T.rnPasswordSet : T.rnPassword;
+  return config;
+}
+
+function rnHandleLoginResult(result) {
+  renderRenaultStatus(result.config);
+  if (result.status === 'code_sent') {
+    rnShowCodeForm(result.email_hint || '');
+    if (result.error) alert(result.error);
+  } else {
+    rnShowCodeForm(null);
+    if (result.status === 'expired') alert(T.rnCodeExpired);
+    else if (result.status === 'failed') alert(T.msErrorPrefix + (result.error || ''));
+  }
+}
+
+document.getElementById('rn-vehicle').addEventListener('change', loadRenaultConfig);
+
+document.getElementById('renault-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const config = await rnSaveConfig();
+  if (config) renderRenaultStatus(config);
+});
+
+document.getElementById('rn-enabled').addEventListener('change', async (e) => {
+  rnRenderEnabledState();
+  const config = await rnSaveConfig(e.target.checked);
+  if (!config) {
+    e.target.checked = !e.target.checked;
+    rnRenderEnabledState();
+    return;
+  }
+  renderRenaultStatus(config);
+});
+
+document.getElementById('rn-login-btn').addEventListener('click', async () => {
+  if (!(await rnSaveConfig())) return;
+  const result = await msRunAction('rn-login-btn', `api/renault/configs/${rnVehicleId()}/login`, T.rnLoggingIn);
+  if (!result) return;
+  rnHandleLoginResult(result);
+  await loadRenaultLog();
+});
+
+document.getElementById('rn-code-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('rn-code-btn');
+  btn.disabled = true;
+  try {
+    const res = await fetch(`api/renault/configs/${rnVehicleId()}/login/code`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: document.getElementById('rn-code').value.trim() })
+    });
+    if (!res.ok) { alert(T.msErrorPrefix + await res.text()); return; }
+    rnHandleLoginResult(await res.json());
+    await loadRenaultLog();
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.getElementById('rn-test-btn').addEventListener('click', async () => {
+  if (!(await rnSaveConfig())) return;
+  const result = await msRunAction('rn-test-btn', `api/renault/configs/${rnVehicleId()}/test`, T.msTesting);
+  if (!result) return;
+  const box = document.getElementById('renault-test-result');
+  box.style.display = 'block';
+  box.textContent = result.ok
+    ? JSON.stringify({ vehicles: result.vehicles, battery: result.summary }, null, 2)
+    : T.msTestFailedPrefix + result.error;
+  document.getElementById('rn-vin').value = result.config.vin || '';
+  renderRenaultStatus(result.config);
+  await loadRenaultLog();
+});
+
+document.getElementById('rn-poll-btn').addEventListener('click', async () => {
+  if (!(await rnSaveConfig())) return;
+  const config = await msRunAction('rn-poll-btn', `api/renault/configs/${rnVehicleId()}/poll`, T.msPolling);
+  if (!config) return;
+  renderRenaultStatus(config);
+  await loadRenaultLog();
+});
+
+document.getElementById('rn-delete-btn').addEventListener('click', async () => {
+  if (!confirm(T.rnConfirmDelete)) return;
+  const res = await fetch(`api/renault/configs/${rnVehicleId()}`, { method: 'DELETE' });
+  if (!res.ok) { alert(T.msErrorPrefix + await res.text()); return; }
+  await loadRenaultConfig();
+});
+
+async function loadRenaultLog() {
+  const panel = document.getElementById('rn-log-panel');
+  const rows = document.getElementById('rn-log-rows');
+  const vehicleId = rnVehicleId();
+  if (!vehicleId || !panel.open) { rows.innerHTML = ''; return; }
+  const entries = await (await fetch(`api/renault/logs?vehicle_id=${vehicleId}&limit=200`)).json();
+  if (!entries.length) {
+    rows.innerHTML = `<tr><td colspan="7" style="color:var(--muted)">${T.msLogNoEntries}</td></tr>`;
+    return;
+  }
+  const levelColor = { error: 'var(--danger)', warning: 'var(--warn)' };
+  rows.innerHTML = entries.map(e => `
+    <tr>
+      <td style="white-space:nowrap">${msFmt(e.created_at)}</td>
+      <td><code>${e.event}</code></td>
+      <td>${e.charging_state ?? ''}</td>
+      <td>${e.soc_percent ?? ''}</td>
+      <td>${e.charge_power_kw != null ? msFmtNum(e.charge_power_kw) : ''}</td>
+      <td style="color:${levelColor[e.level] || 'inherit'}">${e.message}</td>
+      <td>${e.has_payload
+        ? `<a href="api/renault/logs/${e.id}/payload" target="_blank" rel="noopener">${T.msLogRawLink}</a>`
+        : ''}</td>
+    </tr>`).join('');
+}
+
+document.getElementById('rn-log-refresh').addEventListener('click', loadRenaultLog);
+document.getElementById('rn-log-panel').addEventListener('toggle', () => {
+  if (document.getElementById('rn-log-panel').open) loadRenaultLog();
+});
+document.getElementById('rn-log-clear').addEventListener('click', async () => {
+  if (!confirm(T.msLogConfirmClear)) return;
+  const res = await fetch(`api/renault/logs?vehicle_id=${rnVehicleId()}`, { method: 'DELETE' });
+  if (!res.ok) { alert(T.msErrorPrefix + await res.text()); return; }
+  await loadRenaultLog();
+});
+
 (async () => {
   await loadVehicles();
   msRenderEnabledState();
@@ -968,9 +1301,13 @@ document.getElementById('vw-log-clear').addEventListener('click', async () => {
   vwFillVehicles();
   vwRenderEnabledState();
   await vwFillBrands();
+  rnFillVehicles();
+  rnRenderEnabledState();
+  await rnFillLocales();
   await loadMyskodaConfig();
   await loadCardataConfig();
   await loadVwdaConfig();
+  await loadRenaultConfig();
 })();
 </script>
 {% endblock %}
