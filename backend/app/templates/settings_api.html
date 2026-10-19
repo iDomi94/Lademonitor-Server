@@ -6,6 +6,18 @@
 <a class="backlink" href="settings">{{ t('nav.back_to_settings') }}</a>
 <h1>{{ t('api.page_heading') }}</h1>
 
+{# Vier Quellen untereinander waren eine sehr lange Seite, obwohl praktisch
+   jeder nur eine davon nutzt. Der Umschalter zeigt immer genau eine; die
+   Auswahl merkt sich der Browser, ein Link kann sie per #source= vorgeben. #}
+<div class="source-switch" role="tablist" aria-label="{{ t('api.source_switch') }}">
+  <button type="button" role="tab" data-source="myskoda">{{ t('api.source.myskoda') }}</button>
+  <button type="button" role="tab" data-source="bmw">{{ t('api.source.bmw') }}</button>
+  <button type="button" role="tab" data-source="vw">{{ t('api.source.vw') }}</button>
+  <button type="button" role="tab" data-source="renault">{{ t('api.source.renault') }}</button>
+</div>
+
+<section class="api-source" data-source="myskoda" role="tabpanel">
+
 <div class="section-head">
   <h2>{{ t('settings.myskoda.heading') }}</h2>
   <label class="switch">
@@ -60,6 +72,7 @@
     <div class="form-actions" style="margin-bottom:12px">
       <button type="button" id="ms-log-refresh">{{ t('settings.myskoda.log_refresh') }}</button>
       <button type="button" id="ms-log-export" style="background:var(--accent2)">{{ t('settings.myskoda.log_export') }}</button>
+      <button type="button" id="ms-log-zip" style="background:var(--accent2)">{{ t('api.log_zip') }}</button>
       <button type="button" id="ms-log-clear" style="background:var(--danger)">{{ t('settings.myskoda.log_clear') }}</button>
     </div>
 <div class="tablewrap"><table><thead><tr><th>{{ t('settings.myskoda.log.table.time') }}</th><th>{{ t('settings.myskoda.log.table.event') }}</th><th>{{ t('settings.myskoda.log.table.state') }}</th><th>{{ t('settings.myskoda.log.table.soc') }}</th><th>{{ t('settings.myskoda.log.table.power') }}</th><th>{{ t('settings.myskoda.log.table.message') }}</th><th></th></tr></thead>
@@ -67,7 +80,10 @@
   </div>
 </details>
 
-<div class="section-head" style="margin-top:40px">
+</section>
+
+<section class="api-source" data-source="bmw" role="tabpanel" hidden>
+<div class="section-head">
   <h2>{{ t('settings.cardata.heading') }}</h2>
   <label class="switch">
     {{ t('settings.cardata.enabled_label') }}
@@ -103,6 +119,7 @@
     <p style="color:var(--muted); font-size:0.9em; margin-top:0">{{ t('settings.cardata.log_description') }}</p>
     <div class="form-actions" style="margin-bottom:12px">
       <button type="button" id="bc-log-refresh">{{ t('settings.myskoda.log_refresh') }}</button>
+      <button type="button" id="bc-log-zip" style="background:var(--accent2)">{{ t('api.log_zip') }}</button>
       <button type="button" id="bc-log-clear" style="background:var(--danger)">{{ t('settings.myskoda.log_clear') }}</button>
     </div>
 <div class="tablewrap"><table><thead><tr><th>{{ t('settings.myskoda.log.table.time') }}</th><th>{{ t('settings.myskoda.log.table.event') }}</th><th>{{ t('settings.myskoda.log.table.message') }}</th><th></th></tr></thead>
@@ -110,7 +127,10 @@
   </div>
 </details>
 
-<div class="section-head" style="margin-top:40px">
+</section>
+
+<section class="api-source" data-source="vw" role="tabpanel" hidden>
+<div class="section-head">
   <h2>{{ t('settings.vwda.heading') }}</h2>
   <label class="switch">
     {{ t('settings.vwda.enabled_label') }}
@@ -162,6 +182,7 @@
     <p style="color:var(--muted); font-size:0.9em; margin-top:0">{{ t('settings.vwda.log_description') }}</p>
     <div class="form-actions" style="margin-bottom:12px">
       <button type="button" id="vw-log-refresh">{{ t('settings.myskoda.log_refresh') }}</button>
+      <button type="button" id="vw-log-zip" style="background:var(--accent2)">{{ t('api.log_zip') }}</button>
       <button type="button" id="vw-log-clear" style="background:var(--danger)">{{ t('settings.myskoda.log_clear') }}</button>
     </div>
 <div class="tablewrap"><table><thead><tr><th>{{ t('settings.myskoda.log.table.time') }}</th><th>{{ t('settings.myskoda.log.table.event') }}</th><th>{{ t('settings.myskoda.log.table.state') }}</th><th>{{ t('settings.myskoda.log.table.soc') }}</th><th>{{ t('settings.myskoda.log.table.power') }}</th><th>{{ t('settings.myskoda.log.table.message') }}</th><th></th></tr></thead>
@@ -169,7 +190,10 @@
   </div>
 </details>
 
-<div class="section-head" style="margin-top:40px">
+</section>
+
+<section class="api-source" data-source="renault" role="tabpanel" hidden>
+<div class="section-head">
   <h2>{{ t('settings.renault.heading') }}</h2>
   <label class="switch">
     {{ t('settings.renault.enabled_label') }}
@@ -228,14 +252,37 @@
     <p style="color:var(--muted); font-size:0.9em; margin-top:0">{{ t('settings.renault.log_description') }}</p>
     <div class="form-actions" style="margin-bottom:12px">
       <button type="button" id="rn-log-refresh">{{ t('settings.myskoda.log_refresh') }}</button>
+      <button type="button" id="rn-log-zip" style="background:var(--accent2)">{{ t('api.log_zip') }}</button>
       <button type="button" id="rn-log-clear" style="background:var(--danger)">{{ t('settings.myskoda.log_clear') }}</button>
     </div>
 <div class="tablewrap"><table><thead><tr><th>{{ t('settings.myskoda.log.table.time') }}</th><th>{{ t('settings.myskoda.log.table.event') }}</th><th>{{ t('settings.myskoda.log.table.state') }}</th><th>{{ t('settings.myskoda.log.table.soc') }}</th><th>{{ t('settings.myskoda.log.table.power') }}</th><th>{{ t('settings.myskoda.log.table.message') }}</th><th></th></tr></thead>
 <tbody id="rn-log-rows"></tbody></table></div>
   </div>
 </details>
+</section>
 
 <script>
+// ---------- Umschalter zwischen den Quellen ----------
+const SOURCE_KEY = 'apiDebugSource';
+function showSource(name) {
+  const tabs = document.querySelectorAll('.source-switch [data-source]');
+  if (![...tabs].some(tab => tab.dataset.source === name)) name = 'myskoda';
+  tabs.forEach(tab => tab.setAttribute('aria-selected', String(tab.dataset.source === name)));
+  document.querySelectorAll('section.api-source').forEach(section => {
+    section.hidden = section.dataset.source !== name;
+  });
+  try { localStorage.setItem(SOURCE_KEY, name); } catch (e) { /* privater Modus */ }
+}
+document.querySelectorAll('.source-switch [data-source]').forEach(tab => {
+  tab.addEventListener('click', () => showSource(tab.dataset.source));
+});
+(() => {
+  const fromHash = new URLSearchParams(location.hash.slice(1)).get('source');
+  let stored = null;
+  try { stored = localStorage.getItem(SOURCE_KEY); } catch (e) { /* privater Modus */ }
+  showSource(fromHash || stored || 'myskoda');
+})();
+
 let vehicles = [];
 
 // Locale fuer Datumsformatierung an die aktive UI-Sprache gekoppelt statt
@@ -595,6 +642,10 @@ document.getElementById('ms-log-export').addEventListener('click', () => {
   window.location = `api/myskoda/logs/export?vehicle_id=${msVehicleId()}`;
 });
 
+document.getElementById('ms-log-zip').addEventListener('click', () => {
+  window.location = `api/myskoda/logs/export.zip?vehicle_id=${msVehicleId()}`;
+});
+
 document.getElementById('ms-log-clear').addEventListener('click', async () => {
   if (!confirm(T.msLogConfirmClear)) return;
   const res = await fetch(`api/myskoda/logs?vehicle_id=${msVehicleId()}`, { method: 'DELETE' });
@@ -833,6 +884,10 @@ document.getElementById('bc-log-refresh').addEventListener('click', loadCardataL
 document.getElementById('bc-log-panel').addEventListener('toggle', () => {
   if (document.getElementById('bc-log-panel').open) loadCardataLog();
 });
+document.getElementById('bc-log-zip').addEventListener('click', () => {
+  window.location = `api/bmw-cardata/logs/export.zip?vehicle_id=${bcVehicleId()}`;
+});
+
 document.getElementById('bc-log-clear').addEventListener('click', async () => {
   if (!confirm(T.msLogConfirmClear)) return;
   const res = await fetch(`api/bmw-cardata/logs?vehicle_id=${bcVehicleId()}`, { method: 'DELETE' });
@@ -1035,6 +1090,10 @@ document.getElementById('vw-log-refresh').addEventListener('click', loadVwdaLog)
 document.getElementById('vw-log-panel').addEventListener('toggle', () => {
   if (document.getElementById('vw-log-panel').open) loadVwdaLog();
 });
+document.getElementById('vw-log-zip').addEventListener('click', () => {
+  window.location = `api/vw-data-act/logs/export.zip?vehicle_id=${vwVehicleId()}`;
+});
+
 document.getElementById('vw-log-clear').addEventListener('click', async () => {
   if (!confirm(T.msLogConfirmClear)) return;
   const res = await fetch(`api/vw-data-act/logs?vehicle_id=${vwVehicleId()}`, { method: 'DELETE' });
@@ -1286,6 +1345,10 @@ document.getElementById('rn-log-refresh').addEventListener('click', loadRenaultL
 document.getElementById('rn-log-panel').addEventListener('toggle', () => {
   if (document.getElementById('rn-log-panel').open) loadRenaultLog();
 });
+document.getElementById('rn-log-zip').addEventListener('click', () => {
+  window.location = `api/renault/logs/export.zip?vehicle_id=${rnVehicleId()}`;
+});
+
 document.getElementById('rn-log-clear').addEventListener('click', async () => {
   if (!confirm(T.msLogConfirmClear)) return;
   const res = await fetch(`api/renault/logs?vehicle_id=${rnVehicleId()}`, { method: 'DELETE' });

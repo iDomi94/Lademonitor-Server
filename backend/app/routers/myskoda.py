@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 from .. import models, schemas
 from ..auth import get_current_user
 from ..database import get_db
+from ..log_export import zip_response
 from ..myskoda_poller import poll_vehicle, test_connection
 
 router = APIRouter(prefix="/api/myskoda", tags=["myskoda"])
@@ -304,6 +305,19 @@ def export_logs(
         media_type="application/json",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.get("/logs/export.zip")
+def export_logs_zip(
+    vehicle_id: str | None = None,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Alle Protokolleintraege samt Rohdaten als ZIP (siehe log_export.py)."""
+    q = db.query(models.MySkodaLogEntry).filter(models.MySkodaLogEntry.user_id == user.id)
+    if vehicle_id:
+        q = q.filter(models.MySkodaLogEntry.vehicle_id == vehicle_id)
+    return zip_response(q.order_by(models.MySkodaLogEntry.created_at.asc()).all(), "myskoda")
 
 
 @router.get("/logs/{entry_id}/payload")

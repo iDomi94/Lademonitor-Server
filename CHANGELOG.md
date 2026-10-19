@@ -6,7 +6,16 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
-## [0.42.1] — 2026-10-19
+## [0.43.0] — 2026-10-19
+
+### Added
+- **API & Debug: Umschalter zwischen den Quellen** (MyŠkoda, BMW CarData,
+  VW-Konzern, Renault/Dacia). Gezeigt wird nur die gewählte, die Auswahl
+  merkt sich der Browser (`localStorage`), `#source=myskoda|bmw|vw|renault`
+  gibt sie per Link vor.
+- **Protokoll als ZIP** für alle vier Quellen (`GET /api/<quelle>/logs/export.zip`,
+  `log_export.py`): `protokoll.json` mit allen Einträgen, älteste zuerst, und
+  je Eintrag mit Rohdaten eine Datei unter `rohdaten/`.
 
 ### Fixed
 - **VW-Datenportal: Energiezähler ohne Stand vor dem Einstecken.** Fehlte

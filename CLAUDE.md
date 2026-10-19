@@ -883,7 +883,10 @@ drinstehen. Messbar: Seitenhoehe von 2136 px auf 604 px (Desktop) bzw. von
 eine Seite ist (Vorschau-Tabelle, drei Formulare, Debug-Protokoll):
 `import` (Spritmonitor), `backup` (Daten-Backup + Backup-Import +
 WebDAV-Backup, `settings_backup.html`) und `api-debug`
-(MyŠkoda-Konfiguration + Debug-Protokoll, `settings_api.html`). Einstieg ueber
+(MyŠkoda-Konfiguration + Debug-Protokoll, `settings_api.html`). **Seit v0.43.0**
+traegt `api-debug` alle vier automatischen Quellen und zeigt per Umschalter
+oben nur eine davon (Auswahl im `localStorage`, per `#source=` verlinkbar);
+jedes Protokoll laesst sich dort komplett als ZIP laden (`log_export.py`). Einstieg ueber
 `.subpage`-Kacheln in den Einstellungen, Rueckweg ueber einen `.backlink` oben
 auf jeder Unterseite.
 

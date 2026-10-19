@@ -1112,3 +1112,9 @@ button.ghost:hover { border-color: var(--accent2); color: var(--accent2); opacit
      sonst weg - dann bliebe vom AC/DC-Anteil nur ein leerer Rahmen). */
   .rv-bar div, .place-dot { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* API & Debug: Umschalter zwischen den Quellen (settings_api.html) */
+.source-switch { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 24px; }
+.source-switch button { background: transparent; color: var(--text); border: 1px solid var(--border); }
+.source-switch button:hover { border-color: var(--accent2); color: var(--accent2); opacity: 1; }
+.source-switch button[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: #0f1420; }
