@@ -644,7 +644,9 @@ Icon/Tooltip-Logik in der SessionsList-View.
   Datum, Km-Stand, Spritmenge, Kosten, Tankstelle, Ladezustand). Bei anderen
   Sprachen/Fahrzeugtypen ggf. weitere Aliase nötig
 - **iOS-App: Fahrzeug kann beim Bearbeiten nicht gewechselt werden** (by
-  design, da `SessionUpdate`-Schema kein vehicle_id-Feld hat)
+  design, da `SessionUpdate`-Schema kein vehicle_id-Feld hat). **Seit v0.44.0
+  hat es eins** (fuer das erweiterte Bearbeiten im Web, siehe Abschnitt
+  "Ladevorgang bearbeiten: alle Felder") - die Apps nutzen es noch nicht.
 - **Ladevorgangs-Liste war auf 200 Eintraege gedeckelt** - `GET /api/sessions`
   hatte `limit=200` als Default und kein Client schickte je einen Wert.
   **Erledigt seit 2026-09-20 (v0.22.0)**, siehe Abschnitt "Paginierung von
@@ -2917,6 +2919,24 @@ Gegen die echten Daten des Nutzers geprueft (67 Ladungen, 55 Vorgaenge): 46
 Vorgaenge mit Aenderungen, 7 stimmen schon, keine neuen, 5 Hinweise - die
 Sammeleintraege 31.03., 02.04., 26.04., 18.05., 19.07. und 04.08. werden
 erkannt. Nur im Web, die Apps haben auch den Spritmonitor-Import nicht.
+
+## Ladevorgang bearbeiten: alle Felder (`templates/sessions.html`, ab 2026-10-19, v0.44.0)
+
+Wunsch des Nutzers (19.10.2026): beim Bearbeiten soll alles sinnvoll
+Anpassbare im Formular stehen, alles Weitere hinter einem Schalter. Standard
+sind seitdem zusaetzlich Endzeit, Notiz und Netzbezug. Der Schalter "Alle
+Felder anzeigen" (`.show-adv`, im `localStorage` gemerkt) blendet
+Koordinaten, `energy_is_estimated`, `outside_temp_source` und - nur beim
+Bearbeiten (`.edit-only`) - Quelle, `external_session_id`, "weiter zur
+Pruefung markieren", das Fahrzeug sowie ID/Zeitstempel ein. Die
+erweiterten Felder gehen nur mit, wenn sie vom Stand beim Oeffnen abweichen:
+sonst wuerde jedes Speichern die Ableitungen in `update_session()`
+aushebeln (Temperatur-Herkunft MANUAL, "geschaetzt" faellt bei geaenderten
+kWh). `needs_review` bleibt "Speichern = geprueft", ausser der Haken ist
+gesetzt. Nicht editierbar bleiben nur `id`, `user_id`, `created_at`,
+`updated_at`. `SessionUpdate` nimmt dafuer `vehicle_id` (Eigentum geprueft),
+`source` und `external_session_id` an; `null` bei den beiden Pflichtfeldern
+heisst "nicht aendern". Tests: `tests/test_session_edit_all_fields.py`.
 
 ## Backup-Export/-Import (`routers/backup.py`)
 

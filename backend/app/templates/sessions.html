@@ -38,6 +38,10 @@
     <input type="datetime-local" id="f-start" required>
   </div>
   <div>
+    <label>{{ t('sessions.form.end') }}</label>
+    <input type="datetime-local" id="f-end">
+  </div>
+  <div>
     <label>{{ t('sessions.form.type') }}</label>
     <select id="f-type">
       <option value="">–</option>
@@ -65,6 +69,10 @@
     </select>
   </div>
   <div>
+    <label title="{{ t('sessions.form.grid_kwh_hint') }}">{{ t('sessions.form.grid_kwh') }}</label>
+    <input type="number" step="0.01" min="0" id="f-grid" title="{{ t('sessions.form.grid_kwh_hint') }}">
+  </div>
+  <div>
     <label>{{ t('sessions.form.price_kwh') }}</label>
     <input type="number" step="0.0001" id="f-price-kwh">
   </div>
@@ -80,6 +88,59 @@
     <label>{{ t('sessions.form.outside_temp') }}</label>
     <input type="number" step="0.1" min="-60" max="60" id="f-temp"
            placeholder="{{ t('sessions.form.outside_temp_placeholder') }}">
+  </div>
+  <div class="form-span">
+    <label>{{ t('sessions.form.notes') }}</label>
+    <textarea id="f-notes" rows="2"></textarea>
+  </div>
+  <!-- Alles Weitere, was am Ladevorgang gespeichert ist: selten noetig, aber
+       ohne Umweg ueber die API korrigierbar. Was nur beim Bearbeiten Sinn
+       hat (Quelle, externe ID, Pruefen), traegt .edit-only. -->
+  <div class="form-row-wide">
+    <label><input type="checkbox" id="f-advanced" style="width:auto; display:inline-block; margin-right:6px">{{ t('sessions.form.advanced') }}</label>
+  </div>
+  <div class="adv">
+    <label>{{ t('sessions.form.latitude') }}</label>
+    <input type="number" step="any" min="-90" max="90" id="f-lat">
+  </div>
+  <div class="adv">
+    <label>{{ t('sessions.form.longitude') }}</label>
+    <input type="number" step="any" min="-180" max="180" id="f-lon">
+  </div>
+  <div class="adv">
+    <label title="{{ t('sessions.form.estimated_hint') }}">{{ t('sessions.form.estimated') }}</label>
+    <select id="f-estimated" title="{{ t('sessions.form.estimated_hint') }}">
+      <option value="false">{{ t('sessions.form.no') }}</option>
+      <option value="true">{{ t('sessions.form.yes') }}</option>
+    </select>
+  </div>
+  <div class="adv">
+    <label>{{ t('sessions.form.temp_source') }}</label>
+    <select id="f-temp-source">
+      <option value="">–</option>
+      <option value="vehicle">{{ t('sessions.form.temp_source_vehicle') }}</option>
+      <option value="manual">{{ t('sessions.form.temp_source_manual') }}</option>
+      <option value="weather">{{ t('sessions.form.temp_source_weather') }}</option>
+      <option value="weather_daily">{{ t('sessions.form.temp_source_weather_daily') }}</option>
+    </select>
+  </div>
+  <div class="adv edit-only">
+    <label>{{ t('sessions.form.source') }}</label>
+    <select id="f-source">
+      <option value="manual">{{ t('sessions.badge.manual') }}</option>
+      <option value="automatic">{{ t('sessions.badge.automatic') }}</option>
+      <option value="import">{{ t('sessions.badge.import') }}</option>
+    </select>
+  </div>
+  <div class="adv edit-only">
+    <label title="{{ t('sessions.form.external_id_hint') }}">{{ t('sessions.form.external_id') }}</label>
+    <input id="f-external-id" title="{{ t('sessions.form.external_id_hint') }}">
+  </div>
+  <div class="adv edit-only form-row-wide">
+    <label><input type="checkbox" id="f-keep-review" style="width:auto; display:inline-block; margin-right:6px">{{ t('sessions.form.keep_review') }}</label>
+  </div>
+  <div class="adv edit-only form-span">
+    <div class="form-meta" id="f-meta"></div>
   </div>
   <div class="form-actions">
     <button type="button" id="cancel-edit-btn" style="background:var(--muted); display:none">{{ t('sessions.form.cancel') }}</button>
@@ -110,6 +171,11 @@ let providers = [];
 let locations = [];
 let allSessions = [];
 let editingSessionId = null;
+// Der Vorgang, wie er beim Oeffnen zum Bearbeiten war. Die erweiterten Felder
+// gehen nur mit, wenn sie sich davon unterscheiden - sonst ueberschriebe ein
+// blosses Speichern die Regeln, die der Server aus einer ECHTEN Aenderung
+// ableitet (Herkunft der Temperatur, "geschaetzt" bei geaenderten kWh).
+let editingOriginal = null;
 
 // Locale fuer Datumsformatierung an die aktive UI-Sprache gekoppelt statt
 // fest auf 'de-DE'.
@@ -136,6 +202,7 @@ const T = {
   editHeading: {{ t('sessions.form.edit_heading')|tojson }},
   submitNew: {{ t('sessions.form.submit_new')|tojson }},
   submitEdit: {{ t('sessions.form.submit_edit')|tojson }},
+  metaLine: {{ t('sessions.form.meta_line')|tojson }},
 };
 
 async function loadDropdowns() {
@@ -362,6 +429,7 @@ function startEdit(id) {
   document.getElementById('f-location').value = s.location_id || '';
   document.getElementById('f-location-text').value = s.geocoded_place || '';
   document.getElementById('f-start').value = toDatetimeLocalValue(s.start_time);
+  document.getElementById('f-end').value = toDatetimeLocalValue(s.end_time);
   document.getElementById('f-type').value = s.charging_type || '';
   document.getElementById('f-soc-start').value = s.soc_start ?? '';
   document.getElementById('f-soc-end').value = s.soc_end ?? '';
@@ -372,6 +440,22 @@ function startEdit(id) {
   document.getElementById('f-price-total').value = s.price_total ?? '';
   document.getElementById('f-odo').value = s.odometer_km ?? '';
   document.getElementById('f-temp').value = s.outside_temp_c ?? '';
+  document.getElementById('f-grid').value = s.grid_energy_kwh ?? '';
+  document.getElementById('f-notes').value = s.notes || '';
+  document.getElementById('f-lat').value = s.latitude ?? '';
+  document.getElementById('f-lon').value = s.longitude ?? '';
+  document.getElementById('f-estimated').value = String(!!s.energy_is_estimated);
+  document.getElementById('f-temp-source').value = s.outside_temp_source || '';
+  document.getElementById('f-source').value = s.source || 'manual';
+  document.getElementById('f-external-id').value = s.external_session_id || '';
+  document.getElementById('f-keep-review').checked = false;
+  const fmt = iso => iso ? new Date(iso + (/[Zz+]/.test(iso.slice(10)) ? '' : 'Z'))
+    .toLocaleString(LOCALE, { dateStyle: 'medium', timeStyle: 'short' }) : '–';
+  document.getElementById('f-meta').textContent = T.metaLine
+    .replace('{id}', s.id).replace('{created}', fmt(s.created_at)).replace('{updated}', fmt(s.updated_at));
+  editingOriginal = s;
+  document.getElementById('session-form').classList.add('editing');
+  updateVehicleLock();
 
   document.getElementById('form-heading').textContent = T.editHeading;
   document.getElementById('submit-btn').textContent = T.submitEdit;
@@ -381,12 +465,45 @@ function startEdit(id) {
 
 function cancelEdit() {
   editingSessionId = null;
-  document.getElementById('session-form').reset();
+  editingOriginal = null;
+  const form = document.getElementById('session-form');
+  // reset() setzt auch den Schalter "Alle Felder" zurueck - der soll bleiben.
+  const advanced = document.getElementById('f-advanced').checked;
+  form.reset();
+  document.getElementById('f-advanced').checked = advanced;
+  form.classList.remove('editing');
+  updateVehicleLock();
   document.getElementById('form-heading').textContent = T.newHeading;
   document.getElementById('submit-btn').textContent = T.submitNew;
   document.getElementById('cancel-edit-btn').style.display = 'none';
 }
 document.getElementById('cancel-edit-btn').addEventListener('click', cancelEdit);
+
+// Das Fahrzeug laesst sich nur im erweiterten Bearbeiten wechseln - im
+// einfachen Formular waere es sonst ein Feld, dessen Aenderung verpufft.
+function updateVehicleLock() {
+  const advanced = document.getElementById('f-advanced').checked;
+  document.getElementById('session-form').classList.toggle('show-adv', advanced);
+  document.getElementById('f-vehicle').disabled = !!editingSessionId && !advanced;
+}
+document.getElementById('f-advanced').addEventListener('change', () => {
+  updateVehicleLock();
+  try { localStorage.setItem('sessions.advanced', document.getElementById('f-advanced').checked ? '1' : ''); } catch (e) {}
+});
+try { document.getElementById('f-advanced').checked = localStorage.getItem('sessions.advanced') === '1'; } catch (e) {}
+updateVehicleLock();
+
+// datetime-local kennt keine Sekunden. Unveraendert wird deshalb der
+// Originalwert zurueckgeschickt, sonst kappte jedes Speichern die Sekunden.
+function dateTimeField(id, original) {
+  const value = document.getElementById(id).value;
+  if (!value) return null;
+  return original && toDatetimeLocalValue(original) === value ? original : value;
+}
+function numberOrNull(id) {
+  const value = document.getElementById(id).value;
+  return value === '' ? null : Number(value);
+}
 
 async function deleteSession(id) {
   if (!confirm(T.confirmDelete)) return;
@@ -402,7 +519,8 @@ document.getElementById('session-form').addEventListener('submit', async (e) => 
     provider_id: document.getElementById('f-provider').value || null,
     location_id: document.getElementById('f-location').value || null,
     geocoded_place: document.getElementById('f-location-text').value || null,
-    start_time: document.getElementById('f-start').value,
+    start_time: dateTimeField('f-start', editingOriginal && editingOriginal.start_time),
+    end_time: dateTimeField('f-end', editingOriginal && editingOriginal.end_time),
     charging_type: document.getElementById('f-type').value || null,
     soc_start: document.getElementById('f-soc-start').value || null,
     soc_end: document.getElementById('f-soc-end').value || null,
@@ -412,15 +530,49 @@ document.getElementById('session-form').addEventListener('submit', async (e) => 
     price_total: document.getElementById('f-price-total').value || null,
     odometer_km: document.getElementById('f-odo').value || null,
     outside_temp_c: document.getElementById('f-temp').value || null,
+    grid_energy_kwh: document.getElementById('f-grid').value || null,
+    notes: document.getElementById('f-notes').value || null,
   };
+
+  if (document.getElementById('f-advanced').checked) {
+    const o = editingOriginal || {};
+    const adv = {
+      latitude: numberOrNull('f-lat'),
+      longitude: numberOrNull('f-lon'),
+      energy_is_estimated: document.getElementById('f-estimated').value === 'true',
+      outside_temp_source: document.getElementById('f-temp-source').value || null,
+    };
+    const was = {
+      latitude: o.latitude ?? null,
+      longitude: o.longitude ?? null,
+      energy_is_estimated: !!o.energy_is_estimated,
+      outside_temp_source: o.outside_temp_source || null,
+    };
+    if (editingSessionId) {
+      adv.source = document.getElementById('f-source').value;
+      adv.external_session_id = document.getElementById('f-external-id').value.trim() || null;
+      was.source = o.source;
+      was.external_session_id = o.external_session_id || null;
+    }
+    for (const [key, value] of Object.entries(adv)) {
+      if (value !== was[key]) payload[key] = value;
+    }
+  }
 
   let res;
   if (editingSessionId) {
     // vehicle_id lässt sich beim PATCH nicht ändern (Backend erlaubt es aktuell nicht) - daher entfernen
+    // Das Fahrzeug geht nur mit, wenn es im erweiterten Bearbeiten
+    // tatsaechlich gewechselt wurde.
     const { vehicle_id, ...patchPayload } = payload;
+    if (document.getElementById('f-advanced').checked && vehicle_id !== editingOriginal.vehicle_id) {
+      patchPayload.vehicle_id = vehicle_id;
+    }
     // Öffnen + Speichern gilt als Review: automatisch erkannte Ladevorgänge
-    // verlieren dadurch ihr needs_review-Flag, ohne eigenes UI-Element dafür.
-    patchPayload.needs_review = false;
+    // verlieren dadurch ihr needs_review-Flag - ausser, im erweiterten
+    // Bearbeiten ist "weiter zur Prüfung markieren" angehakt.
+    patchPayload.needs_review = document.getElementById('f-advanced').checked
+      && document.getElementById('f-keep-review').checked;
     res = await fetch(`api/sessions/${editingSessionId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },

@@ -819,6 +819,13 @@ class SessionCreate(SessionBase):
 
 
 class SessionUpdate(BaseModel):
+    # Die drei folgenden Felder stehen nur im erweiterten Bearbeiten der
+    # Web-UI ("Alle Felder"). Ein Fahrzeugwechsel ist dort fuer falsch
+    # zugeordnete automatische Vorgaenge gedacht; `null` bei vehicle_id/source
+    # laesst den Wert stehen (beides ist in der DB Pflicht).
+    vehicle_id: str | None = None
+    source: SessionSource | None = None
+    external_session_id: str | None = None
     provider_id: str | None = None
     location_id: str | None = None
     start_time: datetime | None = None

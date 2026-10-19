@@ -5,6 +5,16 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.44.0",
+        "date": "2026-10-19",
+        "title": "Ladevorgang bearbeiten: alle Felder",
+        "changes": [
+            "Im Formular eines Ladevorgangs lassen sich jetzt auch Endzeit, Notiz und der Netzbezug (Heimladung mit PV/Hausakku) bearbeiten.",
+            "Neuer Schalter „Alle Felder anzeigen“: blendet zusätzlich GPS-Koordinaten, „kWh geschätzt“, Herkunft der Temperatur sowie beim Bearbeiten Quelle, externe ID, „weiter zur Prüfung markieren“ und das Fahrzeug ein. Der Schalter bleibt im Browser gespeichert.",
+            "Das Fahrzeug eines Vorgangs ist im einfachen Formular gesperrt, statt eine Änderung stillschweigend zu verwerfen; im erweiterten Formular lässt es sich wechseln.",
+        ],
+    },
+    {
         "version": "0.43.4",
         "date": "2026-10-19",
         "title": "Richtige Uhrzeit bei automatisch erkannten Ladevorgängen",
