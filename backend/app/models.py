@@ -941,6 +941,9 @@ class ChargeDetectionStateMixin:
     # zuletzt gesehener Rohwert (siehe charge_detection.py::_add_energy).
     open_energy_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
     open_energy_raw_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Hat die Quelle waehrend des Steckens einmal "laedt" gemeldet? Dann wird
+    # der Vorgang auch ohne SoC-Zuwachs/Leistung/Zaehler angelegt.
+    open_charging_seen: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
 
 class MySkodaConfig(ChargeDetectionStateMixin, Base):

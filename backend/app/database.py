@@ -611,6 +611,14 @@ def run_light_migrations() -> None:
                     f"ADD COLUMN IF NOT EXISTS {energy_column} DOUBLE PRECISION"
                 )
             )
+        # Merker "Quelle hat laedt gemeldet" (charge_detection.finish_open_session).
+        for detection_table in ("myskoda_configs", "vw_data_act_configs", "renault_configs"):
+            conn.execute(
+                text(
+                    f"ALTER TABLE {detection_table} "
+                    "ADD COLUMN IF NOT EXISTS open_charging_seen BOOLEAN"
+                )
+            )
         conn.execute(
             text(
                 "ALTER TABLE webdav_backup_configs "

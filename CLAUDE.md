@@ -2738,7 +2738,11 @@ des ersten Berichts mit Zustand. Ausserdem kommen ZIPs nicht immer in
 zeitlicher Reihenfolge des INHALTS: ein spaeteres ZIP trug den Stand von
 05:24 (Kabel steckt), nachdem schon 06:02 (Kabel gezogen) verarbeitet war.
 Seit v0.43.2 ueberspringt `vw_data_act_poller._apply()` ein ZIP, dessen
-`captured_at` aelter ist als `last_captured_at`. Ein ZIP kann ausserdem zwei
+`captured_at` aelter ist als `last_captured_at`. Ausserdem entsteht seit v0.43.2 ein Vorgang
+immer, wenn waehrend des Steckens einmal ein echter Ladezustand gemeldet wurde
+(`DetectionSource.charging_states`, Merker `open_charging_seen`) - auch ganz
+ohne SoC, Leistung und Zaehler, dann mit Luecken und `needs_review`.
+Entscheidung des Nutzers 19.10.2026: lieber unvollstaendig als gar nicht. Ein ZIP kann ausserdem zwei
 Ladezustaende tragen: den des Standardberichts und die Kopie aus einem
 Ladeauftrag (`RbcStateReportForStopChargingJob`), siehe `REPORT_COPY_KEYS`.
 

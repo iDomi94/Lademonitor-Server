@@ -127,6 +127,31 @@ def test_plugged_without_charging_is_discarded(db_session, config):
     assert config.open_start_time is None
 
 
+def test_charging_state_seen_creates_session_without_any_numbers(db_session, config):
+    # Wie beim ID.3 vom 18./19.10.2026: waehrend des Steckens kommen Berichte
+    # ohne SoC, Leistung und Zaehler - aber einer meldet "laedt". Lieber ein
+    # Vorgang mit Luecken als keiner.
+    sessions = run(db_session, config, [
+        report(0, plugged=False, soc=None),
+        report(15, plugged=True, soc=None, power=None, state="READY_FOR_CHARGING"),
+        report(30, plugged=True, soc=None, power=None, state="CHARGING_HV_BATTERY"),
+        report(45, plugged=False, soc=None),
+    ])
+    assert len(sessions) == 1
+    assert sessions[0].needs_review is True
+    assert sessions[0].energy_kwh is None
+    assert config.open_charging_seen is None
+
+
+def test_ready_state_only_is_still_discarded(db_session, config):
+    sessions = run(db_session, config, [
+        report(0, plugged=False, soc=None),
+        report(15, plugged=True, soc=None, power=None, state="READY_FOR_CHARGING"),
+        report(45, plugged=False, soc=None),
+    ])
+    assert sessions == []
+
+
 def test_report_without_soc_keeps_the_last_known_value(db_session, config):
     # Echtes Muster aus dem Skoda-Datenportal (15.10.2026): neben vollstaendigen
     # Berichten kommen welche nur mit Einstellungen und Ladezustand, ohne SoC.

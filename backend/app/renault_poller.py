@@ -156,6 +156,7 @@ SOURCE = DetectionSource(
     log=log_event,
     backdate_limit_seconds=_backdate_limit_seconds,
     discharging_states=DISCHARGING_STATES,
+    charging_states=frozenset({"CHARGE_IN_PROGRESS", "V2G_CHARGING_NORMAL"}),
 )
 
 

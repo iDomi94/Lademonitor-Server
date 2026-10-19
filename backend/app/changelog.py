@@ -7,9 +7,10 @@ CHANGELOG = [
     {
         "version": "0.43.2",
         "date": "2026-10-19",
-        "title": "VW-Datenportal: veraltete Datensätze überspringen",
+        "title": "Automatische Erfassung: weniger verlorene Ladevorgänge",
         "changes": [
             "Das VW-Datenportal liefert seine Datensätze nicht immer in zeitlicher Reihenfolge: ein späterer Datensatz kann einen älteren Fahrzeugstand enthalten, etwa noch ein steckendes Kabel, das längst gezogen ist. Daraus wurde bisher ein Ladevorgang mit falscher Startzeit eröffnet. Solche Datensätze werden jetzt übersprungen und im Protokoll vermerkt.",
+            "Hat das Fahrzeug während des Steckens einmal „lädt“ gemeldet, entsteht jetzt immer ein Ladevorgang – auch wenn SoC, Ladeleistung und Energie fehlen. Er ist zum Prüfen markiert, die fehlenden Werte trägst du dort nach. Bisher wurde so ein Vorgang verworfen. Gilt für MyŠkoda, das VW-Datenportal und Renault.",
         ],
     },
     {
