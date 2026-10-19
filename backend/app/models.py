@@ -204,6 +204,11 @@ class User(Base):
     # (Open-Meteo ist quelloffen), traegt sie hier ein und der Server ruft
     # ueberhaupt nichts Fremdes mehr auf.
     weather_api_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Zuletzt gewaehlte Quelle auf der Seite "API & Debug" (myskoda/bmw/vw/
+    # renault). Auf dem Server statt nur im Browser, damit sie auch in der
+    # HA-App und auf einem zweiten Geraet gilt. Leer = erste aktive Quelle
+    # (main.py::api_debug_page).
+    api_debug_source: Mapped[str | None] = mapped_column(String, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 

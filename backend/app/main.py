@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
-from . import crypto, models
+from . import crypto, models, schemas
 from .auth import get_current_user, get_user_from_request
 from .changelog import CHANGELOG, VERSION
 from .database import Base, engine, get_db, run_light_migrations
@@ -379,7 +379,36 @@ def backup_page(request: Request, db: Session = Depends(get_db)):
 
 @app.get("/api-debug", response_class=HTMLResponse)
 def api_debug_page(request: Request, db: Session = Depends(get_db)):
-    return _page(request, db, "settings_api.html")
+    return _page(request, db, "settings_api.html",
+                 api_initial_source=_api_debug_initial_source(request, db))
+
+
+# Reihenfolge wie im Umschalter auf der Seite.
+_API_DEBUG_CONFIGS = (
+    ("myskoda", models.MySkodaConfig),
+    ("bmw", models.BmwCarDataConfig),
+    ("vw", models.VwDataActConfig),
+    ("renault", models.RenaultConfig),
+)
+
+
+def _api_debug_initial_source(request: Request, db: Session) -> str:
+    """Zuletzt gewaehlte Quelle, sonst die erste mit eingeschaltetem Abruf,
+    sonst die erste ueberhaupt."""
+    user = get_user_from_request(request, db)
+    if user is None:
+        return _API_DEBUG_CONFIGS[0][0]
+    if user.api_debug_source in schemas.API_DEBUG_SOURCES:
+        return user.api_debug_source
+    for name, model in _API_DEBUG_CONFIGS:
+        active = (
+            db.query(model.id)
+            .filter(model.user_id == user.id, model.enabled.is_(True))
+            .first()
+        )
+        if active:
+            return name
+    return _API_DEBUG_CONFIGS[0][0]
 
 
 @app.get("/email", response_class=HTMLResponse)

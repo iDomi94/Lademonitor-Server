@@ -6,6 +6,14 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.43.3] — 2026-10-19
+
+### Changed
+- **API & Debug: gewählte Quelle wird am Konto gespeichert** (`User.api_debug_source`,
+  `PUT /api/auth/api-debug-source`) statt im `localStorage`. Ohne gespeicherte
+  Auswahl öffnet die Seite die erste Quelle mit eingeschaltetem Abruf
+  (Reihenfolge MyŠkoda, BMW, VW, Renault).
+
 ## [0.43.2] — 2026-10-19
 
 ### Fixed

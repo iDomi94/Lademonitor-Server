@@ -397,6 +397,17 @@ def set_language(
     return user
 
 
+@router.put("/api-debug-source", status_code=204)
+def set_api_debug_source(
+    payload: schemas.ApiDebugSourceUpdate,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Merkt sich die zuletzt gewaehlte Quelle auf der Seite "API & Debug"."""
+    user.api_debug_source = payload.source
+    db.commit()
+
+
 @router.get("/users", response_model=list[schemas.UserOut])
 def list_users(db: Session = Depends(get_db), _: models.User = Depends(require_admin)):
     return db.query(models.User).order_by(models.User.created_at).all()

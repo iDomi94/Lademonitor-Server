@@ -5,6 +5,15 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.43.3",
+        "date": "2026-10-19",
+        "title": "API & Debug öffnet die richtige Quelle",
+        "changes": [
+            "Die Seite „API & Debug“ merkt sich die zuletzt gewählte Quelle jetzt in deinem Konto statt nur im Browser – sie gilt also auch in der Home-Assistant-App und auf anderen Geräten.",
+            "Hast du noch keine gewählt, öffnet sich die erste Quelle mit eingeschaltetem Abruf statt immer MyŠkoda.",
+        ],
+    },
+    {
         "version": "0.43.2",
         "date": "2026-10-19",
         "title": "Automatische Erfassung: weniger verlorene Ladevorgänge",

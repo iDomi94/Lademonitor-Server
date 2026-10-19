@@ -158,6 +158,20 @@ class LoginResponse(BaseModel):
     user: UserOut
 
 
+API_DEBUG_SOURCES = ("myskoda", "bmw", "vw", "renault")
+
+
+class ApiDebugSourceUpdate(BaseModel):
+    source: str
+
+    @field_validator("source")
+    @classmethod
+    def _validate_source(cls, value: str) -> str:
+        if value not in API_DEBUG_SOURCES:
+            raise ValueError(f"source must be one of {', '.join(API_DEBUG_SOURCES)}")
+        return value
+
+
 class LanguageUpdate(BaseModel):
     language: str
 
