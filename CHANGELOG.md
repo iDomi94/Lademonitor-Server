@@ -6,6 +6,16 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.43.4] — 2026-10-19
+
+### Fixed
+- **Uhrzeit automatisch erkannter Ladevorgänge** (MyŠkoda, VW-Datenportal,
+  Renault): `charge_detection.create_session()` schrieb `start_time`/`end_time`
+  als naive UTC, die DB erwartet naive Ortszeit (wie HA-Push und BMW CarData).
+  Folge: Vorgänge standen in Mitteleuropa 1–2 h zu früh. Jetzt über
+  `utc_to_local()` umgerechnet; die `external_session_id` bleibt UTC-basiert.
+  Bestandsvorgänge werden nicht migriert.
+
 ## [0.43.3] — 2026-10-19
 
 ### Changed

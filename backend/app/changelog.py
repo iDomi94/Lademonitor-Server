@@ -5,6 +5,14 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.43.4",
+        "date": "2026-10-19",
+        "title": "Richtige Uhrzeit bei automatisch erkannten Ladevorgängen",
+        "changes": [
+            "Ladevorgänge aus MyŠkoda, dem VW-Datenportal und Renault standen mit UTC-Zeit in der Liste, im Sommer also zwei Stunden (im Winter eine) zu früh. Neue Vorgänge bekommen jetzt die Ortszeit des Servers, wie alle anderen. Bereits angelegte Vorgänge bleiben unverändert – bei Bedarf die Zeit beim Prüfen korrigieren.",
+        ],
+    },
+    {
         "version": "0.43.3",
         "date": "2026-10-19",
         "title": "API & Debug öffnet die richtige Quelle",
