@@ -6,6 +6,25 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.44.0] — 2026-10-19
+
+### Added
+- **Ladevorgang bearbeiten: alle gespeicherten Felder** (`templates/sessions.html`).
+  Standardmäßig neu: Endzeit, Notiz, Netzbezug (`grid_energy_kwh`). Hinter dem
+  Schalter „Alle Felder anzeigen“ (im `localStorage` gemerkt): Koordinaten,
+  `energy_is_estimated`, `outside_temp_source` und beim Bearbeiten Quelle,
+  `external_session_id`, `needs_review` und das Fahrzeug, dazu ID und
+  Zeitstempel zur Info. Erweiterte Felder gehen nur bei einer echten Änderung
+  mit, damit die Ableitungen des Servers (Temperatur-Herkunft, „geschätzt“)
+  weiter greifen. Unveränderte Zeiten behalten ihre Sekunden.
+- `PATCH /api/sessions/{id}` nimmt `vehicle_id` (nur eigene Fahrzeuge),
+  `source` und `external_session_id` an; `null` bei den beiden Pflichtfeldern
+  ändert nichts.
+
+### Changed
+- Das Fahrzeugfeld ist beim Bearbeiten im einfachen Formular gesperrt (die
+  Änderung wurde bisher stillschweigend verworfen).
+
 ## [0.43.4] — 2026-10-19
 
 ### Fixed

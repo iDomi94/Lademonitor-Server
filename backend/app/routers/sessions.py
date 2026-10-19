@@ -280,6 +280,14 @@ def update_session(
         raise HTTPException(404, "Ladevorgang nicht gefunden")
 
     fields = payload.model_dump(exclude_unset=True)
+    # Pflichtspalten: `null` heisst hier "nicht aendern", nicht "leeren".
+    for required in ("vehicle_id", "source"):
+        if required in fields and fields[required] is None:
+            del fields[required]
+    if "vehicle_id" in fields:
+        _get_owned_vehicle(db, user, fields["vehicle_id"])
+    if fields.get("external_session_id") == "":
+        fields["external_session_id"] = None
     previous_energy = session.energy_kwh
     previous_temp = session.outside_temp_c
     for field, value in fields.items():
