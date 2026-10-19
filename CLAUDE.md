@@ -2728,6 +2728,24 @@ nicht nur ueber den SoC-Sprung ab 5 Punkten - ein 10-min-AC-Vorgang (rund 2
 kWh, 3 %) fiel vorher durch. Ohne Energiezaehler (der Skoda liefert bisher
 keinen) bleibt es beim SoC-Sprung.
 
+**Erste echte Daten vom ID.3 (18./19.10.2026, zweites Konto):** der ID.3
+meldet den Energiezaehler je Vorgang (`charge_energy` 0 -> 16 kWh bei einer
+Ladung auf 100 %), aber zwischen Einstecken und Ladeende kamen nur Berichte
+ohne Ladezustand - der erste mit Zustand stand schon auf 100 % und "bereit".
+Bis 0.42.1 wurde der Vorgang deshalb verworfen (Ausgangswert = 16 kWh, kein
+SoC-Zuwachs); seitdem entsteht er, aber mit Start-SoC 100 % und der Startzeit
+des ersten Berichts mit Zustand. Ausserdem kommen ZIPs nicht immer in
+zeitlicher Reihenfolge des INHALTS: ein spaeteres ZIP trug den Stand von
+05:24 (Kabel steckt), nachdem schon 06:02 (Kabel gezogen) verarbeitet war.
+Seit v0.43.2 ueberspringt `vw_data_act_poller._apply()` ein ZIP, dessen
+`captured_at` aelter ist als `last_captured_at`. Ausserdem entsteht seit v0.43.2 ein Vorgang
+immer, wenn waehrend des Steckens einmal ein echter Ladezustand gemeldet wurde
+(`DetectionSource.charging_states`, Merker `open_charging_seen`) - auch ganz
+ohne SoC, Leistung und Zaehler, dann mit Luecken und `needs_review`.
+Entscheidung des Nutzers 19.10.2026: lieber unvollstaendig als gar nicht. Ein ZIP kann ausserdem zwei
+Ladezustaende tragen: den des Standardberichts und die Kopie aus einem
+Ladeauftrag (`RbcStateReportForStopChargingJob`), siehe `REPORT_COPY_KEYS`.
+
 **Sonstiges:** Einschalten wird mit 422 abgelehnt, wenn fuer das Fahrzeug
 MyŠkoda oder BMW CarData aktiv ist. E-Mail, Passwort, FIN und Rohdaten
 verschluesselt (`database.py`-Listen), Passwort nie in der Antwort

@@ -6,6 +6,18 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.43.2] — 2026-10-19
+
+### Fixed
+- **VW-Datenportal: Datensatz mit älterem Stand als der zuletzt verarbeitete
+  wird übersprungen** (`vw_data_act_poller._apply`). Beim ID.3 kam nach einem
+  Stand von 06:02 (Kabel gezogen) ein ZIP mit dem Stand von 05:24 (Kabel
+  steckt) und eröffnete einen Ladevorgang mit Startzeit 05:24.
+- **Ladevorgang wird angelegt, sobald die Quelle einmal „lädt“ gemeldet hat**
+  (`charge_detection.finish_open_session`, neue Spalte `open_charging_seen`),
+  auch ohne SoC-Zuwachs, Leistung oder Zählerstand – vorher verworfen. Nur
+  „steckt, lädt aber nicht“ (bereit, Ziel erreicht) bleibt Rauschen.
+
 ## [0.43.1] — 2026-10-19
 
 ### Changed

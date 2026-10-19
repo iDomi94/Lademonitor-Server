@@ -138,6 +138,7 @@ SOURCE = DetectionSource(
     log=log_event,
     backdate_limit_seconds=_backdate_limit_seconds,
     discharging_states=DISCHARGING_STATES,
+    charging_states=frozenset({"CHARGING_HV_BATTERY", "CHARGING"}),
 )
 
 
@@ -263,6 +264,26 @@ def _process_datasets(db: Session, config: models.VwDataActConfig, client: DataA
 
 
 def _apply(db: Session, config: models.VwDataActConfig, snapshot: DataActSnapshot) -> None:
+    # Die ZIPs kommen nach `createdOn` sortiert, ihr Inhalt aber nicht immer:
+    # beim ID.3 (19.10.2026) enthielt ein spaeteres ZIP einen Stand von 05:24,
+    # nachdem schon einer von 06:02 verarbeitet war, und meldete darin noch das
+    # laengst gezogene Kabel. Ausgewertet haette das einen Vorgang mit
+    # Startzeit 05:24 eroeffnet. Ein aelterer Stand als der zuletzt verarbeitete
+    # bringt nichts Neues - nur protokollieren.
+    if (
+        config.last_captured_at is not None
+        and snapshot.captured_at < config.last_captured_at
+    ):
+        log_event(
+            db,
+            config,
+            "dataset",
+            f"Datensatz {snapshot.name} enthaelt einen aelteren Stand "
+            f"({snapshot.captured_at:%d.%m. %H:%M:%S}) als der zuletzt verarbeitete "
+            f"({config.last_captured_at:%d.%m. %H:%M:%S}) - uebersprungen.",
+            snapshot=snapshot,
+        )
+        return
     if not apply_snapshot(db, config, snapshot, SOURCE):
         log_event(
             db,

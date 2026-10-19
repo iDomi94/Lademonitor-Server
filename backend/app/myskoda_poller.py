@@ -196,6 +196,7 @@ SOURCE = DetectionSource(
     log=log_event,
     backdate_limit_seconds=_backdate_limit_seconds,
     discharging_states=frozenset(DISCHARGING_STATES),
+    charging_states=frozenset({"CHARGING"}),
     saved_location_label="MyŠkoda-App",
 )
 

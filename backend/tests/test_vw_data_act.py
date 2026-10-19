@@ -474,6 +474,36 @@ def test_charging_session_with_measured_energy(client, db_session, portal):
     assert portal.count("/download") == 4
 
 
+def test_dataset_with_older_state_than_last_one_is_skipped(client, db_session, portal):
+    """ID.3, 19.10.2026: ein spaeteres ZIP brachte einen Stand von 05:24 mit
+    steckendem Kabel, nachdem schon einer von 06:02 (Kabel gezogen) verarbeitet
+    war. Eroeffnet werden darf erst der wirklich neue Stand."""
+    register(client)
+    t0 = datetime(2026, 10, 19, 5, 0)
+    config = _config(db_session, client, last_dataset_name="ds-0.zip", last_dataset_created=t0)
+    portal.add("ds-0.zip", t0, dataset(t0, soc=12))
+    portal.add("ds-1.zip", t0 + timedelta(minutes=60), dataset(t0 + timedelta(minutes=62), soc=11))
+    stale = t0 + timedelta(minutes=24)
+    portal.add("ds-2.zip", t0 + timedelta(minutes=150), dataset(
+        stale, soc=11, plug="PLUG_CONNECTION_STATE_CONNECTED",
+        state="CHARGE_STATE_READY_FOR_CHARGING",
+    ))
+    fresh = t0 + timedelta(minutes=157)
+    portal.add("ds-3.zip", t0 + timedelta(minutes=165), dataset(
+        fresh, soc=11, plug="PLUG_CONNECTION_STATE_CONNECTED",
+        state="CHARGE_STATE_READY_FOR_CHARGING",
+    ))
+
+    vw_data_act_poller.poll_vehicle(db_session, config)
+    assert config.last_status == "ok", config.last_error
+    assert config.open_start_time == fresh
+    assert config.last_dataset_name == "ds-3.zip"
+    skipped = db_session.query(models.VwDataActLogEntry).filter(
+        models.VwDataActLogEntry.message.contains("ds-2.zip")
+    ).all()
+    assert len(skipped) == 1 and "aelteren Stand" in skipped[0].message
+
+
 def test_new_identifier_is_picked_up_when_list_is_empty(client, db_session, portal):
     register(client)
     config = _config(db_session, client, identifier="alt")

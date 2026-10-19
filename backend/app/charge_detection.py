@@ -161,6 +161,10 @@ class DetectionSource:
     log: LogFn
     backdate_limit_seconds: Callable[[Any], int]
     discharging_states: frozenset[str] = field(default_factory=frozenset)
+    # Zustaende, in denen sicher Strom in den Akku fliesst. Wurde einer davon
+    # waehrend des Steckens gesehen, entsteht der Vorgang auch ohne SoC-Zuwachs,
+    # Leistung oder Zaehlerstand (siehe finish_open_session).
+    charging_states: frozenset[str] = field(default_factory=frozenset)
     saved_location_label: str | None = None
 
 
@@ -296,6 +300,7 @@ def reset_open_session(config: Any) -> None:
     config.open_in_saved_location = None
     config.open_energy_kwh = None
     config.open_energy_raw_kwh = None
+    config.open_charging_seen = None
 
 
 # --------------------------------------------------------------------------
@@ -415,6 +420,7 @@ def start_open_session(db: Session, config: Any, snapshot: Any, source: Detectio
     # in diesem Moment. Liefert die API keine Temperatur, bleibt es bei None.
     config.open_outside_temp_c = snapshot.outside_temp_c
     config.open_poll_count = 1
+    config.open_charging_seen = False
     config.open_gap_before_seconds = gap_seconds
     config.open_in_saved_location = snapshot.is_in_saved_location
     coords = snapshot.coordinates
@@ -439,7 +445,8 @@ def start_open_session(db: Session, config: Any, snapshot: Any, source: Detectio
         db,
         config,
         "session_started",
-        f"Ladevorgang begonnen (Zustand {snapshot.charging_state}), SoC {snapshot.soc_percent}%, "
+        f"Ladevorgang begonnen (Zustand {snapshot.charging_state}), SoC "
+        f"{soc_now if soc_now is not None else 'unbekannt'}%, "
         f"letzter Abruf davor vor {fmt_minutes(gap_seconds)} mit SoC "
         f"{config.open_soc_before if config.open_soc_before is not None else 'unbekannt'}%.",
         snapshot=snapshot,
@@ -516,8 +523,16 @@ def finish_open_session(
     energy = measured_energy(config)
 
     # Eingesteckt, aber nie geladen (Zielladestand war schon erreicht, oder das
-    # Kabel steckte nur kurz): kein Ladevorgang, sondern Rauschen.
-    if (delta is None or delta <= 0) and max_power <= 0 and energy is None:
+    # Kabel steckte nur kurz): kein Ladevorgang, sondern Rauschen. Hat die
+    # Quelle dagegen einmal "laedt" gemeldet, entsteht der Vorgang trotzdem -
+    # lieber einer mit Luecken (needs_review) als gar keiner. Beim VW-Datenportal
+    # fehlen SoC und Leistung in den Teilberichten oft genau waehrend des Ladens.
+    if (
+        (delta is None or delta <= 0)
+        and max_power <= 0
+        and energy is None
+        and not config.open_charging_seen
+    ):
         source.log(
             db,
             config,
@@ -802,6 +817,9 @@ def apply_snapshot(db: Session, config: Any, snapshot: Any, source: DetectionSou
                 f"Kein Ladevorgang (Zustand {state}{note}), SoC {snapshot.soc_percent}%.",
                 snapshot=snapshot,
             )
+    # Erst nach start_open_session, das den Merker zuruecksetzt.
+    if plugged_in and state in source.charging_states:
+        config.open_charging_seen = True
 
     config.last_charging_state = state
     # Ein Bericht ohne SoC loescht den letzten bekannten nicht - sonst fehlten
