@@ -29,6 +29,7 @@ from ..bmw_cardata_poller import (
     start_authorization,
 )
 from ..database import get_db
+from ..auto_enable import should_enable
 from ..log_export import zip_response
 
 router = APIRouter(prefix="/api/bmw-cardata", tags=["bmw-cardata"])
@@ -117,6 +118,10 @@ def get_config(
     return _to_out(db, _get_or_create_config(db, user, vehicle_id))
 
 
+def _is_complete(config: models.BmwCarDataConfig) -> bool:
+    return bool(config.client_id and config.vin) and is_connected(config)
+
+
 @router.put("/configs/{vehicle_id}", response_model=schemas.BmwCarDataConfigOut)
 def update_config(
     vehicle_id: str,
@@ -126,6 +131,7 @@ def update_config(
 ):
     config = _get_or_create_config(db, user, vehicle_id)
     was_enabled = config.enabled
+    complete_before = _is_complete(config)
 
     if payload.client_id and payload.client_id != config.client_id:
         # Eine andere Client-ID ist ein anderer Zugang - die Tokens der alten
@@ -140,7 +146,13 @@ def update_config(
             )
         config.vin = vin
 
-    if payload.enabled:
+    # Zugangsdaten sind hier die Verbindung mit BMW (auth_poll); das
+    # Speichern schaltet nur ein, wenn erst die FIN die Konfiguration vervollstaendigt.
+    enabled = payload.enabled or should_enable(
+        db, config, complete_before=complete_before,
+        complete_now=_is_complete(config), credentials_entered=False,
+    )
+    if enabled:
         if not config.client_id:
             raise HTTPException(422, "Ohne Client-ID kann der Abruf nicht aktiviert werden")
         if not is_connected(config):
@@ -148,7 +160,7 @@ def update_config(
         if not config.vin:
             raise HTTPException(422, "Ohne FIN kann der Abruf nicht aktiviert werden")
 
-    config.enabled = payload.enabled
+    config.enabled = enabled
     if payload.poll_interval_hours != config.poll_interval_hours and config.next_poll_at:
         config.next_poll_at = None
     config.poll_interval_hours = payload.poll_interval_hours
@@ -209,11 +221,22 @@ def auth_poll(
     user: models.User = Depends(get_current_user),
 ):
     config = _get_or_create_config(db, user, vehicle_id)
+    was_connected = is_connected(config)
     try:
         status = finish_authorization(db, config)
     except CarDataError as exc:
         raise HTTPException(502, str(exc)) from exc
     db.refresh(config)
+    # Frisch verbunden = Zugangsdaten stehen: Abruf einschalten, sofern die
+    # FIN bekannt ist (BMW liefert sie bei genau einer Zuordnung selbst).
+    if status == "connected" and not was_connected and should_enable(
+        db, config, complete_before=False,
+        complete_now=_is_complete(config), credentials_entered=True,
+    ):
+        config.enabled = True
+        config.next_poll_at = None
+        db.commit()
+        db.refresh(config)
     return schemas.BmwCarDataAuthResult(status=status, config=_to_out(db, config))
 
 

@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 from .. import models, schemas
 from ..auth import get_current_user
 from ..database import get_db
+from ..auto_enable import should_enable
 from ..log_export import zip_response
 from ..myskoda_poller import poll_vehicle, test_connection
 
@@ -121,6 +122,10 @@ def get_config(
     return _to_out(db, _get_or_create_config(db, user, vehicle_id))
 
 
+def _is_complete(config: models.MySkodaConfig) -> bool:
+    return bool(config.api_key) and bool(config.vin) and len(config.vin) == VIN_LENGTH
+
+
 @router.put("/configs/{vehicle_id}", response_model=schemas.MySkodaConfigOut)
 def update_config(
     vehicle_id: str,
@@ -130,13 +135,19 @@ def update_config(
 ):
     config = _get_or_create_config(db, user, vehicle_id)
     was_enabled = config.enabled
+    complete_before = _is_complete(config)
+    credentials_entered = bool(payload.api_key) and payload.api_key != config.api_key
 
     if payload.api_key:
         config.api_key = payload.api_key
     if payload.vin is not None:
         config.vin = payload.vin.upper()
 
-    if payload.enabled:
+    enabled = payload.enabled or should_enable(
+        db, config, complete_before=complete_before,
+        complete_now=_is_complete(config), credentials_entered=credentials_entered,
+    )
+    if enabled:
         if not config.api_key:
             raise HTTPException(422, "Ohne API-Key kann die Abfrage nicht aktiviert werden")
         if not config.vin:
@@ -146,7 +157,7 @@ def update_config(
                 422, f"Die FIN muss {VIN_LENGTH} Zeichen lang sein (eingetragen: {len(config.vin)})"
             )
 
-    config.enabled = payload.enabled
+    config.enabled = enabled
     config.poll_interval_idle_minutes = payload.poll_interval_idle_minutes
     config.poll_interval_active_minutes = payload.poll_interval_active_minutes
     config.detect_missed_sessions = payload.detect_missed_sessions

@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from .. import models, schemas
 from ..auth import get_current_user
 from ..database import get_db
+from ..auto_enable import should_enable
 from ..log_export import zip_response
 from ..renault import LOCALES
 from ..renault_poller import (
@@ -138,6 +139,10 @@ def get_config(
     return _to_out(db, _get_or_create_config(db, user, vehicle_id))
 
 
+def _is_complete(config: models.RenaultConfig) -> bool:
+    return bool(config.email and config.password and config.vin)
+
+
 @router.put("/configs/{vehicle_id}", response_model=schemas.RenaultConfigOut)
 def update_config(
     vehicle_id: str,
@@ -147,6 +152,8 @@ def update_config(
 ):
     config = _get_or_create_config(db, user, vehicle_id)
     was_enabled = config.enabled
+    complete_before = _is_complete(config)
+    credentials_entered = bool(payload.password)
     if payload.locale not in LOCALES:
         raise HTTPException(422, f"Unbekanntes Land/Sprache: {payload.locale}")
 
@@ -176,7 +183,11 @@ def update_config(
             config.model_label = None
         config.vin = vin
 
-    if payload.enabled:
+    enabled = payload.enabled or should_enable(
+        db, config, complete_before=complete_before,
+        complete_now=_is_complete(config), credentials_entered=credentials_entered,
+    )
+    if enabled:
         if not (config.email and config.password):
             raise HTTPException(422, "Ohne E-Mail-Adresse und Passwort kann der Abruf nicht aktiviert werden")
         if not config.vin:
@@ -189,7 +200,7 @@ def update_config(
                 "würden jeden Ladevorgang doppelt anlegen.",
             )
 
-    config.enabled = payload.enabled
+    config.enabled = enabled
     config.poll_interval_idle_minutes = payload.poll_interval_idle_minutes
     config.poll_interval_active_minutes = payload.poll_interval_active_minutes
     config.detect_missed_sessions = payload.detect_missed_sessions

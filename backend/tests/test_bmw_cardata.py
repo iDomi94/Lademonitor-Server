@@ -229,6 +229,8 @@ def test_device_flow_sends_pkce_and_fills_vin(client, db_session, bmw):
     assert body["config"]["connected"]
     assert body["config"]["vin"] == VIN  # aus den Fahrzeugzuordnungen uebernommen
     assert body["config"]["pending_user_code"] is None
+    # Verbunden und FIN bekannt: der automatische Abruf geht von selbst an.
+    assert body["config"]["enabled"] is True
 
     # Der Verifier aus dem ersten Schritt muss zur Challenge passen.
     token_form = bmw.form([r for r in bmw.requests if r.url.path.endswith("/token")][-1])
@@ -462,3 +464,20 @@ def test_deleting_user_removes_cardata_config(client, db_session, bmw):
     assert client.delete(f"/api/auth/users/{bob_id}").status_code == 204
     db_session.expire_all()
     assert db_session.query(models.BmwCarDataConfig).count() == 0
+
+
+def test_connecting_without_vin_waits_for_vin_before_enabling(client, bmw):
+    register(client)
+    vehicle = create_vehicle(client, external_id="ix1", name="iX1")
+    url = f"/api/bmw-cardata/configs/{vehicle['id']}"
+    bmw.mappings = []  # keine Zuordnung, FIN bleibt leer
+    client.put(url, json={"client_id": "client-abc"})
+    client.post(f"{url}/auth/start")
+    done = client.post(f"{url}/auth/poll").json()
+    assert done["status"] == "connected" and done["config"]["enabled"] is False
+
+    # Die FIN vervollstaendigt die Konfiguration - erst jetzt an.
+    assert client.put(url, json={"vin": VIN}).json()["enabled"] is True
+    # Bewusst wieder aus bleibt aus, auch beim naechsten Speichern.
+    assert client.put(url, json={"enabled": False}).json()["enabled"] is False
+    assert client.put(url, json={"vin": VIN}).json()["enabled"] is False

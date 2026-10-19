@@ -5,6 +5,15 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.43.1",
+        "date": "2026-10-19",
+        "title": "Automatischer Abruf schaltet sich selbst ein",
+        "changes": [
+            "Wer unter „API & Debug“ Zugangsdaten und FIN einer Quelle speichert, muss den Schalter „Automatischer Abruf“ nicht mehr extra umlegen – er geht von selbst an. Bei BMW CarData passiert das nach dem Verbinden mit BMW. Läuft für das Fahrzeug schon eine andere Quelle, bleibt er aus.",
+            "Wer den Abruf danach bewusst ausschaltet, behält das, bis wieder neue Zugangsdaten eingetragen werden.",
+        ],
+    },
+    {
         "version": "0.43.0",
         "date": "2026-10-19",
         "title": "API & Debug: eine Quelle auf einmal, Rohdaten als ZIP",
