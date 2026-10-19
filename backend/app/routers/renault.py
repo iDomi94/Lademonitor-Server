@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from .. import models, schemas
 from ..auth import get_current_user
 from ..database import get_db
+from ..log_export import zip_response
 from ..renault import LOCALES
 from ..renault_poller import (
     complete_login,
@@ -332,6 +333,19 @@ def list_logs(
         )
         for e in entries
     ]
+
+
+@router.get("/logs/export.zip")
+def export_logs_zip(
+    vehicle_id: str | None = None,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Alle Protokolleintraege samt Rohdaten als ZIP (siehe log_export.py)."""
+    q = db.query(models.RenaultLogEntry).filter(models.RenaultLogEntry.user_id == user.id)
+    if vehicle_id:
+        q = q.filter(models.RenaultLogEntry.vehicle_id == vehicle_id)
+    return zip_response(q.order_by(models.RenaultLogEntry.created_at.asc()).all(), "renault")
 
 
 @router.get("/logs/{entry_id}/payload")

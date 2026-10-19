@@ -29,6 +29,7 @@ from ..bmw_cardata_poller import (
     start_authorization,
 )
 from ..database import get_db
+from ..log_export import zip_response
 
 router = APIRouter(prefix="/api/bmw-cardata", tags=["bmw-cardata"])
 
@@ -274,6 +275,19 @@ def list_logs(
         )
         for e in entries
     ]
+
+
+@router.get("/logs/export.zip")
+def export_logs_zip(
+    vehicle_id: str | None = None,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Alle Protokolleintraege samt Rohdaten als ZIP (siehe log_export.py)."""
+    q = db.query(models.BmwCarDataLogEntry).filter(models.BmwCarDataLogEntry.user_id == user.id)
+    if vehicle_id:
+        q = q.filter(models.BmwCarDataLogEntry.vehicle_id == vehicle_id)
+    return zip_response(q.order_by(models.BmwCarDataLogEntry.created_at.asc()).all(), "bmw-cardata")
 
 
 @router.get("/logs/{entry_id}/payload")

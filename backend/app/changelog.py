@@ -5,6 +5,16 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.43.0",
+        "date": "2026-10-19",
+        "title": "API & Debug: eine Quelle auf einmal, Rohdaten als ZIP",
+        "changes": [
+            "Die Seite „API & Debug“ zeigt oben einen Umschalter zwischen MyŠkoda, BMW CarData, VW-Konzern und Renault/Dacia und darunter nur noch die gewählte Quelle. Die Auswahl bleibt beim nächsten Öffnen erhalten.",
+            "Im Protokoll jeder Quelle lädt „Alle Rohdaten als ZIP“ sämtliche Einträge auf einmal herunter: eine Datei je Abruf mit Rohdaten plus eine Übersicht aller Einträge in zeitlicher Reihenfolge.",
+            "Lag vor dem Einstecken noch kein Stand des Energiezählers vor (z.B. beim ersten Ladevorgang nach dem Einrichten), wurde der erste Wert während des Ladens als Ausgangspunkt genommen. Beim Enyaq stand der Zähler da schon bei 13 kWh, die dann fehlten. Jetzt zählt der Vorgang in diesem Fall ab null.",
+        ],
+    },
+    {
         "version": "0.42.0",
         "date": "2026-10-16",
         "title": "Renault und Dacia als Datenquelle",

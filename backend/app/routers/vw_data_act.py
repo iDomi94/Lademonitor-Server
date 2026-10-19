@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from .. import models, schemas
 from ..auth import get_current_user
 from ..database import get_db
+from ..log_export import zip_response
 from ..vw_data_act import BRANDS
 from ..vw_data_act_poller import forget_client, poll_vehicle, test_connection
 
@@ -285,6 +286,19 @@ def list_logs(
         )
         for e in entries
     ]
+
+
+@router.get("/logs/export.zip")
+def export_logs_zip(
+    vehicle_id: str | None = None,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Alle Protokolleintraege samt Rohdaten als ZIP (siehe log_export.py)."""
+    q = db.query(models.VwDataActLogEntry).filter(models.VwDataActLogEntry.user_id == user.id)
+    if vehicle_id:
+        q = q.filter(models.VwDataActLogEntry.vehicle_id == vehicle_id)
+    return zip_response(q.order_by(models.VwDataActLogEntry.created_at.asc()).all(), "vw-datenportal")
 
 
 @router.get("/logs/{entry_id}/payload")

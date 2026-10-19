@@ -104,7 +104,11 @@ Gesamtzaehler ist, ist nicht dokumentiert - deshalb werden nur die ZUWAECHSE
 aufsummiert (`_add_energy`): steigt der Wert, zaehlt die Differenz; faellt er,
 hat der Zaehler neu begonnen und der neue Wert zaehlt ab null. Damit gehen
 beide Varianten auf. Ausgangswert ist der letzte Stand VOR dem Einstecken
-(`last_energy_raw_kwh`), sonst der erste Bericht mit steckendem Kabel. Der
+(`last_energy_raw_kwh`). Gibt es keinen (erster Vorgang nach dem Einrichten),
+gilt null, solange der erste Wert ein plausibler Einzelvorgang ist: der Enyaq
+meldete im ersten Ladebericht schon 13 kWh (SoC 10 -> 25 %), als Ausgangswert
+genommen fehlten sie (19.10.2026). Ein hoeherer erster Wert ist ein
+Gesamtzaehler und wird zum Ausgangswert. Der
 Messort ist das FAHRZEUG (`energy_meter="vehicle"`), Ladeverluste stecken
 also nicht drin.
 """
@@ -420,7 +424,16 @@ def start_open_session(db: Session, config: Any, snapshot: Any, source: Detectio
     # damit auch der Teil zaehlt, den das Abfrageintervall verschluckt hat.
     config.open_energy_kwh = None
     config.open_energy_raw_kwh = config.last_energy_raw_kwh
-    _add_energy(config, _snapshot_energy(snapshot))
+    first_energy = _snapshot_energy(snapshot)
+    if (
+        config.open_energy_raw_kwh is None
+        and first_energy is not None
+        and first_energy <= PLAUSIBLE_ENERGY_KWH[1]
+    ):
+        # Kein Stand vor dem Einstecken: ein Zaehler je Vorgang begann bei
+        # null (siehe Modul-Docstring, "Gemessene Energie").
+        config.open_energy_raw_kwh = 0.0
+    _add_energy(config, first_energy)
 
     source.log(
         db,

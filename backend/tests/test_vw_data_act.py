@@ -455,7 +455,9 @@ def test_charging_session_with_measured_energy(client, db_session, portal):
     assert session.source == models.SessionSource.AUTOMATIC and session.needs_review
     assert session.external_session_id.startswith(f"vwda-{config.vehicle_id}-")
     assert VIN not in session.external_session_id
-    assert session.energy_kwh == pytest.approx(5.4)  # 5,9 - 0,5
+    # Vor dem Einstecken kein Zaehlerstand: der Zaehler begann bei null, die
+    # 0,5 kWh bis zum ersten Bericht zaehlen mit.
+    assert session.energy_kwh == pytest.approx(5.9)
     assert session.energy_is_estimated is False
     assert session.energy_meter == "vehicle"  # ohne Anbieter eine Ausnahme von "Ladesaeule"
     assert session.charging_type == models.ChargingType.AC

@@ -883,7 +883,10 @@ drinstehen. Messbar: Seitenhoehe von 2136 px auf 604 px (Desktop) bzw. von
 eine Seite ist (Vorschau-Tabelle, drei Formulare, Debug-Protokoll):
 `import` (Spritmonitor), `backup` (Daten-Backup + Backup-Import +
 WebDAV-Backup, `settings_backup.html`) und `api-debug`
-(MyŠkoda-Konfiguration + Debug-Protokoll, `settings_api.html`). Einstieg ueber
+(MyŠkoda-Konfiguration + Debug-Protokoll, `settings_api.html`). **Seit v0.43.0**
+traegt `api-debug` alle vier automatischen Quellen und zeigt per Umschalter
+oben nur eine davon (Auswahl im `localStorage`, per `#source=` verlinkbar);
+jedes Protokoll laesst sich dort komplett als ZIP laden (`log_export.py`). Einstieg ueber
 `.subpage`-Kacheln in den Einstellungen, Rueckweg ueber einen `.backlink` oben
 auf jeder Unterseite.
 
@@ -2671,7 +2674,14 @@ Zustandsmaschine entscheidet nichts. Enum-Werte kommen manchmal als Index
 `charged_energy` in 0,1 kWh). Ob er je Vorgang oder insgesamt zaehlt, ist
 nicht dokumentiert - `charge_detection._add_energy()` summiert nur Zuwaechse
 (faellt der Wert, hat er neu begonnen), Ausgangswert ist der letzte Stand VOR
-dem Einstecken. `tests/test_charge_detection.py` haelt beide Varianten fest.
+dem Einstecken, ohne einen solchen null (bis 250 kWh, sonst Gesamtzaehler).
+`tests/test_charge_detection.py` haelt beide Varianten fest. **Der Enyaq
+zaehlt je Vorgang** (echte Daten 18./19.10.2026: 13 kWh im ersten Ladebericht
+bei SoC 10 -> 25 %, nach dem Ausstecken bleibt der Wert bis zum naechsten
+Einstecken stehen). Dort ausserdem gesehen: zwischen Einstecken und erstem
+Ladebericht kamen fast zwei Stunden lang nur Teilberichte ohne Ladezustand -
+Startzeit und Start-SoC des Vorgangs sind dann zu spaet bzw. zu hoch, weil die
+Rueckdatierung am Alter des letzten SoC-Berichts scheitert. Offen.
 Messort `vehicle`, also ohne Ladeverluste: faellt aus der Verlustrechnung,
 zaehlt im Akku-Index in der eigenen Gruppe. Die Rueckdatierung aendert bei
 gemessener Energie nur SoC-Start und Startzeit.
