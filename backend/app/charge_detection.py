@@ -117,7 +117,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
 from sqlalchemy.orm import Session
@@ -307,6 +307,18 @@ def reset_open_session(config: Any) -> None:
 # Ladevorgang anlegen
 # --------------------------------------------------------------------------
 
+def utc_to_local(when: datetime) -> datetime:
+    """Naive UTC -> naive LOKALZEIT des Servers.
+
+    Die Zustandsmaschine rechnet durchweg in naiver UTC (`captured_at` der
+    APIs), `ChargingSession.start_time`/`end_time` liegen aber als lokale Zeit
+    in der DB - wie beim HA-Push, BMW CarData und den Formularen. Ohne diese
+    Umrechnung stand ein Vorgang aus MySkoda, VW-Datenportal oder Renault in
+    Mitteleuropa ein bis zwei Stunden zu frueh in der Liste.
+    """
+    return when.replace(tzinfo=timezone.utc).astimezone().replace(tzinfo=None)
+
+
 def create_session(
     db: Session,
     config: Any,
@@ -357,8 +369,8 @@ def create_session(
     session = models.ChargingSession(
         vehicle_id=vehicle.id,
         user_id=config.user_id,
-        start_time=start_time,
-        end_time=end_time,
+        start_time=utc_to_local(start_time),
+        end_time=utc_to_local(end_time),
         charging_type=charging_type,
         soc_start=soc_start,
         soc_end=soc_end,

@@ -6,6 +6,7 @@ muessen dieselbe Energie ergeben. Die Berichte hier sind schlichte Objekte mit
 den Eigenschaften, die die Zustandsmaschine liest.
 """
 
+import time
 from datetime import datetime, timedelta
 from types import SimpleNamespace
 
@@ -254,3 +255,28 @@ def test_soc_jump_without_counter_still_works(db_session, config):
     assert len(sessions) == 1
     assert sessions[0].energy_is_estimated is True
     assert "SoC von 40 % auf 60 %" in sessions[0].notes
+
+
+# --- Zeitzone ------------------------------------------------------------------
+# Die Zustandsmaschine rechnet in UTC (captured_at der APIs), Ladevorgaenge
+# liegen als lokale Zeit in der DB. Echter Fall (ID.3, 19.10.2026): Beginn
+# 05:24 UTC stand als 05:24 in der Liste statt 07:24.
+
+
+def test_session_times_are_stored_as_local_time(db_session, config, monkeypatch):
+    monkeypatch.setenv("TZ", "Europe/Berlin")
+    time.tzset()
+    try:
+        sessions = run(db_session, config, [
+            report(0, plugged=False, soc=40),
+            report(15, plugged=True, soc=40, power=11),
+            report(60, plugged=False, soc=60),
+        ])
+    finally:
+        monkeypatch.delenv("TZ", raising=False)
+        time.tzset()
+    assert len(sessions) == 1
+    s = sessions[0]
+    # Oktober 2026 = Sommerzeit, UTC+2.
+    assert s.start_time == T0 + timedelta(hours=2, minutes=15)
+    assert s.end_time == T0 + timedelta(hours=2, minutes=60)

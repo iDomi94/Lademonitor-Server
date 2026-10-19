@@ -467,6 +467,14 @@ Abschaltbar per `backdate_session_start`. Die Rohwerte beider Abrufe stehen
 weiterhin in `notes`, die angewandte Korrektur dort und als
 `session_backdated`-Zeile im Debug-Log; die Vorgaenge bleiben `needs_review`.
 
+**Zeitzone (Fix 2026-10-19, v0.43.4):** die Zustandsmaschine rechnet in
+naiver UTC, `charge_detection.create_session()` rechnet Start/Ende per
+`utc_to_local()` in die naive ORTSZEIT um, wie `start_time` ueberall sonst
+liegt. Bis 0.43.3 fehlte das - Vorgaenge aus MyŠkoda, VW-Datenportal und
+Renault standen 1-2 h zu frueh in der Liste (aufgefallen am ID.3: 05:24 statt
+07:24). Bestandsvorgaenge sind nicht migriert. Die `external_session_id`
+bleibt UTC-basiert.
+
 ### Zustand liegt in der DB, nicht im Prozess
 
 `MySkodaConfig` ist Konfiguration UND Zustandsspeicher: die `open_*`-Spalten
