@@ -5,6 +5,14 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.43.2",
+        "date": "2026-10-19",
+        "title": "VW-Datenportal: veraltete Datensätze überspringen",
+        "changes": [
+            "Das VW-Datenportal liefert seine Datensätze nicht immer in zeitlicher Reihenfolge: ein späterer Datensatz kann einen älteren Fahrzeugstand enthalten, etwa noch ein steckendes Kabel, das längst gezogen ist. Daraus wurde bisher ein Ladevorgang mit falscher Startzeit eröffnet. Solche Datensätze werden jetzt übersprungen und im Protokoll vermerkt.",
+        ],
+    },
+    {
         "version": "0.43.1",
         "date": "2026-10-19",
         "title": "Automatischer Abruf schaltet sich selbst ein",

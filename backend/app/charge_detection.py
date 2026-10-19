@@ -439,7 +439,8 @@ def start_open_session(db: Session, config: Any, snapshot: Any, source: Detectio
         db,
         config,
         "session_started",
-        f"Ladevorgang begonnen (Zustand {snapshot.charging_state}), SoC {snapshot.soc_percent}%, "
+        f"Ladevorgang begonnen (Zustand {snapshot.charging_state}), SoC "
+        f"{soc_now if soc_now is not None else 'unbekannt'}%, "
         f"letzter Abruf davor vor {fmt_minutes(gap_seconds)} mit SoC "
         f"{config.open_soc_before if config.open_soc_before is not None else 'unbekannt'}%.",
         snapshot=snapshot,
