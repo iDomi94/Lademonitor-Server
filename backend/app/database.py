@@ -511,6 +511,7 @@ def run_light_migrations() -> None:
             # unterschieben.
             ("weather_autofill_enabled", "BOOLEAN", "FALSE"),
             ("weather_api_url", "VARCHAR", None),
+            ("api_debug_source", "VARCHAR", None),
         ):
             suffix = f" DEFAULT {default}" if default else ""
             conn.execute(

@@ -885,7 +885,9 @@ eine Seite ist (Vorschau-Tabelle, drei Formulare, Debug-Protokoll):
 WebDAV-Backup, `settings_backup.html`) und `api-debug`
 (MyŠkoda-Konfiguration + Debug-Protokoll, `settings_api.html`). **Seit v0.43.0**
 traegt `api-debug` alle vier automatischen Quellen und zeigt per Umschalter
-oben nur eine davon (Auswahl im `localStorage`, per `#source=` verlinkbar);
+oben nur eine davon (per `#source=` verlinkbar; seit v0.43.3 merkt sich der
+Server die Auswahl je Nutzer in `User.api_debug_source`, ohne Auswahl oeffnet
+die erste Quelle mit eingeschaltetem Abruf - Wunsch des Nutzers 19.10.2026);
 jedes Protokoll laesst sich dort komplett als ZIP laden (`log_export.py`).
 **Seit v0.43.1** schaltet der Server den automatischen Abruf selbst ein,
 sobald eine Quelle in einem Speichern vollstaendig wird oder neue Zugangsdaten

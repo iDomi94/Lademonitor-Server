@@ -8,7 +8,8 @@
 
 {# Vier Quellen untereinander waren eine sehr lange Seite, obwohl praktisch
    jeder nur eine davon nutzt. Der Umschalter zeigt immer genau eine; die
-   Auswahl merkt sich der Browser, ein Link kann sie per #source= vorgeben. #}
+   Auswahl merkt sich der Server je Nutzer (ohne Auswahl die erste aktive
+   Quelle, main.py::api_debug_page), ein Link kann sie per #source= vorgeben. #}
 <div class="source-switch" role="tablist" aria-label="{{ t('api.source_switch') }}">
   <button type="button" role="tab" data-source="myskoda">{{ t('api.source.myskoda') }}</button>
   <button type="button" role="tab" data-source="bmw">{{ t('api.source.bmw') }}</button>
@@ -263,7 +264,6 @@
 
 <script>
 // ---------- Umschalter zwischen den Quellen ----------
-const SOURCE_KEY = 'apiDebugSource';
 function showSource(name) {
   const tabs = document.querySelectorAll('.source-switch [data-source]');
   if (![...tabs].some(tab => tab.dataset.source === name)) name = 'myskoda';
@@ -271,16 +271,21 @@ function showSource(name) {
   document.querySelectorAll('section.api-source').forEach(section => {
     section.hidden = section.dataset.source !== name;
   });
-  try { localStorage.setItem(SOURCE_KEY, name); } catch (e) { /* privater Modus */ }
 }
 document.querySelectorAll('.source-switch [data-source]').forEach(tab => {
-  tab.addEventListener('click', () => showSource(tab.dataset.source));
+  tab.addEventListener('click', () => {
+    showSource(tab.dataset.source);
+    // Nur ein Merker - schlaegt das Speichern fehl, bleibt die Anzeige trotzdem.
+    fetch('api/auth/api-debug-source', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source: tab.dataset.source }),
+    }).catch(() => {});
+  });
 });
 (() => {
   const fromHash = new URLSearchParams(location.hash.slice(1)).get('source');
-  let stored = null;
-  try { stored = localStorage.getItem(SOURCE_KEY); } catch (e) { /* privater Modus */ }
-  showSource(fromHash || stored || 'myskoda');
+  showSource(fromHash || {{ api_initial_source|default('myskoda')|tojson }});
 })();
 
 let vehicles = [];

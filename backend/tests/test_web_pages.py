@@ -5,7 +5,8 @@ ist: absolute statt relativer Pfade (bricht unter dem Home-Assistant-Ingress)
 und Dateien, die es gar nicht gibt.
 """
 
-from conftest import register
+from app import models
+from conftest import create_vehicle, register
 
 
 def test_manifest_is_served_without_login(client):
@@ -170,3 +171,32 @@ def test_api_page_has_the_renault_section_with_relative_paths(client):
     assert "'/api/renault" not in response.text
     assert 'id="rn-code-form"' in response.text
     assert "settings.renault." not in response.text
+
+
+def _initial_source(client):
+    response = client.get("/api-debug")
+    assert response.status_code == 200
+    for name in ("myskoda", "bmw", "vw", "renault"):
+        if f'showSource(fromHash || "{name}")' in response.text:
+            return name
+    raise AssertionError("keine Startquelle im Umschalter")
+
+
+def test_api_page_opens_the_first_active_source(client, db_session):
+    register(client)
+    assert _initial_source(client) == "myskoda"
+
+    vehicle = create_vehicle(client, external_id="id3", name="ID.3", capacity=58.0)
+    owner_id = db_session.get(models.Vehicle, vehicle["id"]).user_id
+    db_session.add(models.VwDataActConfig(user_id=owner_id, vehicle_id=vehicle["id"],
+                                          brand="VOLKSWAGEN_PASSENGER_CARS", enabled=True))
+    db_session.commit()
+    assert _initial_source(client) == "vw"
+
+
+def test_api_page_remembers_the_chosen_source(client):
+    register(client)
+    assert client.put("/api/auth/api-debug-source", json={"source": "renault"}).status_code == 204
+    assert _initial_source(client) == "renault"
+    assert client.put("/api/auth/api-debug-source", json={"source": "tesla"}).status_code == 422
+    assert _initial_source(client) == "renault"
