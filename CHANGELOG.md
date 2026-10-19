@@ -6,6 +6,16 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.42.1] — 2026-10-19
+
+### Fixed
+- **VW-Datenportal: Energiezähler ohne Stand vor dem Einstecken.** Fehlte
+  `last_energy_raw_kwh` (erster Vorgang nach dem Einrichten), wurde der erste
+  Zählerwert mit steckendem Kabel zum Ausgangswert und die bis dahin geladene
+  Energie fehlte (Enyaq 18./19.10.2026: 36 statt 49 kWh). Jetzt gilt in
+  diesem Fall null, solange der erste Wert ein plausibler Einzelvorgang ist
+  (bis 250 kWh); ein höherer Wert bleibt als Gesamtzähler der Ausgangswert.
+
 ## [0.42.0] — 2026-10-16
 
 ### Added

@@ -80,6 +80,30 @@ def test_counter_per_session_restarts_from_zero(db_session, config):
     assert sessions[0].energy_kwh == pytest.approx(8.0)
 
 
+def test_counter_without_reading_before_plugging_in_starts_at_zero(db_session, config):
+    # Nachgebaut am Enyaq vom 18./19.10.2026: vor dem Einstecken kein
+    # Zaehlerstand, der erste Ladebericht steht schon bei 13 kWh.
+    sessions = run(db_session, config, [
+        report(0, plugged=False, soc=10),
+        report(270, plugged=True, soc=25, energy=13.0, power=7),
+        report(600, plugged=True, soc=71, energy=49.0, power=7),
+        report(1050, plugged=False, soc=80, energy=49.0),
+    ])
+    assert len(sessions) == 1
+    assert sessions[0].energy_kwh == pytest.approx(49.0)
+    assert sessions[0].energy_is_estimated is False
+
+
+def test_cumulative_counter_without_reading_before_is_not_counted_from_zero(db_session, config):
+    sessions = run(db_session, config, [
+        report(0, plugged=False, soc=40),
+        report(15, plugged=True, soc=42, energy=1201.5, power=11),
+        report(45, plugged=False, soc=55, energy=1209.0),
+    ])
+    assert len(sessions) == 1
+    assert sessions[0].energy_kwh == pytest.approx(7.5)
+
+
 def test_without_counter_energy_is_estimated_from_soc(db_session, config):
     sessions = run(db_session, config, [
         report(0, plugged=False, soc=40),

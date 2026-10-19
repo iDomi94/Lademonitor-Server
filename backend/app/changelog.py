@@ -5,6 +5,14 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.42.1",
+        "date": "2026-10-19",
+        "title": "VW-Datenportal: erste Ladung vollständig gezählt",
+        "changes": [
+            "Lag vor dem Einstecken noch kein Stand des Energiezählers vor (z.B. beim ersten Ladevorgang nach dem Einrichten), wurde der erste Wert während des Ladens als Ausgangspunkt genommen. Beim Enyaq stand der Zähler da schon bei 13 kWh, die dann fehlten. Jetzt zählt der Vorgang in diesem Fall ab null.",
+        ],
+    },
+    {
         "version": "0.42.0",
         "date": "2026-10-16",
         "title": "Renault und Dacia als Datenquelle",
