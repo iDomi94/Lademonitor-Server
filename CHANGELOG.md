@@ -6,6 +6,15 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.43.1] — 2026-10-19
+
+### Changed
+- **Automatischer Abruf geht beim Speichern der Zugangsdaten an** (MyŠkoda,
+  VW-Datenportal, Renault: sobald Zugangsdaten und FIN stehen; BMW CarData:
+  nach dem Verbinden, sobald die FIN bekannt ist). Nicht, wenn für das
+  Fahrzeug schon eine andere Quelle aktiv ist. Ein bewusst ausgeschalteter
+  Abruf bleibt aus, bis neue Zugangsdaten kommen (`auto_enable.py`).
+
 ## [0.43.0] — 2026-10-19
 
 ### Added

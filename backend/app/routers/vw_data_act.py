@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from .. import models, schemas
 from ..auth import get_current_user
 from ..database import get_db
+from ..auto_enable import should_enable
 from ..log_export import zip_response
 from ..vw_data_act import BRANDS
 from ..vw_data_act_poller import forget_client, poll_vehicle, test_connection
@@ -126,6 +127,10 @@ def get_config(
     return _to_out(db, _get_or_create_config(db, user, vehicle_id))
 
 
+def _is_complete(config: models.VwDataActConfig) -> bool:
+    return bool(config.email and config.password and config.vin)
+
+
 @router.put("/configs/{vehicle_id}", response_model=schemas.VwDataActConfigOut)
 def update_config(
     vehicle_id: str,
@@ -135,6 +140,8 @@ def update_config(
 ):
     config = _get_or_create_config(db, user, vehicle_id)
     was_enabled = config.enabled
+    complete_before = _is_complete(config)
+    credentials_entered = bool(payload.password)
     if payload.brand not in BRANDS:
         raise HTTPException(422, f"Unbekannte Marke: {payload.brand}")
 
@@ -165,7 +172,11 @@ def update_config(
             config.last_dataset_created = None
         config.vin = vin
 
-    if payload.enabled:
+    enabled = payload.enabled or should_enable(
+        db, config, complete_before=complete_before,
+        complete_now=_is_complete(config), credentials_entered=credentials_entered,
+    )
+    if enabled:
         if not (config.email and config.password):
             raise HTTPException(422, "Ohne E-Mail-Adresse und Passwort kann der Abruf nicht aktiviert werden")
         if not config.vin:
@@ -178,7 +189,7 @@ def update_config(
                 "würden jeden Ladevorgang doppelt anlegen.",
             )
 
-    config.enabled = payload.enabled
+    config.enabled = enabled
     config.poll_interval_minutes = payload.poll_interval_minutes
     config.detect_missed_sessions = payload.detect_missed_sessions
     config.missed_session_min_soc_delta = payload.missed_session_min_soc_delta

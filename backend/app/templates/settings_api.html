@@ -419,6 +419,9 @@ async function loadVehicles() {
 function renderMyskodaStatus(c) {
   const el = document.getElementById('myskoda-status');
   document.getElementById('ms-delete-btn').style.display = (c.has_api_key || c.vin) ? '' : 'none';
+  // Der Server schaltet den Abruf beim Speichern von Zugangsdaten selbst ein.
+  document.getElementById('ms-enabled').checked = c.enabled;
+  msRenderEnabledState();
 
   const labels = {
     ok: T.msStatusOk,

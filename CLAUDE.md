@@ -886,7 +886,12 @@ WebDAV-Backup, `settings_backup.html`) und `api-debug`
 (MyŠkoda-Konfiguration + Debug-Protokoll, `settings_api.html`). **Seit v0.43.0**
 traegt `api-debug` alle vier automatischen Quellen und zeigt per Umschalter
 oben nur eine davon (Auswahl im `localStorage`, per `#source=` verlinkbar);
-jedes Protokoll laesst sich dort komplett als ZIP laden (`log_export.py`). Einstieg ueber
+jedes Protokoll laesst sich dort komplett als ZIP laden (`log_export.py`).
+**Seit v0.43.1** schaltet der Server den automatischen Abruf selbst ein,
+sobald eine Quelle in einem Speichern vollstaendig wird oder neue Zugangsdaten
+bekommt (`auto_enable.py`, BMW nach dem Verbinden) - Wunsch des Nutzers
+19.10.2026, der Schalter wurde sonst vergessen. Nicht bei einer anderen
+aktiven Quelle fuer das Fahrzeug (dann still aus statt 422). Einstieg ueber
 `.subpage`-Kacheln in den Einstellungen, Rueckweg ueber einen `.backlink` oben
 auf jeder Unterseite.
 
