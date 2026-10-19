@@ -399,6 +399,14 @@ Deckungsgleich mit dem HA-Blueprint, damit beide Quellen dasselbe unter
 `DISCHARGING` (V2H/V2G) zaehlt als "nicht verbunden" und erzeugt keinen
 Vorgang. Liefert eine Antwort gar keinen Ladezustand, wird bewusst NICHTS
 entschieden (ein laufender Vorgang wuerde sonst faelschlich beendet).
+**Seit v0.44.3** zaehlt dafuer zuerst `charging.status.plugConnectionState`
+(API 1.1.0): die API laesst `state` weg, wenn Ladeprozess und Stecker keinen
+benannten Zustand ergeben (eingesteckt+entriegelt ohne Ladung, kurz nach der
+Fahrt), und sagt ausdruecklich, dass das NICHT ausgesteckt heisst. Ohne `state`
+liefert `VehicleSnapshot.charging_state` dann `PLUG_CONNECTED`/
+`PLUG_DISCONNECTED`; `DISCHARGING` bleibt "nicht verbunden". Der Stand der API
+wird woechentlich geprueft (`analysen/skoda-public-api-stand.md` im
+Projektordner).
 
 ### Bekannte Ungenauigkeiten (bewusst so, nicht uebersehen)
 
