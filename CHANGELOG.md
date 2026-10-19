@@ -6,6 +6,18 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.44.1] — 2026-10-19
+
+### Fixed
+- **MyŠkoda: Kabelstatus aus `charging.status.plugConnectionState`** (seit API
+  1.1.0). Die API lässt `state` weg, wenn die Kombination aus Ladeprozess und
+  Stecker keinen Namen hat; weggelassen heißt laut Doku nicht ausgesteckt.
+  `VehicleSnapshot.is_plugged_in` nimmt jetzt zuerst den Kabelstatus
+  (Rückspeisung zählt weiter als ausgesteckt), `charging_state` fällt ohne
+  `state` auf `PLUG_CONNECTED`/`PLUG_DISCONNECTED` zurück, damit die
+  Zustandsmaschine entscheiden kann. Unbekannte Werte werden ignoriert.
+  Tests: `tests/test_myskoda_plug.py`.
+
 ## [0.44.0] — 2026-10-19
 
 ### Added
