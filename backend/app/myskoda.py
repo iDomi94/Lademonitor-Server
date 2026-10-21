@@ -65,6 +65,14 @@ PLUGGED_IN_STATES = frozenset(
 UNPLUGGED_STATES = frozenset({"CONNECT_CABLE"})
 #: Rueckspeisung (V2H/V2G) - kein Ladevorgang, wird wie ausgesteckt behandelt.
 DISCHARGING_STATES = frozenset({"DISCHARGING"})
+#: Kabelstatus aus `charging.status.plugConnectionState` (seit API 1.1.0).
+#: Unbekannte Werte (die API kuendigt neue an) zaehlen als "nicht gemeldet".
+PLUG_CONNECTED = "CONNECTED"
+PLUG_DISCONNECTED = "DISCONNECTED"
+#: Ersatzzustaende fuer die Zustandsmaschine, wenn die API `state` weglaesst,
+#: der Kabelstatus aber bekannt ist (gleiche Namen wie beim VW-Datenportal).
+PLUG_ONLY_CONNECTED = "PLUG_CONNECTED"
+PLUG_ONLY_DISCONNECTED = "PLUG_DISCONNECTED"
 
 
 class MySkodaError(Exception):
@@ -200,16 +208,62 @@ class VehicleSnapshot:
     # --- Ladezustand ---------------------------------------------------------
 
     @property
-    def charging_state(self) -> str | None:
-        """CONNECT_CABLE | CHARGING | CONSERVING | READY_FOR_CHARGING |
-        DISCHARGING | CHARGING_INTERRUPTED - oder None, wenn das Fahrzeug
-        gerade keinen Ladeteil geliefert hat."""
+    def api_charging_state(self) -> str | None:
+        """`charging.status.state` wie geliefert: CONNECT_CABLE | CHARGING |
+        CONSERVING | READY_FOR_CHARGING | DISCHARGING | CHARGING_INTERRUPTED.
+
+        Seit API 1.1.0 laesst die API das Feld weg, wenn die Kombination aus
+        Ladeprozess und Stecker keinen Namen hat (eingesteckt und entriegelt
+        ohne Ladung, kurz nach einer Fahrt) - weggelassen heisst ausdruecklich
+        NICHT ausgesteckt."""
         state = self._part("charging").get("status", {}).get("state")
         return state if isinstance(state, str) else None
 
     @property
+    def plug_connection_state(self) -> str | None:
+        """`charging.status.plugConnectionState` (CONNECTED | DISCONNECTED),
+        seit API 1.1.0, fehlt bei aelteren Fahrzeugen/Antworten."""
+        value = self._part("charging").get("status", {}).get("plugConnectionState")
+        return value if isinstance(value, str) else None
+
+    @property
+    def plug_connected(self) -> bool | None:
+        value = self.plug_connection_state
+        if value == PLUG_CONNECTED:
+            return True
+        if value == PLUG_DISCONNECTED:
+            return False
+        return None
+
+    @property
     def is_plugged_in(self) -> bool:
-        return (self.charging_state or "") in PLUGGED_IN_STATES
+        """Steckt das Kabel (im Sinne eines Ladevorgangs)?
+
+        Rueckspeisung zaehlt immer als ausgesteckt, auch bei steckendem Kabel.
+        Sonst gilt der Kabelstatus - die API-Doku verlangt ausdruecklich, ihn
+        dafuer zu lesen statt `state` - und erst ohne ihn der Ladezustand.
+        """
+        state = self.api_charging_state
+        if state in DISCHARGING_STATES:
+            return False
+        plug = self.plug_connected
+        if plug is not None:
+            return plug
+        return (state or "") in PLUGGED_IN_STATES
+
+    @property
+    def charging_state(self) -> str | None:
+        """Was die Zustandsmaschine als Zustand sieht: der Ladezustand der API,
+        fehlt er, ein Ersatz aus dem Kabelstatus (PLUG_CONNECTED |
+        PLUG_DISCONNECTED). None nur, wenn beides fehlt - dann wird nichts
+        entschieden."""
+        state = self.api_charging_state
+        if state:
+            return state
+        plug = self.plug_connected
+        if plug is None:
+            return None
+        return PLUG_ONLY_CONNECTED if plug else PLUG_ONLY_DISCONNECTED
 
     @property
     def soc_percent(self) -> int | None:
@@ -330,6 +384,7 @@ class VehicleSnapshot:
         return {
             "vin": self.vin,
             "charging_state": self.charging_state,
+            "plug_connection_state": self.plug_connection_state,
             "soc_percent": self.soc_percent,
             "charge_power_kw": self.charge_power_kw,
             "charge_type": self.charge_type,

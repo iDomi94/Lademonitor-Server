@@ -5,6 +5,15 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.44.3",
+        "date": "2026-10-21",
+        "title": "MyŠkoda: Kabelstatus der API auswerten",
+        "changes": [
+            "Die MyŠkoda-Abfrage liest jetzt den Kabelstatus, den die Public API seit Version 1.1.0 eigens meldet. Fehlte bisher der Ladezustand in einer Antwort (eingestecktes, entriegeltes Kabel ohne Ladung oder kurz nach einer Fahrt), wurde nichts entschieden und ein Ein- oder Ausstecken konnte verpasst werden.",
+            "Das Debug-Protokoll zeigt in diesem Fall „PLUG_CONNECTED“ bzw. „PLUG_DISCONNECTED“ als Zustand.",
+        ],
+    },
+    {
         "version": "0.44.2",
         "date": "2026-10-21",
         "title": "Start-SoC nach einer Fahrt genauer",
