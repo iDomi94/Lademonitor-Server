@@ -287,7 +287,10 @@ def backdated_start(
 # Ab so vielen Prozentpunkten Abstand gilt der aus der Energie gerechnete
 # Startwert als besser als der erfasste. Kleinere Abweichungen sind Rundung
 # (SoC ganzzahlig, Zaehler je kWh) und Nennkapazitaet gegen echte Kapazitaet.
+# Ist belegt, dass seit dem Start-SoC gefahren wurde, reicht ein kleiner
+# Abstand; ohne Kilometerstaende bleibt es bei der vorsichtigen Schwelle.
 ENERGY_START_TOLERANCE_PCT = 5
+ENERGY_START_TOLERANCE_DRIVEN_PCT = 2
 
 
 def energy_based_start(
@@ -295,6 +298,7 @@ def energy_based_start(
     soc_end: int | None,
     energy: float | None,
     capacity_kwh: float | None,
+    driven_km: int | None = None,
 ) -> tuple[int | None, str | None]:
     """Start-SoC aus gemessener Energie nachrechnen: `(soc_start, Begruendung)`.
 
@@ -302,22 +306,37 @@ def energy_based_start(
     Bericht beim Einstecken keinen eigenen SoC hat (VW-Datenportal). Wurde
     seitdem gefahren, ist er zu hoch - ID.3 vom 20.10.2026: 77 % aus einem
     Bericht von 95 km vorher, gemessen wurden 23 kWh bis 90 %, eingesteckt war
-    bei rund 50 %. Der Fahrzeugzaehler misst ab Akku (ohne Ladeverluste), also
+    bei rund 46 %. Der Fahrzeugzaehler misst ab Akku (ohne Ladeverluste), also
     ist `soc_end - energy / capacity` der Startwert. Korrigiert wird nur nach
-    UNTEN (ohne Laden faellt der SoC nur) und nur bei deutlichem Abstand.
-    Ergibt die Rechnung weniger als 0 %, passen Zaehler und Kapazitaet nicht
-    zusammen - dann bleibt der erfasste Wert.
+    UNTEN (ohne Laden faellt der SoC nur).
+
+    `driven_km` sind die km zwischen der Messung des Start-SoC und dem
+    Einstecken: 0 heisst, der Wert ist frisch - dann wird nichts korrigiert;
+    mehr als 0 heisst, er ist veraltet - dann ab
+    `ENERGY_START_TOLERANCE_DRIVEN_PCT`; None (unbekannt) ab
+    `ENERGY_START_TOLERANCE_PCT`. Ergibt die Rechnung weniger als 0 %, passen
+    Zaehler und Kapazitaet nicht zusammen - dann bleibt der erfasste Wert.
     """
     if soc_start is None or soc_end is None or not energy or not capacity_kwh:
         return soc_start, None
+    if driven_km is not None and driven_km <= 0:
+        return soc_start, None
+    tolerance = (
+        ENERGY_START_TOLERANCE_PCT if driven_km is None else ENERGY_START_TOLERANCE_DRIVEN_PCT
+    )
     derived = soc_end - energy / capacity_kwh * 100
-    if derived < 0 or soc_start - derived < ENERGY_START_TOLERANCE_PCT:
+    if derived < 0 or soc_start - derived < tolerance:
         return soc_start, None
     corrected = int(round(derived))
+    because = (
+        f"Der erfasste Wert stammte aus einem Bericht {driven_km} km vor dem Einstecken."
+        if driven_km is not None
+        else "Der erfasste Wert stammte vermutlich aus einem Bericht vor einer Fahrt."
+    )
     reason = (
         f"Start-SoC aus der gemessenen Energie nachgerechnet: {soc_start} % → {corrected} % "
         f"({fmt_number(energy, 2)} kWh bis {soc_end} % bei {fmt_number(capacity_kwh)} kWh "
-        "Akkukapazität). Der erfasste Wert stammte vermutlich aus einem Bericht vor einer Fahrt."
+        f"Akkukapazität). {because}"
     )
     return corrected, reason
 
@@ -327,6 +346,7 @@ def reset_open_session(config: Any) -> None:
     config.open_soc_start = None
     config.open_soc_before = None
     config.open_soc_last = None
+    config.open_soc_start_odometer_km = None
     config.open_charging_type = None
     config.open_max_power_kw = None
     config.open_odometer_km = None
@@ -461,6 +481,11 @@ def start_open_session(db: Session, config: Any, snapshot: Any, source: Detectio
     soc_now = snapshot.soc_percent if snapshot.soc_percent is not None else config.last_soc
     config.open_soc_start = soc_now
     config.open_soc_before = config.last_soc
+    # Nur ein Kilometerstand aus DEMSELBEN Bericht wie der SoC zaehlt - ein
+    # aelterer liesse einen frischen SoC wie einen veralteten aussehen.
+    config.open_soc_start_odometer_km = (
+        snapshot.odometer_km if snapshot.soc_percent is not None else config.last_soc_odometer_km
+    )
     config.open_soc_last = soc_now
     config.open_charging_type = snapshot.charge_type
     config.open_max_power_kw = snapshot.charge_power_kw
@@ -570,8 +595,20 @@ def finish_open_session(
 
     max_power = config.open_max_power_kw or 0.0
     energy = measured_energy(config)
+    # Das Fahrzeug steht waehrend des Steckens - jeder dabei gesehene
+    # Kilometerstand ist der beim Einstecken.
+    plugged_km = config.open_odometer_km or snapshot.odometer_km
+    driven_km = (
+        plugged_km - config.open_soc_start_odometer_km
+        if plugged_km is not None and config.open_soc_start_odometer_km is not None
+        else None
+    )
     soc_start, energy_reason = energy_based_start(
-        soc_start, soc_end, energy, vehicle.battery_capacity_kwh if vehicle else None
+        soc_start,
+        soc_end,
+        energy,
+        vehicle.battery_capacity_kwh if vehicle else None,
+        driven_km,
     )
     if energy_reason:
         source.log(db, config, "session_backdated", energy_reason, snapshot=snapshot)
@@ -883,6 +920,7 @@ def apply_snapshot(db: Session, config: Any, snapshot: Any, source: DetectionSou
     # beim naechsten Einstecken Start-SoC und Rueckdatierung.
     if snapshot.soc_percent is not None:
         config.last_soc = snapshot.soc_percent
+        config.last_soc_odometer_km = snapshot.odometer_km
     config.last_captured_at = snapshot.captured_at
     raw_energy = _snapshot_energy(snapshot)
     if raw_energy is not None:

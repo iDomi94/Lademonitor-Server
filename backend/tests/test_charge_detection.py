@@ -19,7 +19,7 @@ from conftest import create_vehicle, register
 T0 = datetime(2026, 10, 3, 18, 0)
 
 
-def report(minutes, *, plugged, soc, energy=None, power=0.0, state=None):
+def report(minutes, *, plugged, soc, energy=None, power=0.0, state=None, km=20000):
     when = T0 + timedelta(minutes=minutes)
     return SimpleNamespace(
         charging_state=state or ("CHARGING_HV_BATTERY" if plugged else "NOT_READY_FOR_CHARGING"),
@@ -27,7 +27,7 @@ def report(minutes, *, plugged, soc, energy=None, power=0.0, state=None):
         soc_percent=soc,
         charge_power_kw=power,
         charge_type="AC" if plugged else "OFF",
-        odometer_km=20000,
+        odometer_km=km,
         outside_temp_c=None,
         coordinates=None,
         is_in_saved_location=None,
@@ -287,39 +287,70 @@ def test_stale_start_soc_is_corrected_by_the_measured_energy(db_session, config)
     # Bericht vor rund 95 km Fahrt, beim Einstecken und waehrend des Ladens
     # kommen nur Berichte ohne SoC. Gemessen: 23 kWh bis 90 %.
     sessions = run(db_session, config, [
-        report(0, plugged=False, soc=77, energy=16.0),
-        report(800, plugged=False, soc=None),
-        report(1000, plugged=True, soc=None, energy=0.0, state="READY_FOR_CHARGING"),
-        report(1300, plugged=True, soc=None, energy=10.0, state="CHARGING_HV_BATTERY"),
-        report(1600, plugged=False, soc=90, energy=23.0),
+        report(0, plugged=False, soc=77, energy=16.0, km=51351),
+        report(800, plugged=False, soc=None, km=51355),
+        report(1000, plugged=True, soc=None, energy=0.0, state="READY_FOR_CHARGING", km=None),
+        report(1300, plugged=True, soc=None, energy=10.0, state="CHARGING_HV_BATTERY", km=51450),
+        report(1600, plugged=False, soc=90, energy=23.0, km=51450),
     ])
     assert len(sessions) == 1
     # 90 - 23 / 58 * 100 = 50,3
     assert sessions[0].soc_start == 50
     assert sessions[0].energy_kwh == pytest.approx(23.0)
-    assert "nachgerechnet" in sessions[0].notes
+    assert "99 km vor dem Einstecken" in sessions[0].notes
 
 
-def test_matching_start_soc_is_not_touched_by_the_energy(db_session, config):
-    # ID.3 vom 21.10.2026: 18 kWh bei 49 -> 80 % passt zu 58 kWh.
+def test_small_gap_is_corrected_after_driving(db_session, config):
+    # ID.3 vom 21.10.2026 mit 52 kWh netto: SoC 49 % bei km 51572, eingesteckt
+    # nach 23 km, 18 kWh bis 80 % -> 45 %. Nur 4 Punkte Abstand, aber gefahren.
+    db_session.get(models.Vehicle, config.vehicle_id).battery_capacity_kwh = 52.0
     sessions = run(db_session, config, [
-        report(0, plugged=False, soc=49, energy=23.0),
-        report(200, plugged=True, soc=None, energy=0.0, state="READY_FOR_CHARGING"),
-        report(400, plugged=True, soc=None, energy=10.0, state="CHARGING_HV_BATTERY"),
-        report(460, plugged=False, soc=80, energy=18.0),
+        report(0, plugged=False, soc=49, energy=23.0, km=51572),
+        report(200, plugged=True, soc=None, energy=0.0, state="READY_FOR_CHARGING", km=None),
+        report(400, plugged=True, soc=None, energy=10.0, state="CHARGING_HV_BATTERY", km=None),
+        report(460, plugged=False, soc=80, energy=18.0, km=51595),
     ])
     assert len(sessions) == 1
-    assert sessions[0].soc_start == 49
+    assert sessions[0].soc_start == 45
+    assert "23 km vor dem Einstecken" in sessions[0].notes
+
+
+def test_fresh_start_soc_is_not_touched_by_the_energy(db_session, config):
+    # Kein km zwischen SoC-Bericht und Einstecken: der Wert ist frisch, auch
+    # wenn die Energie (Kapazitaet zu klein eingetragen) etwas anderes sagt.
+    sessions = run(db_session, config, [
+        report(0, plugged=False, soc=60, energy=5.0, km=30000),
+        report(15, plugged=True, soc=None, energy=0.0, state="CHARGING_HV_BATTERY", km=30000),
+        report(200, plugged=False, soc=80, energy=20.0, km=30000),
+    ])
+    assert len(sessions) == 1
+    assert sessions[0].soc_start == 60
     assert "nachgerechnet" not in sessions[0].notes
 
 
-@pytest.mark.parametrize("soc_start, soc_end, energy, capacity, expected", [
-    (77, 90, 23.0, None, 77),     # ohne Akkukapazitaet keine Rechnung
-    (77, 90, None, 58.0, 77),     # ohne Zaehler keine Rechnung
-    (20, 80, 49.0, 58.0, 20),     # unter 0 %: Zaehler/Kapazitaet passen nicht
-    (60, 80, 9.0, 58.0, 60),      # nur 4 Punkte Abstand: Rundung
-    (40, 60, 5.0, 58.0, 40),      # gerechneter Wert hoeher: nie nach oben
+def test_without_odometer_only_large_gaps_are_corrected(db_session, config):
+    # Ohne Kilometerstaende bleibt es bei 5 Punkten: 4 Punkte bleiben stehen.
+    sessions = run(db_session, config, [
+        report(0, plugged=False, soc=53, energy=23.0, km=None),
+        report(200, plugged=True, soc=None, energy=0.0, state="CHARGING_HV_BATTERY", km=None),
+        report(460, plugged=False, soc=80, energy=18.0, km=None),
+    ])
+    assert len(sessions) == 1
+    assert sessions[0].soc_start == 53
+
+
+@pytest.mark.parametrize("soc_start, soc_end, energy, capacity, driven, expected", [
+    (77, 90, 23.0, None, 99, 77),     # ohne Akkukapazitaet keine Rechnung
+    (77, 90, None, 58.0, 99, 77),     # ohne Zaehler keine Rechnung
+    (20, 80, 49.0, 58.0, 99, 20),     # unter 0 %: Zaehler/Kapazitaet passen nicht
+    (60, 80, 9.0, 58.0, None, 60),    # unbekannt gefahren, 4 Punkte: Rundung
+    (48, 80, 18.0, 52.0, 10, 45),     # gefahren, 2,6 Punkte: korrigiert
+    (40, 60, 5.0, 58.0, 50, 40),      # gerechneter Wert hoeher: nie nach oben
+    (77, 90, 23.0, 58.0, 0, 77),      # nicht gefahren: frischer Wert bleibt
+    (50, 80, 18.0, 58.0, 5, 50),      # gefahren, 1 Punkt: Rundung
 ])
-def test_energy_based_start_guards(soc_start, soc_end, energy, capacity, expected):
-    corrected, _ = charge_detection.energy_based_start(soc_start, soc_end, energy, capacity)
+def test_energy_based_start_guards(soc_start, soc_end, energy, capacity, driven, expected):
+    corrected, _ = charge_detection.energy_based_start(
+        soc_start, soc_end, energy, capacity, driven
+    )
     assert corrected == expected
