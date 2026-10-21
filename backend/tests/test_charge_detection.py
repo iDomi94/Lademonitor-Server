@@ -280,3 +280,46 @@ def test_session_times_are_stored_as_local_time(db_session, config, monkeypatch)
     # Oktober 2026 = Sommerzeit, UTC+2.
     assert s.start_time == T0 + timedelta(hours=2, minutes=15)
     assert s.end_time == T0 + timedelta(hours=2, minutes=60)
+
+
+def test_stale_start_soc_is_corrected_by_the_measured_energy(db_session, config):
+    # Nachgebaut am ID.3 vom 20.10.2026: der letzte SoC (77 %) stammt aus einem
+    # Bericht vor rund 95 km Fahrt, beim Einstecken und waehrend des Ladens
+    # kommen nur Berichte ohne SoC. Gemessen: 23 kWh bis 90 %.
+    sessions = run(db_session, config, [
+        report(0, plugged=False, soc=77, energy=16.0),
+        report(800, plugged=False, soc=None),
+        report(1000, plugged=True, soc=None, energy=0.0, state="READY_FOR_CHARGING"),
+        report(1300, plugged=True, soc=None, energy=10.0, state="CHARGING_HV_BATTERY"),
+        report(1600, plugged=False, soc=90, energy=23.0),
+    ])
+    assert len(sessions) == 1
+    # 90 - 23 / 58 * 100 = 50,3
+    assert sessions[0].soc_start == 50
+    assert sessions[0].energy_kwh == pytest.approx(23.0)
+    assert "nachgerechnet" in sessions[0].notes
+
+
+def test_matching_start_soc_is_not_touched_by_the_energy(db_session, config):
+    # ID.3 vom 21.10.2026: 18 kWh bei 49 -> 80 % passt zu 58 kWh.
+    sessions = run(db_session, config, [
+        report(0, plugged=False, soc=49, energy=23.0),
+        report(200, plugged=True, soc=None, energy=0.0, state="READY_FOR_CHARGING"),
+        report(400, plugged=True, soc=None, energy=10.0, state="CHARGING_HV_BATTERY"),
+        report(460, plugged=False, soc=80, energy=18.0),
+    ])
+    assert len(sessions) == 1
+    assert sessions[0].soc_start == 49
+    assert "nachgerechnet" not in sessions[0].notes
+
+
+@pytest.mark.parametrize("soc_start, soc_end, energy, capacity, expected", [
+    (77, 90, 23.0, None, 77),     # ohne Akkukapazitaet keine Rechnung
+    (77, 90, None, 58.0, 77),     # ohne Zaehler keine Rechnung
+    (20, 80, 49.0, 58.0, 20),     # unter 0 %: Zaehler/Kapazitaet passen nicht
+    (60, 80, 9.0, 58.0, 60),      # nur 4 Punkte Abstand: Rundung
+    (40, 60, 5.0, 58.0, 40),      # gerechneter Wert hoeher: nie nach oben
+])
+def test_energy_based_start_guards(soc_start, soc_end, energy, capacity, expected):
+    corrected, _ = charge_detection.energy_based_start(soc_start, soc_end, energy, capacity)
+    assert corrected == expected

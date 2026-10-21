@@ -5,6 +5,14 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.44.1",
+        "date": "2026-10-21",
+        "title": "Richtiger Start-SoC bei Berichten ohne Ladestand",
+        "changes": [
+            "Meldet das Fahrzeug beim Einstecken keinen Ladestand (häufig beim VW-Datenportal), galt bisher der letzte bekannte – auch wenn seitdem gefahren wurde. Ein Ladevorgang am ID.3 stand so bei 77 % statt rund 50 % Start. Liefert das Fahrzeug die geladene Energie, wird der Start-SoC jetzt daraus und aus der Akkukapazität nachgerechnet, sobald er deutlich niedriger liegt. Die Korrektur steht in der Notiz des Vorgangs.",
+        ],
+    },
+    {
         "version": "0.44.0",
         "date": "2026-10-19",
         "title": "Ladevorgang bearbeiten: alle Felder",

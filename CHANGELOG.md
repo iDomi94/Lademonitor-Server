@@ -6,6 +6,15 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.44.1] — 2026-10-21
+
+### Fixed
+- **Start-SoC aus gemessener Energie nachgerechnet** (`charge_detection.energy_based_start()`).
+  Hat der Bericht beim Einstecken keinen SoC, war der Startwert der letzte bekannte,
+  auch nach einer Fahrt (ID.3, 20.10.2026: 77 % statt rund 50 %). Mit Energiezähler
+  und Akkukapazität gilt jetzt `SoC_Ende − kWh / Kapazität`, wenn das mindestens
+  5 Punkte niedriger liegt; nie nach oben, nie unter 0 %. Vermerk in Notiz und Protokoll.
+
 ## [0.44.0] — 2026-10-19
 
 ### Added
