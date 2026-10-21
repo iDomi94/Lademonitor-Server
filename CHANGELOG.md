@@ -6,6 +6,15 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.44.2] — 2026-10-21
+
+### Changed
+- **Start-SoC-Korrektur abhängig von der Fahrt** (`charge_detection.energy_based_start()`).
+  Die Ladeerkennung merkt sich den Kilometerstand des Berichts, der den SoC lieferte
+  (`last_soc_odometer_km`, `open_soc_start_odometer_km`). Ist das Fahrzeug seitdem
+  gefahren, wird schon ab 2 Punkten korrigiert, ohne Fahrt gar nicht, ohne
+  Kilometerstände weiter ab 5 Punkten. Migration: zwei INTEGER-Spalten je Quelle.
+
 ## [0.44.1] — 2026-10-21
 
 ### Fixed

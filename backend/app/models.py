@@ -913,6 +913,10 @@ class ChargeDetectionStateMixin:
     # liefert (siehe charge_detection.py, "Gemessene Energie") - Ausgangswert
     # fuer den naechsten Vorgang.
     last_energy_raw_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Kilometerstand aus dem Bericht, der `last_soc` geliefert hat (None, wenn
+    # er keinen trug). Daran erkennt charge_detection.energy_based_start(), ob
+    # seit dem letzten SoC gefahren wurde (dann ist er als Start zu hoch).
+    last_soc_odometer_km: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # --- Laufender, noch nicht abgeschlossener Ladevorgang -------------------
     open_start_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -923,6 +927,8 @@ class ChargeDetectionStateMixin:
     # Fehler). Landet als Notiz am angelegten Ladevorgang.
     open_soc_before: Mapped[int | None] = mapped_column(Integer, nullable=True)
     open_soc_last: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Kilometerstand, zu dem open_soc_start gemessen wurde.
+    open_soc_start_odometer_km: Mapped[int | None] = mapped_column(Integer, nullable=True)
     open_charging_type: Mapped[str | None] = mapped_column(String, nullable=True)
     open_max_power_kw: Mapped[float | None] = mapped_column(Float, nullable=True)
     open_odometer_km: Mapped[int | None] = mapped_column(Integer, nullable=True)

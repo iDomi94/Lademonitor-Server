@@ -620,6 +620,14 @@ def run_light_migrations() -> None:
                     "ADD COLUMN IF NOT EXISTS open_charging_seen BOOLEAN"
                 )
             )
+            # Kilometerstaende zum SoC (charge_detection.energy_based_start).
+            for odometer_column in ("last_soc_odometer_km", "open_soc_start_odometer_km"):
+                conn.execute(
+                    text(
+                        f"ALTER TABLE {detection_table} "
+                        f"ADD COLUMN IF NOT EXISTS {odometer_column} INTEGER"
+                    )
+                )
         conn.execute(
             text(
                 "ALTER TABLE webdav_backup_configs "

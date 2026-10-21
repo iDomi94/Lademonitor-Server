@@ -5,6 +5,14 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.44.2",
+        "date": "2026-10-21",
+        "title": "Start-SoC nach einer Fahrt genauer",
+        "changes": [
+            "Wurde seit dem letzten gemeldeten Ladestand gefahren, rechnet der Server den Start-SoC jetzt schon ab 2 Prozentpunkten Abweichung aus der geladenen Energie nach (bisher erst ab 5). Steht der Kilometerstand seit der Messung still, bleibt der gemeldete Wert unverändert.",
+        ],
+    },
+    {
         "version": "0.44.1",
         "date": "2026-10-21",
         "title": "Richtiger Start-SoC bei Berichten ohne Ladestand",
