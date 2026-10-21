@@ -2703,6 +2703,15 @@ Messort `vehicle`, also ohne Ladeverluste: faellt aus der Verlustrechnung,
 zaehlt im Akku-Index in der eigenen Gruppe. Die Rueckdatierung aendert bei
 gemessener Energie nur SoC-Start und Startzeit.
 
+**Start-SoC aus der Energie (v0.44.1):** traegt der Bericht beim Einstecken
+keinen SoC, ist `open_soc_start` der letzte bekannte Wert - nach einer Fahrt zu
+hoch (ID.3 20.10.2026: 77 % aus einem Bericht 95 km vorher, gemessen 23 kWh bis
+90 %, echt ~50 %). `charge_detection.energy_based_start()` rechnet bei
+gemessener Energie und Akkukapazitaet `soc_end - kWh/Kapazitaet` und nimmt das,
+wenn es mindestens `ENERGY_START_TOLERANCE_PCT` (5) niedriger liegt - nur nach
+unten, nicht unter 0 % (dann passen Zaehler und Kapazitaet nicht). Haengt an
+einer korrekt eingetragenen NETTO-Kapazitaet; die Startzeit bleibt.
+
 **Keine Position** - Geo-Matching greift nicht, Ort und Anbieter traegt man
 beim Pruefen nach. Temperatur: `outside_temperature` (dK), sonst die
 `outdoor_temperature*`-Varianten, plausibel -50..60 Grad.

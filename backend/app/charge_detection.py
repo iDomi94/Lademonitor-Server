@@ -284,6 +284,44 @@ def backdated_start(
     return corrected, corrected_time, reason
 
 
+# Ab so vielen Prozentpunkten Abstand gilt der aus der Energie gerechnete
+# Startwert als besser als der erfasste. Kleinere Abweichungen sind Rundung
+# (SoC ganzzahlig, Zaehler je kWh) und Nennkapazitaet gegen echte Kapazitaet.
+ENERGY_START_TOLERANCE_PCT = 5
+
+
+def energy_based_start(
+    soc_start: int | None,
+    soc_end: int | None,
+    energy: float | None,
+    capacity_kwh: float | None,
+) -> tuple[int | None, str | None]:
+    """Start-SoC aus gemessener Energie nachrechnen: `(soc_start, Begruendung)`.
+
+    Der Start-SoC ist oft der letzte bekannte Wert VOR dem Einstecken, weil der
+    Bericht beim Einstecken keinen eigenen SoC hat (VW-Datenportal). Wurde
+    seitdem gefahren, ist er zu hoch - ID.3 vom 20.10.2026: 77 % aus einem
+    Bericht von 95 km vorher, gemessen wurden 23 kWh bis 90 %, eingesteckt war
+    bei rund 50 %. Der Fahrzeugzaehler misst ab Akku (ohne Ladeverluste), also
+    ist `soc_end - energy / capacity` der Startwert. Korrigiert wird nur nach
+    UNTEN (ohne Laden faellt der SoC nur) und nur bei deutlichem Abstand.
+    Ergibt die Rechnung weniger als 0 %, passen Zaehler und Kapazitaet nicht
+    zusammen - dann bleibt der erfasste Wert.
+    """
+    if soc_start is None or soc_end is None or not energy or not capacity_kwh:
+        return soc_start, None
+    derived = soc_end - energy / capacity_kwh * 100
+    if derived < 0 or soc_start - derived < ENERGY_START_TOLERANCE_PCT:
+        return soc_start, None
+    corrected = int(round(derived))
+    reason = (
+        f"Start-SoC aus der gemessenen Energie nachgerechnet: {soc_start} % → {corrected} % "
+        f"({fmt_number(energy, 2)} kWh bis {soc_end} % bei {fmt_number(capacity_kwh)} kWh "
+        "Akkukapazität). Der erfasste Wert stammte vermutlich aus einem Bericht vor einer Fahrt."
+    )
+    return corrected, reason
+
+
 def reset_open_session(config: Any) -> None:
     config.open_start_time = None
     config.open_soc_start = None
@@ -530,9 +568,14 @@ def finish_open_session(
     if backdate_reason:
         source.log(db, config, "session_backdated", backdate_reason, snapshot=snapshot)
 
-    delta = (soc_end - soc_start) if (soc_start is not None and soc_end is not None) else None
     max_power = config.open_max_power_kw or 0.0
     energy = measured_energy(config)
+    soc_start, energy_reason = energy_based_start(
+        soc_start, soc_end, energy, vehicle.battery_capacity_kwh if vehicle else None
+    )
+    if energy_reason:
+        source.log(db, config, "session_backdated", energy_reason, snapshot=snapshot)
+    delta = (soc_end - soc_start) if (soc_start is not None and soc_end is not None) else None
 
     # Eingesteckt, aber nie geladen (Zielladestand war schon erreicht, oder das
     # Kabel steckte nur kurz): kein Ladevorgang, sondern Rauschen. Hat die
@@ -559,6 +602,8 @@ def finish_open_session(
         return
 
     notes = detection_note(config, source, delta, backdate_reason, energy)
+    if energy_reason:
+        notes = f"{notes}\n{energy_reason}"
     session = create_session(
         db,
         config,
