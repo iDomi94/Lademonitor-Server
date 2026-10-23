@@ -1,0 +1,66 @@
+{# Laufende Ladevorgaenge ("laedt gerade", active_sessions.py). Eingebunden
+   ganz oben im Dashboard und ueber der Ladevorgangsliste - beide Male
+   derselbe Block, damit die Anzeige nicht auseinanderlaeuft. Folgt keinem
+   Filter: was gerade laedt, laedt jetzt. Nichts zu bearbeiten - der
+   Vorgang entsteht erst beim Ausstecken. #}
+<div class="card active-charging" id="active-charging" hidden></div>
+<script>
+(() => {
+  const T = {
+    title: {{ t('active.title')|tojson }},
+    since: {{ t('active.since')|tojson }},
+    asOf: {{ t('active.as_of')|tojson }},
+    maxPower: {{ t('active.max_power')|tojson }},
+    hint: {{ t('active.hint')|tojson }},
+    sources: {
+      myskoda: 'MyŠkoda', vw_data_act: {{ t('active.source.vw_data_act')|tojson }},
+      renault: 'Renault', home_assistant: 'Home Assistant',
+    },
+  };
+  const locale = {{ lang|default('de')|tojson }} === 'en' ? 'en-US' : 'de-DE';
+  const num = (v, d = 0) => Number(v).toLocaleString(locale, { maximumFractionDigits: d });
+  const when = iso => {
+    const d = new Date(iso);
+    const today = new Date().toDateString() === d.toDateString();
+    return d.toLocaleString(locale, today
+      ? { hour: '2-digit', minute: '2-digit' }
+      : { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  };
+  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  async function load() {
+    const box = document.getElementById('active-charging');
+    let list = [];
+    try {
+      const res = await fetch('api/sessions/active');
+      if (res.ok) list = await res.json();
+    } catch (e) { /* aelterer Server oder offline: Block bleibt aus */ }
+    box.hidden = !list.length;
+    if (!list.length) return;
+    box.innerHTML = list.map(a => {
+      const parts = [];
+      if (a.start_time) parts.push(T.since.replace('{time}', when(a.start_time)));
+      if (a.soc_start != null || a.soc_current != null) {
+        const s = a.soc_start != null ? a.soc_start + ' %' : '?';
+        parts.push(a.soc_current != null && a.soc_current !== a.soc_start
+          ? `${s} → ${a.soc_current} %` : s);
+      }
+      if (a.energy_kwh != null) parts.push((a.energy_is_estimated ? '~' : '') + num(a.energy_kwh, 1) + ' kWh');
+      if (a.max_power_kw) parts.push(T.maxPower.replace('{kw}', num(a.max_power_kw, 1)));
+      if (a.odometer_km != null) parts.push(num(a.odometer_km) + ' km');
+      if (a.outside_temp_c != null) parts.push(num(a.outside_temp_c, 1) + ' °C');
+      const meta = [T.sources[a.source] || a.source];
+      if (a.updated_at) meta.push(T.asOf.replace('{time}', when(a.updated_at)));
+      return `<div class="active-line">
+        <span class="badge badge-active"><span class="active-dot"></span>${T.title}</span>
+        <strong>${esc(a.vehicle_name)}</strong>
+        ${a.charging_type ? `<span class="type-badge type-${a.charging_type.toLowerCase()}">${a.charging_type}</span>` : ''}
+        <span>${parts.join(' · ')}</span>
+        <span class="active-meta">${meta.join(' · ')}</span></div>`;
+    }).join('') + `<p class="chartnote">${T.hint}</p>`;
+  }
+  load();
+  // Poller fragen alle paar Minuten ab - die Anzeige zieht im selben Takt nach.
+  setInterval(() => { if (!document.hidden) load(); }, 60000);
+})();
+</script>

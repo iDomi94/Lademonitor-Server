@@ -967,6 +967,77 @@ class AutoSessionPush(BaseModel):
         return upper if upper in (t.value for t in ChargingType) else None
 
 
+class ActiveSessionPush(BaseModel):
+    """Home Assistant meldet einen laufenden Ladevorgang (beim Einstecken,
+    optional spaeter mit aktuellem SoC). Wiederholte Meldungen fuer dasselbe
+    Fahrzeug aktualisieren den Eintrag; der Push am Ladeende raeumt ihn weg.
+    Alles ausser dem Fahrzeug ist optional und tolerant wie AutoSessionPush -
+    eine Anzeige soll nie an einem 'unknown'-Sensor scheitern."""
+    vehicle_external_id: str
+    start_time: datetime | None = None
+    charging_type: ChargingType | None = None
+    soc_start: int | None = None
+    soc_current: int | None = None
+    energy_kwh: float | None = None
+    odometer_km: int | None = None
+    outside_temp_c: float | None = None
+
+    @field_validator(
+        "soc_start", "soc_current", "energy_kwh", "odometer_km", "outside_temp_c",
+        mode="before",
+    )
+    @classmethod
+    def _tolerate_unknown_number(cls, value: object, info) -> object:
+        """'unknown'/leer/unplausibel -> Feld weglassen statt 422."""
+        if isinstance(value, str):
+            try:
+                value = float(value.strip())
+            except ValueError:
+                return None
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        if info.field_name == "outside_temp_c":
+            return value if -60 <= value <= 60 else None
+        if value < 0:
+            return None
+        if info.field_name in ("soc_start", "soc_current"):
+            return round(value) if value <= 100 else None
+        if info.field_name == "odometer_km":
+            return round(value)
+        return value
+
+    @field_validator("charging_type", mode="before")
+    @classmethod
+    def _normalize_charging_type(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        upper = value.upper()
+        return upper if upper in (t.value for t in ChargingType) else None
+
+
+class ActiveSessionOut(BaseModel):
+    """Ein laufender Ladevorgang (siehe active_sessions.py). Kein
+    ChargingSession-Datensatz, deshalb ohne id - die Clients zeigen ihn nur an."""
+    vehicle_id: str
+    vehicle_name: str | None = None
+    # myskoda | vw_data_act | renault | home_assistant
+    source: str
+    start_time: datetime | None = None
+    charging_type: str | None = None
+    soc_start: int | None = None
+    # Juengster bekannter SoC (Poller: letzter Bericht, HA: letzte Meldung).
+    soc_current: int | None = None
+    energy_kwh: float | None = None
+    energy_is_estimated: bool = False
+    max_power_kw: float | None = None
+    odometer_km: int | None = None
+    outside_temp_c: float | None = None
+    # Lokalzeit des Berichts, aus dem die Werte stammen.
+    updated_at: datetime | None = None
+    # Rohzustand der Quelle (z.B. CHARGING, CONSERVING), nur Poller.
+    charging_state: str | None = None
+
+
 # ---------- Statistik ----------
 
 class MonthlyStat(BaseModel):

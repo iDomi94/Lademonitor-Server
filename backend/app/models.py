@@ -669,6 +669,33 @@ class ChargingSession(Base):
     location: Mapped["ChargingLocation"] = relationship(back_populates="sessions")
 
 
+class ActiveChargeReport(Base):
+    """Laufender Ladevorgang, den Home Assistant beim Einstecken meldet.
+
+    Die HA-Integration schickt den fertigen Vorgang erst beim Ladeende
+    (`POST /api/sessions/auto`) - bis dahin wuesste der Server nichts davon.
+    Diese Zeile haelt nur die Anzeige "laedt gerade" (siehe active_sessions.py)
+    und verschwindet mit dem Push am Ende. Hoechstens eine je Fahrzeug.
+    Die Poller brauchen sie nicht: deren laufender Vorgang steht ohnehin in den
+    `open_*`-Spalten ihrer Konfiguration.
+    """
+    __tablename__ = "active_charge_reports"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    vehicle_id: Mapped[str] = mapped_column(ForeignKey("vehicles.id"), unique=True, index=True)
+    # Naive LOKALZEIT wie ChargingSession.start_time.
+    start_time: Mapped[datetime] = mapped_column(DateTime)
+    charging_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    soc_start: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    soc_current: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    energy_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
+    odometer_km: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    outside_temp_c: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Naive UTC: wann HA zuletzt etwas gemeldet hat (Stand der Anzeige).
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class TireSet(Base):
     """Ein Reifensatz ab seinem Montagedatum.
 

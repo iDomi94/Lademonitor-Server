@@ -151,6 +151,10 @@ def delete_vehicle(
     db.query(models.RenaultConfig).filter(
         models.RenaultConfig.vehicle_id == vehicle.id
     ).delete(synchronize_session=False)
+    # Und ein von Home Assistant gemeldeter, noch laufender Vorgang.
+    db.query(models.ActiveChargeReport).filter(
+        models.ActiveChargeReport.vehicle_id == vehicle.id
+    ).delete(synchronize_session=False)
     # Grabstein VOR dem Loeschen, im selben Commit - siehe sync.record_deletion().
     record_deletion(db, user.id, models.SyncEntityType.VEHICLE, vehicle.id)
     db.delete(vehicle)

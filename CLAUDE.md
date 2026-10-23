@@ -76,6 +76,7 @@ backend/app/
     combustion_vehicle.py, bmw_cardata.py, vw_data_act.py, renault.py
   auth.py            - Passwort-Hashing, Token-Handling, Auth-Dependencies
   sync.py            - record_deletion(): Grabstein fuer eine geloeschte Zeile
+  active_sessions.py - Laufende Ladevorgaenge ("laedt gerade") aus Pollern und HA
   tires.py           - Reifensaetze, temperaturbereinigter Vergleich
   fees.py            - Grundgebuehren/Abos: Perioden und Umlage nach kWh
   vehicle_costs.py   - Fahrzeugkosten, Wertverlust (Restwertkurve), Leasing
@@ -2958,6 +2959,39 @@ gesetzt. Nicht editierbar bleiben nur `id`, `user_id`, `created_at`,
 `updated_at`. `SessionUpdate` nimmt dafuer `vehicle_id` (Eigentum geprueft),
 `source` und `external_session_id` an; `null` bei den beiden Pflichtfeldern
 heisst "nicht aendern". Tests: `tests/test_session_edit_all_fields.py`.
+
+## Laufender Ladevorgang (`active_sessions.py`, `GET/POST/DELETE /api/sessions/active`, ab 2026-10-23, v0.45.0)
+
+Wunsch des Nutzers (23.10.2026): ein gerade laufender Vorgang soll sichtbar
+sein - als markierter Eintrag ueber der Ladevorgangsliste und ganz oben im
+Dashboard, in Web, iOS und Android, inkl. Startmeldung aus Home Assistant.
+
+**Kein ChargingSession-Datensatz.** Der Vorgang entsteht weiterhin erst beim
+Ausstecken; die Anzeige ist ein Zwischenstand ohne ID, nicht bearbeitbar,
+nicht im Sync, nicht im Backup. Rueckdatierung und Start-SoC aus der Energie
+greifen erst beim Anlegen - die Anzeige zeigt die Rohwerte und sagt das.
+
+**Woher die Werte kommen:**
+- Poller (MyŠkoda, VW-Datenportal, Renault): der offene Zustand in den
+  `open_*`-Spalten, nur bei eingeschalteter Quelle. Aktueller SoC = `last_soc`
+  (letzter Bericht), Stand = `last_captured_at` - beim VW-Datenportal oft
+  Stunden alt, deshalb steht er immer dabei. kWh: `open_energy_kwh`, sonst
+  geschaetzt aus SoC-Zuwachs x Akkukapazitaet.
+- Home Assistant: `POST /api/sessions/active` beim `begin_charging_session`
+  (Lademonitor-HA 0.9.0), optional Zwischenstaende mit `soc_current` ueber
+  `lademonitor.update_charging_session`. Eine Zeile je Fahrzeug
+  (`models.ActiveChargeReport`, entsteht per `create_all()`); fehlende Felder
+  im Zwischenstand bleiben stehen, eine andere `start_time` beginnt neu. Der
+  Push auf `/auto` raeumt sie weg (auch bei Dublette), `DELETE` verwirft sie
+  ohne Push. Meldungen aelter als `HA_REPORT_MAX_AGE` (3 Tage seit der
+  letzten Meldung) werden nicht mehr angezeigt - sonst stuende ein Vorgang,
+  dessen Ende nie ankam, fuer immer da.
+- BMW CarData: nur fertige Vorgaenge, taucht nie auf.
+
+Je Fahrzeug hoechstens ein Eintrag; Poller vor HA. Web: Partial
+`templates/_active_charging.html` (Dashboard und Ladevorgaenge), laedt jede
+Minute nach. Apps: nur im Server-Modus, ein aelterer Server (404) zeigt
+einfach nichts. Tests: `tests/test_active_sessions.py`.
 
 ## Backup-Export/-Import (`routers/backup.py`)
 

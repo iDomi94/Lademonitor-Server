@@ -2,6 +2,8 @@
 {% block content %}
 <h1>{{ t('dashboard.heading') }}</h1>
 
+{% include "_active_charging.html" %}
+
 {# Faellige und bald faellige Erinnerungen (reminders.py) ganz oben - sonst
    ist hier nichts zu sehen. Folgt bewusst KEINEM Filter: eine faellige HU
    ist faellig, egal welcher Zeitraum gerade gewaehlt ist. #}

@@ -1227,5 +1227,11 @@
   "email.renault_tfa.subject": "Lademonitor: Renault verlangt einen Bestätigungscode",
   "email.renault_tfa.heading": "My Renault möchte die Anmeldung bestätigt haben",
   "email.renault_tfa.intro": "Renault verlangt für die Anmeldung des Servers einen Code per E-Mail. Im Hintergrund kann der Server den nicht eintragen, deshalb werden bis dahin keine Ladevorgänge erkannt.",
-  "email.renault_tfa.note": "In den Einstellungen unter \"API & Debug\" auf \"Anmelden\" drücken und den Code aus der E-Mail von Renault eintragen."
+  "email.renault_tfa.note": "In den Einstellungen unter \"API & Debug\" auf \"Anmelden\" drücken und den Code aus der E-Mail von Renault eintragen.",
+  "active.title": "Lädt gerade",
+  "active.since": "seit {time}",
+  "active.as_of": "Stand {time}",
+  "active.max_power": "max. {kw} kW",
+  "active.hint": "Der Ladevorgang wird beim Ausstecken angelegt. Bis dahin sind das Zwischenstände der Quelle, Start-SoC und Startzeit können sich noch ändern.",
+  "active.source.vw_data_act": "VW-Datenportal"
 }

@@ -1139,3 +1139,17 @@ button.ghost:hover { border-color: var(--accent2); color: var(--accent2); opacit
 .source-switch button { background: transparent; color: var(--text); border: 1px solid var(--border); }
 .source-switch button:hover { border-color: var(--accent2); color: var(--accent2); opacity: 1; }
 .source-switch button[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: #0f1420; }
+
+/* Laufender Ladevorgang (templates/_active_charging.html) - gruene Kante wie
+   die orange des Erinnerungsbanners, damit er sich von beidem abhebt. */
+.active-charging { margin-bottom: 16px; border-left: 3px solid var(--accent); }
+.active-line { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; padding: 3px 0; }
+.active-meta { color: var(--muted); font-size: 12px; }
+.badge-active { background: rgba(79, 209, 165, 0.15); color: var(--accent); }
+.active-dot {
+  display: inline-block; width: 7px; height: 7px; margin-right: 5px; border-radius: 50%;
+  background: var(--accent); vertical-align: 1px;
+  animation: active-pulse 1.6s ease-in-out infinite;
+}
+@keyframes active-pulse { 50% { opacity: 0.3; } }
+@media (prefers-reduced-motion: reduce) { .active-dot { animation: none; } }

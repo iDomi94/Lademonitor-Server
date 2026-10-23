@@ -149,6 +149,9 @@
 </form>
 </details>
 
+{# Laufender Vorgang ueber der Liste - er ist noch kein Datensatz. #}
+{% include "_active_charging.html" %}
+
 <!-- Zwei Darstellungen derselben Liste: die Tabelle fuer breite Schirme, die
      Karten fuer schmale. Es liegt immer nur eine davon im DOM - welche,
      entscheidet renderSessions() ueber eine Media Query. -->

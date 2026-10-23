@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..battery import METER_CHARGER, effective_meter
+from ..active_sessions import clear_report, list_active
 from ..auth import get_current_user
 from ..consumption import compute_vehicle_consumptions
 from ..database import get_db
@@ -176,6 +177,11 @@ def sync_provider_last_price(session: models.ChargingSession, db: Session) -> No
         provider.last_price_ac_per_kwh = session.price_per_kwh
 
 
+def charge_local_now() -> datetime:
+    """Naive Ortszeit, wie start_time in der DB liegt."""
+    return datetime.now()
+
+
 def _get_owned_vehicle(db: Session, user: models.User, vehicle_id: str) -> models.Vehicle:
     vehicle = (
         db.query(models.Vehicle)
@@ -228,6 +234,82 @@ def list_sessions(
     sessions = q.all()
     attach_consumption(db, user.id, sessions)
     return sessions
+
+
+# --- Laufende Ladevorgaenge (siehe active_sessions.py) ----------------------
+# Vor den "/{session_id}"-Routen registriert, sonst faengt DELETE
+# "/{session_id}" den Pfad "/active" ab.
+
+@router.get("/active", response_model=list[schemas.ActiveSessionOut])
+def list_active_sessions(
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    return list_active(db, user)
+
+
+def _vehicle_by_external_id(db: Session, user: models.User, external_id: str) -> models.Vehicle:
+    vehicle = (
+        db.query(models.Vehicle)
+        .filter(models.Vehicle.external_id == external_id, models.Vehicle.user_id == user.id)
+        .first()
+    )
+    if not vehicle:
+        raise HTTPException(404, f"Kein Vehicle mit external_id '{external_id}' fuer diesen Nutzer")
+    return vehicle
+
+
+@router.post("/active", status_code=204)
+def report_active_session(
+    payload: schemas.ActiveSessionPush,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Home Assistant meldet Ladebeginn bzw. einen Zwischenstand. Felder, die
+    nicht mitkommen, bleiben beim Zwischenstand erhalten - nur ein neuer
+    Ladebeginn (andere start_time) beginnt von vorn."""
+    vehicle = _vehicle_by_external_id(db, user, payload.vehicle_external_id)
+    start = payload.start_time
+    if start is not None and start.tzinfo is not None:
+        # Wie beim Push am Ladeende: die Wanduhrzeit zaehlt (Ortszeit).
+        start = start.replace(tzinfo=None)
+    report = (
+        db.query(models.ActiveChargeReport)
+        .filter(models.ActiveChargeReport.vehicle_id == vehicle.id)
+        .first()
+    )
+    if report is None or (start is not None and start != report.start_time):
+        if report is not None:
+            db.delete(report)
+            db.flush()
+        report = models.ActiveChargeReport(
+            user_id=user.id,
+            vehicle_id=vehicle.id,
+            start_time=start or charge_local_now(),
+        )
+        db.add(report)
+    for field in ("soc_start", "soc_current", "energy_kwh", "odometer_km", "outside_temp_c"):
+        value = getattr(payload, field)
+        if value is not None:
+            setattr(report, field, value)
+    if payload.charging_type is not None:
+        report.charging_type = payload.charging_type.value
+    if report.soc_current is None:
+        report.soc_current = report.soc_start
+    report.updated_at = datetime.utcnow()
+    db.commit()
+
+
+@router.delete("/active", status_code=204)
+def clear_active_session(
+    vehicle_external_id: str,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Laufenden Vorgang ohne Push verwerfen (abgebrochen, nie geladen)."""
+    vehicle = _vehicle_by_external_id(db, user, vehicle_external_id)
+    clear_report(db, user.id, vehicle.id)
+    db.commit()
 
 
 @router.post("", response_model=schemas.SessionOut, status_code=201)
@@ -393,7 +475,11 @@ def push_auto_session(
         )
         .first()
     )
+    # Der laufende Vorgang ist hiermit beendet (auch bei einer Dublette).
+    clear_report(db, user.id, vehicle.id)
+
     if existing:
+        db.commit()
         attach_consumption(db, user.id, [existing])
         return existing
 
