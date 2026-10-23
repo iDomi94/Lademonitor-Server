@@ -1227,5 +1227,11 @@
   "email.renault_tfa.subject": "Lademonitor: Renault asks for a confirmation code",
   "email.renault_tfa.heading": "My Renault wants the login confirmed",
   "email.renault_tfa.intro": "Renault asks for a code by email to log the server in. The server cannot enter it in the background, so no charging sessions are detected until then.",
-  "email.renault_tfa.note": "Press \"Log in\" in the settings under \"API & Debug\" and enter the code from Renault's email."
+  "email.renault_tfa.note": "Press \"Log in\" in the settings under \"API & Debug\" and enter the code from Renault's email.",
+  "active.title": "Charging now",
+  "active.since": "since {time}",
+  "active.as_of": "as of {time}",
+  "active.max_power": "max. {kw} kW",
+  "active.hint": "The session is created when the cable is unplugged. Until then these are interim values from the source; start SoC and start time may still change.",
+  "active.source.vw_data_act": "VW data portal"
 }

@@ -6,6 +6,20 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.45.0] — 2026-10-23
+
+### Added
+- **Laufender Ladevorgang** („Lädt gerade“) ganz oben im Dashboard und über der
+  Ladevorgangsliste, mit Beginn, Start-SoC, aktuellem SoC, bisher geladenen kWh
+  (gemessen oder geschätzt), AC/DC, km-Stand, Außentemperatur und Stand des
+  letzten Berichts. Quellen: MyŠkoda, VW-Datenportal, Renault (offener Zustand
+  der Ladeerkennung) und Home Assistant (neue Startmeldung, Lademonitor-HA
+  0.9.0). BMW CarData kennt keine laufenden Vorgänge.
+- `GET /api/sessions/active`, `POST /api/sessions/active` (Startmeldung bzw.
+  Zwischenstand aus HA) und `DELETE /api/sessions/active?vehicle_external_id=`.
+  Der Push am Ladeende räumt die HA-Meldung weg; eine Meldung ohne Ende
+  verschwindet nach drei Tagen aus der Anzeige.
+
 ## [0.44.3] — 2026-10-21
 
 ### Fixed

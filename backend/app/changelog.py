@@ -5,6 +5,16 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.45.0",
+        "date": "2026-10-23",
+        "title": "Laufender Ladevorgang",
+        "changes": [
+            "Ein gerade laufender Ladevorgang erscheint jetzt ganz oben im Dashboard und über der Ladevorgangsliste: Fahrzeug, Beginn, Start-SoC, aktueller SoC, bisher geladene kWh (gemessen oder geschätzt), AC/DC, km-Stand und Außentemperatur, soweit die Quelle sie liefert, mit dem Zeitpunkt des letzten Berichts.",
+            "Funktioniert mit MyŠkoda, VW-Datenportal und Renault sowie mit Home Assistant ab Lademonitor-HA 0.9.0, das den Ladebeginn jetzt an den Server meldet. BMW CarData liefert nur abgeschlossene Vorgänge.",
+            "Neue Endpunkte GET/POST/DELETE /api/sessions/active für Apps und Home Assistant.",
+        ],
+    },
+    {
         "version": "0.44.3",
         "date": "2026-10-21",
         "title": "MyŠkoda: Kabelstatus der API auswerten",
