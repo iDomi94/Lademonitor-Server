@@ -88,6 +88,8 @@ SESSION_FIELDS = [
     "energy_meter",
     # Seit v0.41.0 (Netzbezug bei PV/Hausakku, leer = unbekannt).
     "grid_energy_kwh",
+    # Seit v0.47.0 (Durchschnittsgeschwindigkeit seit dem letzten Laden).
+    "avg_speed_kmh",
 ]
 
 # Seit v0.27.0 (Grundgebuehren, siehe models.ProviderFee). Beim Import
@@ -306,6 +308,7 @@ def build_backup_zip(db: Session, user: models.User) -> bytes:
             "outside_temp_source": _c(s.outside_temp_source),
             "energy_meter": _c(s.energy_meter),
             "grid_energy_kwh": _c(s.grid_energy_kwh),
+            "avg_speed_kmh": _c(s.avg_speed_kmh),
         }
         for s in sessions
     ]
@@ -749,6 +752,7 @@ async def import_backup(
                 odometer_km=_parse_int(row.get("odometer_km")),
                 outside_temp_c=_parse_float(row.get("outside_temp_c")),
                 outside_temp_source=temp_source,
+                avg_speed_kmh=_parse_float(row.get("avg_speed_kmh")),
                 price_total=_parse_float(row.get("price_total")),
                 price_per_kwh=_parse_float(row.get("price_per_kwh")),
                 latitude=_parse_float(row.get("latitude")),

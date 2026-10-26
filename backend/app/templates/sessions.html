@@ -89,6 +89,12 @@
     <input type="number" step="0.1" min="-60" max="60" id="f-temp"
            placeholder="{{ t('sessions.form.outside_temp_placeholder') }}">
   </div>
+  <div>
+    <label title="{{ t('sessions.form.avg_speed_help') }}">{{ t('sessions.form.avg_speed') }}</label>
+    <input type="number" step="1" min="5" max="250" id="f-speed"
+           placeholder="{{ t('sessions.form.avg_speed_placeholder') }}"
+           title="{{ t('sessions.form.avg_speed_help') }}">
+  </div>
   <div class="form-span">
     <label>{{ t('sessions.form.notes') }}</label>
     <textarea id="f-notes" rows="2"></textarea>
@@ -184,6 +190,8 @@ let editingOriginal = null;
 // fest auf 'de-DE'.
 const LOCALE = {{ lang|default('de')|tojson }} === 'en' ? 'en-US' : 'de-DE';
 const T = {
+  breakdownLine: {{ t('sessions.breakdown.line')|tojson }},
+  breakdownTooltip: {{ t('sessions.breakdown.tooltip')|tojson }},
   edit: {{ t('common.edit')|tojson }},
   del: {{ t('common.delete')|tojson }},
   noneOption: {{ t('common.none_option')|tojson }},
@@ -270,6 +278,23 @@ const CONSUMPTION_TOOLTIP = {
   unavailable: T.tooltipUnavailable,
 };
 
+// Aufteilung des Verbrauchs (drive_breakdown.py) als kleine Zeile darunter,
+// nur wenn der Server eine liefert (Tempo eingetragen, genug Fahrten).
+function breakdownLine(s, cls) {
+  const b = s.consumption_breakdown;
+  if (!b) return '';
+  const signed = v => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(1);
+  const text = T.breakdownLine
+    .replace('{speed}', signed(b.speed))
+    .replace('{temp}', signed(b.temperature))
+    .replace('{rest}', signed(b.rest));
+  const tooltip = T.breakdownTooltip
+    .replace('{base}', b.base.toFixed(1))
+    .replace('{ref}', Math.round(b.reference_speed_kmh));
+  return cls ? `<div class="${cls}" title="${tooltip}">${text}</div>`
+    : `<div style="color:var(--muted); font-size:0.85em" title="${tooltip}">${text}</div>`;
+}
+
 function consumptionCell(kwhPer100km, method) {
   const tooltip = CONSUMPTION_TOOLTIP[method] || CONSUMPTION_TOOLTIP.unavailable;
   if (kwhPer100km == null) {
@@ -332,7 +357,7 @@ function sessionRowHtml(s) {
       ? `<div style="color:var(--muted); font-size:0.85em" title="${T.feeShareTooltip}">${v.feeShare}</div>` : ''}${v.solarShare
       ? `<div style="color:var(--muted); font-size:0.85em" title="${T.solarShareTooltip}">${v.solarShare}</div>` : ''}</td>
     <td>${v.odometer ?? '–'}</td>
-    <td>${consumptionCell(s.consumption_kwh_per_100km, s.consumption_method)}</td>
+    <td>${consumptionCell(s.consumption_kwh_per_100km, s.consumption_method)}${breakdownLine(s)}</td>
     <td>${badgeFor(s.source)}</td>
     <td class="col-actions">${editDeleteButtons(
       `startEdit('${s.id}')`, `deleteSession('${s.id}')`, T.edit, T.del)}</td>
@@ -358,7 +383,7 @@ function sessionCardHtml(s) {
     const icon = CONSUMPTION_ICON[s.consumption_method] || '';
     const tooltip = CONSUMPTION_TOOLTIP[s.consumption_method] || '';
     consumption = `<div class="smeta" title="${tooltip}">${icon} ` +
-      `${s.consumption_kwh_per_100km.toFixed(1)} kWh/100km</div>`;
+      `${s.consumption_kwh_per_100km.toFixed(1)} kWh/100km</div>${breakdownLine(s, 'smeta')}`;
   }
 
   const typeRow = s.charging_type ? ` type-row-${s.charging_type.toLowerCase()}` : '';
@@ -443,6 +468,7 @@ function startEdit(id) {
   document.getElementById('f-price-total').value = s.price_total ?? '';
   document.getElementById('f-odo').value = s.odometer_km ?? '';
   document.getElementById('f-temp').value = s.outside_temp_c ?? '';
+  document.getElementById('f-speed').value = s.avg_speed_kmh ?? '';
   document.getElementById('f-grid').value = s.grid_energy_kwh ?? '';
   document.getElementById('f-notes').value = s.notes || '';
   document.getElementById('f-lat').value = s.latitude ?? '';
@@ -533,6 +559,7 @@ document.getElementById('session-form').addEventListener('submit', async (e) => 
     price_total: document.getElementById('f-price-total').value || null,
     odometer_km: document.getElementById('f-odo').value || null,
     outside_temp_c: document.getElementById('f-temp').value || null,
+    avg_speed_kmh: document.getElementById('f-speed').value || null,
     grid_energy_kwh: document.getElementById('f-grid').value || null,
     notes: document.getElementById('f-notes').value || null,
   };

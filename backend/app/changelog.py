@@ -5,6 +5,17 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.47.0",
+        "date": "2026-10-27",
+        "title": "Mehrverbrauch nach Tempo und Temperatur",
+        "changes": [
+            "Neues Feld „Ø km/h seit Laden“ am Ladevorgang: die Durchschnittsgeschwindigkeit seit dem letzten Laden aus dem Bordcomputer, beim Einstecken abgelesen.",
+            "Damit teilt Lademonitor den Verbrauch jeder Fahrt in dein Normal, den Anteil des Tempos (Luftwiderstand), den der Temperatur (Heizen und Kühlen, je langsamer desto mehr je km) und einen Rest (Wind, Nässe, Steigung, Fahrweise) auf. Die Aufteilung steht in der Ladevorgangsliste und als eigener Abschnitt im Dashboard.",
+            "Ab 5 Fahrten mit Tempo und Außentemperatur. Mit wenigen Fahrten stützt sich die Rechnung auf physikalische Vorgabewerte, mit jeder weiteren mehr auf deine Daten.",
+            "Neuer Endpunkt GET /api/stats/drive-breakdown, das Feld avg_speed_kmh in der Ladevorgangs-API und im Backup.",
+        ],
+    },
+    {
         "version": "0.46.1",
         "date": "2026-10-27",
         "title": "Gesamtpreis beim Bearbeiten",

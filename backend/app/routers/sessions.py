@@ -7,6 +7,7 @@ from .. import models, schemas
 from ..battery import METER_CHARGER, effective_meter
 from ..active_sessions import clear_report, list_active
 from ..auth import get_current_user
+from ..drive_breakdown import breakdowns_for_vehicle
 from ..consumption import compute_vehicle_consumptions
 from ..database import get_db
 from ..fees import load_allocation
@@ -44,12 +45,17 @@ def attach_consumption(db: Session, user_id: str, sessions: list[models.Charging
         )
         capacity = vehicle.battery_capacity_kwh if vehicle else None
         results = compute_vehicle_consumptions(full_history, capacity)
+        # Aufteilung in Tempo/Temperatur (drive_breakdown.py) - braucht wie
+        # der Verbrauch selbst die ganze Historie, das Modell wird je
+        # Fahrzeug aus allen Fahrten mit Tempo angepasst.
+        breakdowns = breakdowns_for_vehicle(full_history, results)
         for s in sessions:
             if s.vehicle_id != vehicle_id:
                 continue
             result = results.get(s.id)
             s.consumption_kwh_per_100km = result.value if result else None
             s.consumption_method = result.method if result else None
+            s.consumption_breakdown = breakdowns.get(s.id)
 
     # Anteil an Grundgebuehren (fees.py) - aus demselben Grund hier und nicht
     # gespeichert wie der Verbrauch: er haengt an ALLEN Vorgaengen der

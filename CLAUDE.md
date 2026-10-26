@@ -3051,6 +3051,39 @@ fuer Fahrzeug-kWh neben den Lade-kWh (Stufe 3) ebenfalls nicht. Kontingent:
 laufen HA-MyŠkoda-Integration und Poller mit demselben API-Key, teilen sie sich
 20 Anfragen/h.
 
+## Mehrverbrauch nach Tempo und Temperatur (`drive_breakdown.py`, ab 2026-10-26, v0.47.0)
+
+Wunsch des Nutzers (25./26.10.2026): eine Autobahnfahrt mit 20,5 statt 16-18
+kWh/100 km soll sich aufteilen lassen, ohne alles der Temperatur zuzuschreiben
+und ohne grobe Kategorien wie Stadt/Land/Autobahn (Spritmonitor).
+
+**Die Angabe:** `ChargingSession.avg_speed_kmh`, die Ø-Geschwindigkeit "seit
+Laden" aus dem Bordcomputer - deckt genau die Strecke N-1 bis N ab, aus der
+`consumption.py` rechnet. **Keine automatische Quelle liefert sie** (geprueft
+26.10.2026: MyŠkoda Public API hat nur den Fahrzeug-Endpunkt, die laufenden
+Datensaetze des VW-Datenportals - 44 echte Enyaq-Payloads - haben weder Tempo
+noch Fahrzeit; nur das von Hand angeforderte historische Datenpaket enthaelt
+Geschwindigkeitskanaele, das waere ein spaeterer Import). Bereich 5-250 km/h.
+
+**Modell** (Docstring in `drive_breakdown.py`): `y = a + c*v^2 + (q + h*kalt +
+k*warm) * 100/v` - Luftwiderstand je km waechst mit v^2, Grundlast und
+Heizen/Kuehlen sind LEISTUNGEN und kosten je km umso mehr, je langsamer.
+Komfortband fest 18-24 Grad. Ridge-Regression zu Vorgabewerten hin
+(`PRIOR_*`, Gewicht `PRIOR_DRIVES` = 5 Fahrten; Staerke = Fahrten x mittlere
+km x Merkmalsskala^2), Koeffizienten nie negativ (auf 0 festsetzen und neu
+anpassen), km-gewichtet, ab `MIN_DRIVES` (5) Fahrten mit Tempo UND Temperatur
+(Paarung wie `temperature.drive_temperature()`). Aufteilung gegen das eigene
+Normal (km-gewichteter Median-Tempo, Komfortband): Basis + Tempo + Temperatur
++ Rest = gemessen, exakt.
+
+**Ausgabe:** `SessionOut.consumption_breakdown` (in `attach_consumption()`,
+Modell je Fahrzeug aus der ganzen Historie) und `GET /api/stats/drive-breakdown`
+(ein Fahrzeug; ohne `vehicle_id` bei mehreren Fahrzeugen `needs_vehicle`).
+Web: Feld im Formular, Zeile unter dem Verbrauch in der Liste, Abschnitt im
+Dashboard. Fahrweise bewusst ohne Schalter - sie bleibt im Rest. Tests:
+`tests/test_drive_breakdown.py`. **Offen:** Vorgabewerte nur an synthetischen
+Daten geprueft; der Kaelteverlust des Akkus (je km) landet im Heizterm (je h).
+
 ## Backup-Export/-Import (`routers/backup.py`)
 
 Reiner Backup/Restore-Mechanismus (z.B. Server-Neuaufsetzung), bewusst KEIN

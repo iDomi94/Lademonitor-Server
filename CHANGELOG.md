@@ -6,6 +6,19 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.47.0] — 2026-10-27
+
+### Added
+- **Ø km/h seit Laden** (`avg_speed_kmh`) am Ladevorgang: Durchschnittsgeschwindigkeit
+  seit dem letzten Laden aus dem Bordcomputer. Keine automatische Quelle liefert sie.
+- **Mehrverbrauch nach Tempo und Temperatur**: der Verbrauch jeder Fahrt wird in
+  Normal, Tempo (Luftwiderstand ~ v²), Temperatur (Heiz-/Kühlleistung je Stunde,
+  also je km umso mehr, je langsamer) und Rest aufgeteilt. Physikalisches Modell
+  mit Vorgabewerten, die mit jeder Fahrt mehr den eigenen Daten weichen; ab 5
+  Fahrten mit Tempo und Temperatur. In der Ladevorgangsliste
+  (`SessionOut.consumption_breakdown`) und im Dashboard
+  (`GET /api/stats/drive-breakdown`).
+
 ## [0.46.1] — 2026-10-27
 
 ### Fixed

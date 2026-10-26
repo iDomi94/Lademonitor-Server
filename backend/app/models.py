@@ -638,6 +638,13 @@ class ChargingSession(Base):
         Enum(TemperatureSource), nullable=True
     )
 
+    # Durchschnittsgeschwindigkeit (km/h) seit dem letzten Laden, abgelesen
+    # im Bordcomputer ("Seit Laden"). Beschreibt dieselbe Strecke wie der
+    # Verbrauch dieses Vorgangs (N-1 bis N) und teilt dessen Mehrverbrauch in
+    # Tempo und Temperatur auf (drive_breakdown.py). Keine automatische Quelle
+    # liefert sie; nicht verschluesselt (kein personenbezogenes Datum).
+    avg_speed_kmh: Mapped[float | None] = mapped_column(Float, nullable=True)
+
     price_total: Mapped[float | None] = mapped_column(Float, nullable=True)
     price_per_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
 

@@ -802,6 +802,9 @@ class SessionBase(BaseModel):
     # hat ihn von Hand eingetragen - der Server traegt dann MANUAL nach (siehe
     # routers/sessions.py).
     outside_temp_source: TemperatureSource | None = None
+    # Durchschnittsgeschwindigkeit seit dem letzten Laden (Bordcomputer),
+    # siehe models.ChargingSession und drive_breakdown.py.
+    avg_speed_kmh: float | None = Field(default=None, ge=5, le=250)
     price_total: float | None = None
     price_per_kwh: float | None = None
     latitude: float | None = None
@@ -840,6 +843,7 @@ class SessionUpdate(BaseModel):
     odometer_km: int | None = None
     outside_temp_c: float | None = Field(default=None, ge=-60, le=60)
     outside_temp_source: TemperatureSource | None = None
+    avg_speed_kmh: float | None = Field(default=None, ge=5, le=250)
     price_total: float | None = None
     price_per_kwh: float | None = None
     latitude: float | None = None
@@ -847,6 +851,18 @@ class SessionUpdate(BaseModel):
     geocoded_place: str | None = None
     notes: str | None = None
     needs_review: bool | None = None
+
+
+class ConsumptionBreakdownOut(BaseModel):
+    """Verbrauch einer Fahrt in kWh/100 km, aufgeteilt (drive_breakdown.py).
+    base + speed + temperature + rest = consumption_kwh_per_100km. Roh, nicht
+    gerundet - gerundet wird in der Anzeige."""
+    model_config = ConfigDict(from_attributes=True)
+    base: float
+    speed: float
+    temperature: float
+    rest: float
+    reference_speed_kmh: float
 
 
 class SessionOut(SessionBase):
@@ -865,6 +881,10 @@ class SessionOut(SessionBase):
     # Tatsaechlich geltender Messort (Ausnahme am Vorgang, sonst Anbieter,
     # sonst Ladesaeule) - damit Clients nicht selbst nachschlagen muessen.
     energy_meter_effective: EnergyMeter = "charger"
+    # Aufteilung des Verbrauchs in Basis, Tempo, Temperatur und Rest
+    # (drive_breakdown.py), nur lesend. None ohne avg_speed_kmh/Temperatur
+    # oder solange das Fahrzeug zu wenige solcher Fahrten hat.
+    consumption_breakdown: ConsumptionBreakdownOut | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -1679,6 +1699,52 @@ class TemperatureStats(BaseModel):
     bucket_width_c: int
     # Nur bei genau einem Fahrzeug mit Akkukapazitaet und belastbarer Kurve.
     range: TempRangeOut | None = None
+
+
+# ---------- Mehrverbrauch: Tempo und Temperatur (drive_breakdown.py) ----------
+
+class DriveBreakdownModelOut(BaseModel):
+    # Verbrauch = base_consumption + aero * v^2
+    #   + (base_load_kw + heat_kw_per_k * max(heat_below_c - T, 0)
+    #      + cool_kw_per_k * max(T - cool_above_c, 0)) * 100 / v
+    base_consumption: float
+    aero: float
+    base_load_kw: float
+    heat_kw_per_k: float
+    cool_kw_per_k: float
+    heat_below_c: float
+    cool_above_c: float
+    reference_speed_kmh: float
+    drive_count: int
+    # Verbrauch bei Bezugstempo im Komfortband ("dein Normal").
+    normal_consumption: float
+
+
+class DriveBreakdownPointOut(BaseModel):
+    session_id: str
+    start_time: datetime
+    speed_kmh: float
+    temp_c: float
+    km: float
+    consumption_kwh_per_100km: float
+    base: float
+    speed: float
+    temperature: float
+    rest: float
+
+
+class DriveBreakdownStats(BaseModel):
+    vehicle_id: str | None = None
+    # True, wenn mehrere Fahrzeuge in Frage kommen und keins gewaehlt ist -
+    # ein Modell gilt immer nur fuer EIN Fahrzeug.
+    needs_vehicle: bool = False
+    # None, solange es weniger als min_drives Fahrten mit Tempo und
+    # Temperatur gibt.
+    model: DriveBreakdownModelOut | None = None
+    drives: list[DriveBreakdownPointOut] = []
+    drives_without_speed: int = 0
+    drives_without_temp: int = 0
+    min_drives: int
 
 
 # ---------- Akku-Gesundheit und Ladeverluste (battery.py) ----------

@@ -239,6 +239,16 @@ def run_light_migrations() -> None:
             )
         )
 
+        # Durchschnittsgeschwindigkeit seit dem letzten Laden (siehe
+        # drive_breakdown.py). Kein Backfill - der Bordcomputer zeigt nur den
+        # laufenden Wert, fuer alte Vorgaenge gibt es ihn nicht mehr.
+        conn.execute(
+            text(
+                "ALTER TABLE charging_sessions "
+                "ADD COLUMN IF NOT EXISTS avg_speed_kmh DOUBLE PRECISION"
+            )
+        )
+
         # Kilometerstand beim Reifenwechsel (siehe tires.py). Nachgereicht,
         # weil die Tabelle in 0.26.0 schon einmal ohne die Spalte angelegt
         # worden sein kann (:beta-Image). Bestandszeilen bleiben NULL - die
