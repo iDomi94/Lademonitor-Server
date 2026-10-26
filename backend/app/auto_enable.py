@@ -7,35 +7,13 @@ wenn eine Konfiguration in diesem Speichern vollstaendig WIRD oder neue
 Zugangsdaten bekommt. Wer ihn danach bewusst ausschaltet, behaelt das, solange
 er nicht erneut Zugangsdaten eintraegt.
 
-Nie eingeschaltet wird, wenn fuer das Fahrzeug schon eine andere automatische
-Quelle laeuft - zwei Quellen legen jeden Ladevorgang doppelt an. Dann bleibt
-es still beim Aus, statt das Speichern mit 422 abzulehnen.
+Bis 0.45 blieb der Abruf aus, wenn fuer das Fahrzeug schon eine andere
+automatische Quelle lief (sonst entstand jeder Vorgang doppelt). Seit 0.46.0
+ergaenzt eine zweite Quelle den vorhandenen Vorgang (`session_merge.py`), die
+Sperre ist entfallen.
 """
 
 from sqlalchemy.orm import Session
-
-from . import models
-
-SOURCE_MODELS = (
-    models.MySkodaConfig,
-    models.BmwCarDataConfig,
-    models.VwDataActConfig,
-    models.RenaultConfig,
-)
-
-
-def other_source_active(db: Session, user_id: str, vehicle_id: str, own_model) -> bool:
-    for model in SOURCE_MODELS:
-        if model is own_model:
-            continue
-        active = (
-            db.query(model.id)
-            .filter(model.vehicle_id == vehicle_id, model.user_id == user_id, model.enabled == True)  # noqa: E712
-            .first()
-        )
-        if active:
-            return True
-    return False
 
 
 def should_enable(
@@ -49,6 +27,4 @@ def should_enable(
     """True, wenn der Abruf jetzt von selbst eingeschaltet werden soll."""
     if config.enabled or not complete_now:
         return False
-    if complete_before and not credentials_entered:
-        return False
-    return not other_source_active(db, config.user_id, config.vehicle_id, type(config))
+    return not complete_before or credentials_entered

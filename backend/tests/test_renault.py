@@ -403,7 +403,7 @@ def test_api_login_with_code_then_test_fills_vin(client, db_session, fake):
     assert res.json()["status"] == "connected"
 
 
-def test_enabling_requires_credentials_and_rejects_second_source(client, db_session, fake):
+def test_enabling_requires_credentials_and_allows_second_source(client, db_session, fake):
     register(client)
     vehicle = create_vehicle(client, external_id="zoe", name="ZOE")
     url = f"/api/renault/configs/{vehicle['id']}"
@@ -415,8 +415,8 @@ def test_enabling_requires_credentials_and_rejects_second_source(client, db_sess
     db_session.add(models.BmwCarDataConfig(user_id=owner_id, vehicle_id=vehicle["id"], enabled=True))
     db_session.commit()
     res = client.put(url, json={"enabled": True, "email": EMAIL, "password": PASSWORD, "vin": VIN})
-    assert res.status_code == 422
-    assert "BMW CarData" in res.text
+    assert res.status_code == 200, res.text
+    assert res.json()["enabled"] is True
 
 
 def test_changing_the_account_drops_the_login_token(client, db_session, fake):

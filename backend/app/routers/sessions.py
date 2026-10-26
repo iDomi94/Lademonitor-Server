@@ -537,6 +537,19 @@ def push_auto_session(
             round(payload.price_total / session.energy_kwh, 4) if session.energy_kwh else None
         )
 
+    # Hat ein Poller (MyŠkoda, VW-Datenportal, Renault, BMW) denselben Vorgang
+    # schon angelegt, wird er ergaenzt statt doppelt angelegt. Ein erneuter
+    # Push (Warteschlange in Lademonitor-HA) landet ebenfalls hier und aendert
+    # beim zweiten Mal nichts mehr.
+    from ..session_merge import merge_or_none
+
+    match, _changes = merge_or_none(db, session, "Home Assistant")
+    if match is not None:
+        db.commit()
+        db.refresh(match)
+        attach_consumption(db, user.id, [match])
+        return match
+
     db.add(session)
     db.commit()
     db.refresh(session)

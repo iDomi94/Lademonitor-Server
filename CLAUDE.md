@@ -77,6 +77,8 @@ backend/app/
   auth.py            - Passwort-Hashing, Token-Handling, Auth-Dependencies
   sync.py            - record_deletion(): Grabstein fuer eine geloeschte Zeile
   active_sessions.py - Laufende Ladevorgaenge ("laedt gerade") aus Pollern und HA
+  session_merge.py   - Mehrere Quellen je Fahrzeug: ergaenzen statt Dublette (siehe Abschnitt
+                          "Mehrere Datenquellen je Fahrzeug")
   tires.py           - Reifensaetze, temperaturbereinigter Vergleich
   fees.py            - Grundgebuehren/Abos: Perioden und Umlage nach kWh
   vehicle_costs.py   - Fahrzeugkosten, Wertverlust (Restwertkurve), Leasing
@@ -355,8 +357,9 @@ Lademonitor-HA ersetzt den `rest_command`-Aufruf, die restliche Automation
 bewusst PARALLEL zum HA-Push oben und nicht als Ersatz: wer Home Assistant
 betreibt, faehrt mit dem Push weiter besser (Push statt Polling, kein
 Rate-Limit); der Server-Weg existiert fuer alle ohne HA. **Beide Quellen
-wissen nichts voneinander** - pro Fahrzeug darf nur eine aktiv sein, sonst
-entstehen Dubletten (die `external_session_id`-Praefixe unterscheiden sich:
+wussten bis v0.45 nichts voneinander** - pro Fahrzeug durfte nur eine aktiv sein, sonst
+entstanden Dubletten (seit v0.46.0 ergaenzt die zweite Quelle, siehe Abschnitt
+"Mehrere Datenquellen je Fahrzeug") (die `external_session_id`-Praefixe unterscheiden sich:
 HA liefert eine eigene, der Poller nutzt `myskoda-<Vehicle.id>-<Startzeit>` -
 **Update 2026-09-09:** urspruenglich `myskoda-<FIN>-<Startzeit>`, auf die
 interne Fahrzeug-UUID umgestellt, als die VIN im Zuge der DSGVO-Pruefung
@@ -645,6 +648,8 @@ Icon/Tooltip-Logik in der SessionsList-View.
   gleichzeitig fuer dasselbe Fahrzeug laufen** - bewusst nicht geloest
   (unterschiedliche `external_session_id`-Schemata, ein Abgleich ueber
   Zeitfenster waere Rateraetsel). Dokumentiert in README und Web-UI.
+  **Erledigt seit 2026-10-26 (v0.46.0)**: Abgleich ueber ueberlappende
+  Ladezeiten, siehe Abschnitt "Mehrere Datenquellen je Fahrzeug".
 - **AC/DC fehlt bei Spritmonitor-Importen** - Spritmonitor-CSV-Export hat
   keine AC/DC-Spalte. Noch nicht umgesetzt: Muster-Erkennung anhand
   Ladeort-Name (z.B. "HPC"/"Ionity" → DC vorschlagen)
@@ -1520,6 +1525,10 @@ dieses Projekt real gestolpert ist:
 - `test_home_solar.py` - gemessene Kosten/Netzanteil im HA-Push (Vorrang vor
   dem Anbieterpreis, Preis-Gedaechtnis unangetastet, Kappung, Sensorwerte,
   Rundlauf ueber die API, `solar_kwh`).
+- `test_session_merge.py` - mehrere Quellen je Fahrzeug: HA und Poller in
+  beiden Reihenfolgen, wiederholter Push, bestaetigter Vorgang, zwei getrennte
+  Ladungen, gemessene kWh (BMW) vor geschaetzten, VW-Zaehler als Schaetzung,
+  einmalige Umstellung der Bestandsvorgaenge.
 - `test_myskoda_import.py` - MySkoda-Abgleich an nachgebauten echten Faellen
   (Start-SoC 20, Sammeleintrag mit gemessenen und mit geschaetzten kWh, um 2 h
   verschobener Vorgang, verpasster Ladebeginn, neue Ladung, Hinweis statt
@@ -2992,6 +3001,55 @@ Je Fahrzeug hoechstens ein Eintrag; Poller vor HA. Web: Partial
 `templates/_active_charging.html` (Dashboard und Ladevorgaenge), laedt jede
 Minute nach. Apps: nur im Server-Modus, ein aelterer Server (404) zeigt
 einfach nichts. Tests: `tests/test_active_sessions.py`.
+
+## Mehrere Datenquellen je Fahrzeug (`session_merge.py`, ab 2026-10-26, v0.46.0)
+
+Wunsch des Nutzers (26.10.2026): mehrere Quellen fuer dasselbe Fahrzeug
+gleichzeitig, die genauere gewinnt. Analyse vorab (Claude Doc "Mehrere
+Datenquellen je Fahrzeug zusammenfuehren"): HA und MyŠkoda-Poller lesen
+dieselbe Cloud, der Gewinn liegt vor allem bei Zeiten/SoC und darin, dass eine
+zweite Quelle Ausfaelle der ersten abfaengt - kWh bringt das VW-Datenportal
+nicht (siehe unten).
+
+**Wer zuerst kommt, legt an, jede weitere Quelle ergaenzt.** Vor dem Anlegen
+rufen `charge_detection.create_session` (MyŠkoda, VW, Renault),
+`bmw_cardata_poller.import_history_item` und `routers/sessions.py::
+push_auto_session` `session_merge.merge_or_none` auf. Zuordnung: gleiches
+Fahrzeug, Zeitraeume ueberschneiden sich (30 min Spiel); fehlt ein Ende, Beginn
+innerhalb 3 h. Echte getrennte Ladungen ueberschneiden sich nie. Die
+`external_session_id` des ergaenzten Vorgangs bleibt die der ersten Quelle; ein
+wiederholter Push oder das erneute Lesen der BMW-Historie findet ihn wieder ueber
+die Zeit und aendert dann nichts mehr (keine Notizzeile).
+
+**Regeln** (Docstring in `session_merge.py`): leere Felder immer fuellen;
+ueberschreiben nur an `needs_review` + `AUTOMATIC` (Bestaetigtes und von Hand
+Angelegtes fasst keine Quelle an). Zeiten/SoC/km nach `TIME_SOC_RANK`
+(MySkoda-CSV 0, HA/BMW 1, MyŠkoda/Renault 2, VW-Datenportal 3; die Quelle wird
+aus dem Praefix der `external_session_id` abgeleitet, sonst AUTOMATIC = HA).
+Gemessene kWh schlagen geschaetzte; aendert sich der SoC einer Schaetzung, wird
+neu geschaetzt; DC schlaegt AC; Fahrzeugtemperatur schlaegt Wetterdienst;
+gemessene HA-Kosten schlagen den Anbieterpreis. Jede Aenderung als Zeile
+"Ergaenzt durch <Quelle>: ..." in der Notiz. HA-Zeitstempel (mit Offset) werden
+fuer den Vergleich per `naive_local()` in naive Ortszeit umgerechnet.
+
+Die Sperre "nur eine Quelle" (`_other_active_source` in den VW-/Renault-Routern,
+`auto_enable.other_source_active`) ist entfallen.
+
+**VW-Datenportal-kWh gelten als geschaetzt** (`DetectionSource.energy_measured
+=False`): der Zaehler stieg beim Enyaq am 18.10.2026 ueber die ganze Ladung mit
+genau 0,80 kWh je Prozentpunkt, ist also aus dem SoC gerechnet (und blieb am
+Ende bei 49 kWh stehen, obwohl der SoC noch von 71 auf 80 % stieg). Neue Vorgaenge
+bekommen die Server-Schaetzung, den Zaehler nur ohne SoC. Fuer Nacherkennung
+und Start-SoC aus der Energie zaehlt er weiter. Bestandsvorgaenge (`vwda-%`)
+stellt `database._mark_vw_portal_energy_estimated` EINMAL um - ueber die neue
+Tabelle `applied_data_migrations` (`_run_once`), damit eine spaetere
+Handkorrektur beim naechsten Start nicht wieder kippt.
+
+**Offen:** Herkunft je Feld wird nicht gespeichert (Stufe 2 der Analyse) - die
+Rangfolge kennt nur die Quelle, die den Vorgang angelegt hat; ein zweites Feld
+fuer Fahrzeug-kWh neben den Lade-kWh (Stufe 3) ebenfalls nicht. Kontingent:
+laufen HA-MyŠkoda-Integration und Poller mit demselben API-Key, teilen sie sich
+20 Anfragen/h.
 
 ## Backup-Export/-Import (`routers/backup.py`)
 

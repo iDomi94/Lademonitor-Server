@@ -184,6 +184,33 @@ def _check_no_orphaned_ciphertext(conn) -> None:
             )
 
 
+def _run_once(conn, name: str, migration) -> None:
+    """Fuehrt `migration(conn)` genau einmal je Datenbank aus."""
+    done = conn.execute(
+        text("SELECT 1 FROM applied_data_migrations WHERE name = :name"), {"name": name}
+    ).first()
+    if done:
+        return
+    migration(conn)
+    conn.execute(text("INSERT INTO applied_data_migrations (name) VALUES (:name)"), {"name": name})
+
+
+def _mark_vw_portal_energy_estimated(conn) -> None:
+    """Bestandsvorgaenge aus dem VW-Datenportal: kWh gelten als geschaetzt.
+
+    Der Energiezaehler des Portals ist selbst aus SoC-Hub x Kapazitaet gerechnet
+    (Enyaq 18.10.2026: genau 0,80 kWh je Prozentpunkt), war bis 0.45 aber als
+    gemessen gespeichert. Der Wert selbst bleibt, nur Merker und Messort.
+    """
+    conn.execute(
+        text(
+            "UPDATE charging_sessions SET energy_is_estimated = TRUE, energy_meter = NULL "
+            "WHERE external_session_id LIKE 'vwda-%' "
+            "AND energy_kwh IS NOT NULL AND energy_is_estimated = FALSE"
+        )
+    )
+
+
 def run_light_migrations() -> None:
     """Ergaenzt nachtraeglich hinzugekommene Spalten, da wir bewusst kein
     Alembic o.ae. einsetzen (Ein-Tabellen-Aenderungen sind selten genug,
@@ -634,6 +661,17 @@ def run_light_migrations() -> None:
                 "ADD COLUMN IF NOT EXISTS last_failure_notified_at TIMESTAMP"
             )
         )
+
+        # Einmalige Datenkorrekturen. Anders als ADD COLUMN IF NOT EXISTS sind
+        # sie nicht von selbst idempotent: ein Nutzer kann den Wert danach von
+        # Hand wieder umstellen, und das darf der naechste Start nicht kippen.
+        conn.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS applied_data_migrations ("
+                "name VARCHAR PRIMARY KEY, applied_at TIMESTAMP NOT NULL DEFAULT now())"
+            )
+        )
+        _run_once(conn, "vwda_energy_estimated", _mark_vw_portal_energy_estimated)
 
         # ------------------------------------------------------------------
         # Verschluesselung personenbezogener Daten (siehe crypto.py und

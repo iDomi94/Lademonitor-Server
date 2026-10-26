@@ -139,6 +139,10 @@ SOURCE = DetectionSource(
     backdate_limit_seconds=_backdate_limit_seconds,
     discharging_states=DISCHARGING_STATES,
     charging_states=frozenset({"CHARGING_HV_BATTERY", "CHARGING"}),
+    # charge_energy steigt beim Enyaq ueber die ganze Ladung mit genau
+    # 0,80 kWh je Prozentpunkt (18.10.2026) - also aus dem SoC gerechnet, nicht
+    # gemessen. Seit 0.46.0 deshalb als Schaetzung behandelt.
+    energy_measured=False,
 )
 
 
