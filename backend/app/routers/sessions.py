@@ -372,6 +372,7 @@ def update_session(
         fields["external_session_id"] = None
     previous_energy = session.energy_kwh
     previous_temp = session.outside_temp_c
+    previous_total = session.price_total
     for field, value in fields.items():
         setattr(session, field, value)
 
@@ -410,7 +411,17 @@ def update_session(
     estimate_energy_kwh(session, vehicle)
     # Auch wenn nur energy_kwh nach unten korrigiert wurde.
     clamp_grid_energy(session)
-    if session.price_total and session.energy_kwh and not session.price_per_kwh:
+    # Ein geaenderter Gesamtpreis gewinnt gegen den kWh-Preis: die Apps
+    # schicken bei jedem Speichern BEIDE Felder mit (der kWh-Preis also
+    # unveraendert, wenn nur der Gesamtpreis eingetippt wurde). Ohne diese
+    # Unterscheidung rechnete der alte kWh-Preis den neuen Gesamtpreis sofort
+    # wieder zurueck - der Gesamtpreis liess sich gar nicht festlegen.
+    total_changed = "price_total" in fields and _value_changed(session.price_total, previous_total)
+    if (
+        session.price_total
+        and session.energy_kwh
+        and (not session.price_per_kwh or total_changed)
+    ):
         session.price_per_kwh = round(session.price_total / session.energy_kwh, 4)
     elif session.price_per_kwh and session.energy_kwh:
         session.price_total = round(session.price_per_kwh * session.energy_kwh, 2)
@@ -421,6 +432,12 @@ def update_session(
     db.refresh(session)
     attach_consumption(db, user.id, [session])
     return session
+
+
+def _value_changed(new: float | None, old: float | None) -> bool:
+    if new is None or old is None:
+        return new is not old
+    return abs(new - old) > 1e-6
 
 
 @router.delete("/{session_id}", status_code=204)
