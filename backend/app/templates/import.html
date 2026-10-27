@@ -80,6 +80,8 @@ const T = {
   commitDone: {{ t('import.js.commit_done')|tojson }},
   ms: {
     summary: {{ t('import.myskoda.js.summary')|tojson }},
+    tripsSummary: {{ t('import.myskoda.js.trips_summary')|tojson }},
+    tripsDetail: {{ t('import.myskoda.js.trips_detail')|tojson }},
     nothing: {{ t('import.myskoda.js.nothing')|tojson }},
     fields: {
       soc_start: {{ t('import.myskoda.field.soc_start')|tojson }},
@@ -88,6 +90,8 @@ const T = {
       end_time: {{ t('import.myskoda.field.end_time')|tojson }},
       charging_type: {{ t('import.myskoda.field.charging_type')|tojson }},
       energy_kwh: {{ t('import.myskoda.field.energy_kwh')|tojson }},
+      avg_speed_kmh: {{ t('import.myskoda.field.avg_speed_kmh')|tojson }},
+      odometer_km: {{ t('import.myskoda.field.odometer_km')|tojson }},
     },
     grouped: {{ t('import.myskoda.js.grouped')|tojson }},
     newRow: {{ t('import.myskoda.js.new_row')|tojson }},
@@ -97,6 +101,7 @@ const T = {
       type_mismatch: {{ t('import.myskoda.hint.type_mismatch')|tojson }},
       unassigned_charge: {{ t('import.myskoda.hint.unassigned_charge')|tojson }},
       unmatched_session: {{ t('import.myskoda.hint.unmatched_session')|tojson }},
+      trip_gap: {{ t('import.myskoda.hint.trip_gap')|tojson }},
     },
     commitDone: {{ t('import.myskoda.js.commit_done')|tojson }},
   },
@@ -173,6 +178,8 @@ function fmtValue(field, value) {
   if (field === 'start_time' || field === 'end_time') return fmtDateTime(value);
   if (field === 'soc_start' || field === 'soc_end') return value + ' %';
   if (field === 'energy_kwh') return value + ' kWh';
+  if (field === 'avg_speed_kmh') return Number(value).toLocaleString(window.LADEMONITOR_LANG) + ' km/h';
+  if (field === 'odometer_km') return value + ' km';
   return String(value);
 }
 
@@ -186,6 +193,8 @@ function hintText(h) {
     .replace('{date}', fmtDateTime(h.when))
     .replace('{stored}', h.data.stored ?? '')
     .replace('{derived}', h.data.derived ?? '')
+    .replace('{pct}', h.data.pct ?? '')
+    .replace('{km}', h.data.km ?? '')
     .replace('{charge}', h.data.soc_start != null ? chargeText(h.data) : '');
 }
 
@@ -209,7 +218,12 @@ document.getElementById('ms-form').addEventListener('submit', async (e) => {
   }
   const data = await res.json();
 
-  document.getElementById('ms-summary').textContent = T.ms.summary
+  document.getElementById('ms-summary').textContent = data.kind === 'trips'
+    ? T.ms.tripsSummary
+      .replace('{total}', data.trips_total)
+      .replace('{updates}', data.updates.length)
+      .replace('{unchanged}', data.unchanged)
+    : T.ms.summary
     .replace('{total}', data.charges_total)
     .replace('{updates}', data.updates.length)
     .replace('{created}', data.new_sessions.length)
@@ -225,13 +239,19 @@ document.getElementById('ms-form').addEventListener('submit', async (e) => {
     const grouped = u.charges.length > 1
       ? `<div style="color: var(--muted); font-size: 13px;">${escapeHtml(T.ms.grouped.replace('{count}', u.charges.length))}</div>`
       : '';
+    const trips = u.trips
+      ? `<div style="color: var(--muted); font-size: 13px;">${escapeHtml(T.ms.tripsDetail
+          .replace('{count}', u.trips.count)
+          .replace('{km}', Math.round(u.trips.km))
+          .replace('{hours}', (u.trips.minutes / 60).toLocaleString(window.LADEMONITOR_LANG, {maximumFractionDigits: 1})))}</div>`
+      : '';
     rows.push({
       sort: u.start_time,
       html: `<tr>
         <td><input type="checkbox" class="ms-pick" value="${escapeHtml(u.key)}" checked></td>
         <td>${fmtDateTime(u.start_time, u.source !== 'import' || !u.start_time.endsWith('T00:00:00'))}</td>
         <td>${escapeHtml(u.provider_name || T.ms.noProvider)}</td>
-        <td>${changes}${grouped}</td>
+        <td>${changes}${grouped}${trips}</td>
       </tr>`,
     });
   }

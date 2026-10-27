@@ -5,6 +5,17 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.48.0",
+        "date": "2026-10-27",
+        "title": "Ø-Geschwindigkeit aus der MySkoda-Fahrtenstatistik",
+        "changes": [
+            "Der MySkoda-Abgleich (Import) erkennt jetzt auch die Fahrtenstatistik der App. Daraus wird für jeden Ladevorgang die Ø-Geschwindigkeit seit dem Laden davor berechnet (alle km geteilt durch die gesamte Fahrzeit der Fahrten dazwischen) und eingetragen – die Grundlage für die Aufteilung des Mehrverbrauchs nach Tempo und Temperatur, ohne Abtippen.",
+            "Zugeordnet wird über den Kilometerstand. Eine Fahrt mit Ladestopp unterwegs wird anteilig auf beide Ladevorgänge verteilt.",
+            "Fehlt einem Ladevorgang mit Uhrzeit der km-Stand, wird er aus der letzten Fahrt davor ergänzt.",
+            "Nur leere Felder werden gefüllt, du siehst vorher jede Änderung und wählst aus. Decken die Fahrten weniger als 80 % der Strecke ab, gibt es statt eines Werts einen Hinweis.",
+        ],
+    },
+    {
         "version": "0.47.0",
         "date": "2026-10-27",
         "title": "Mehrverbrauch nach Tempo und Temperatur",
