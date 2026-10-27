@@ -112,6 +112,20 @@
 </div>
 </div>
 
+<h2>{{ t('breakdown.heading') }}</h2>
+
+<details class="help">
+  <summary>{{ t('temp.help.summary') }}</summary>
+  <p>{{ t('breakdown.help.text') }}</p>
+</details>
+
+<div class="card" id="breakdown-card">
+  <p class="tempempty" id="breakdown-empty"></p>
+  <p id="breakdown-normal" hidden></p>
+  <div class="tablewrap"><table id="breakdown-table" hidden></table></div>
+  <p class="chartnote" id="breakdown-missing"></p>
+</div>
+
 <h2>{{ t('battery.heading') }}</h2>
 
 <details class="help">
@@ -827,9 +841,61 @@ async function loadReviewTile() {
   document.getElementById('review-tile-figures').textContent = parts.join(' · ');
 }
 
+// Mehrverbrauch je Fahrt: Tempo, Temperatur, Rest (drive_breakdown.py).
+const BREAKDOWN_T = {
+  needsVehicle: {{ t('breakdown.needs_vehicle')|tojson }},
+  learning: {{ t('breakdown.learning')|tojson }},
+  normal: {{ t('breakdown.normal')|tojson }},
+  missing: {{ t('breakdown.missing')|tojson }},
+  cols: {{ [t('breakdown.col.date'), t('breakdown.col.speed'), t('breakdown.col.temp'),
+            t('breakdown.col.consumption'), t('breakdown.col.speed_part'),
+            t('breakdown.col.temp_part'), t('breakdown.col.rest')]|tojson }},
+};
+const BREAKDOWN_ROWS = 15;
+
+async function loadBreakdown() {
+  const res = await fetch('api/stats/drive-breakdown' + filterQueryString());
+  const data = await res.json();
+  const empty = document.getElementById('breakdown-empty');
+  const normal = document.getElementById('breakdown-normal');
+  const table = document.getElementById('breakdown-table');
+
+  if (data.needs_vehicle) {
+    empty.textContent = BREAKDOWN_T.needsVehicle;
+  } else if (!data.model) {
+    empty.textContent = BREAKDOWN_T.learning.replace('{min}', data.min_drives);
+  }
+  empty.hidden = !!data.model;
+  normal.hidden = table.hidden = !data.model;
+  setText('breakdown-missing', data.drives_without_speed
+    ? BREAKDOWN_T.missing.replace('{count}', data.drives_without_speed) : '');
+  if (!data.model) return;
+
+  const m = data.model;
+  normal.textContent = BREAKDOWN_T.normal
+    .replace('{value}', fmtNumber(m.normal_consumption, 1))
+    .replace('{speed}', fmtNumber(m.reference_speed_kmh, 0))
+    .replace('{from}', fmtNumber(m.heat_below_c, 0))
+    .replace('{to}', fmtNumber(m.cool_above_c, 0))
+    .replace('{count}', m.drive_count);
+  const signed = v => (v >= 0 ? '+' : '−') + fmtNumber(Math.abs(v), 1);
+  table.innerHTML = '<thead><tr>' + BREAKDOWN_T.cols.map(c => `<th>${c}</th>`).join('') + '</tr></thead><tbody>'
+    + data.drives.slice(0, BREAKDOWN_ROWS).map(d => `<tr>
+        <td>${new Date(d.start_time).toLocaleDateString(LOCALE)}</td>
+        <td>${fmtNumber(d.speed_kmh, 0)}</td>
+        <td>${fmtNumber(d.temp_c, 1)}</td>
+        <td>${fmtNumber(d.consumption_kwh_per_100km, 1)}</td>
+        <td>${signed(d.speed)}</td>
+        <td>${signed(d.temperature)}</td>
+        <td>${signed(d.rest)}</td>
+      </tr>`).join('')
+    + '</tbody>';
+}
+
 function loadAll() {
   loadStats();
   loadTemperature();
+  loadBreakdown();
   loadBattery();
 }
 renderFilterBar('filter-bar', loadAll);

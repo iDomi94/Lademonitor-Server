@@ -201,6 +201,28 @@ def _weighted_average(pairs: list[tuple[float, float]]) -> float | None:
     return sum(value * weight for value, weight in pairs) / total_weight
 
 
+def drive_temperature(
+    session: models.ChargingSession,
+    previous: models.ChargingSession | None,
+) -> float | None:
+    """Temperatur der Fahrt, die mit `session` endet (Modul-Docstring, Punkt 1).
+
+    Auch von drive_breakdown.py benutzt - beide Auswertungen muessen dieselbe
+    Fahrt mit derselben Temperatur verbinden.
+    """
+    own = session.outside_temp_c
+    if own is None:
+        return None
+    if _covers_the_whole_drive(session):
+        # Ein Wert vom Wetterdienst ist seit v0.24.1 bereits das Mittel ueber
+        # genau diesen Fahrt-Zeitraum (weather.py). Ihn nochmal mit dem Wert
+        # davor zu mitteln wuerde die Nachbarfahrt hineinmischen und die
+        # bessere Angabe wieder verwaessern.
+        return own
+    before = previous.outside_temp_c if previous else None
+    return (own + before) / 2 if before is not None else own
+
+
 def collect_points(
     sessions: list[models.ChargingSession],
     capacity_by_vehicle_id: dict[str, float | None],
@@ -235,19 +257,8 @@ def collect_points(
             if not result or result.value is None or not result.km:
                 continue
 
-            own = session.outside_temp_c
-            before = previous_session.outside_temp_c if previous_session else None
-            if own is not None and _covers_the_whole_drive(session):
-                # Ein Wert vom Wetterdienst ist seit v0.24.1 bereits das Mittel
-                # ueber genau diesen Fahrt-Zeitraum (weather.py). Ihn nochmal
-                # mit dem Wert davor zu mitteln wuerde die Nachbarfahrt
-                # hineinmischen und die bessere Angabe wieder verwaessern.
-                temp = own
-            elif own is not None and before is not None:
-                temp = (own + before) / 2
-            elif own is not None:
-                temp = own
-            else:
+            temp = drive_temperature(session, previous_session)
+            if temp is None:
                 # Kein Wert am Ende der Fahrt. Der Startwert allein waere hier
                 # verlockend, taugt aber nicht: zwischen dem Einstecken davor
                 # und dieser Fahrt koennen Tage liegen.

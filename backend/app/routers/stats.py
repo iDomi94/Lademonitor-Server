@@ -15,6 +15,7 @@ from ..fees import load_allocation
 from ..range_estimate import build_range
 from ..review import build_review
 from ..vehicle_costs import cost_entries, has_cost_data, ownership_entries
+from .. import drive_breakdown
 from ..temperature import (
     BUCKET_WIDTH_C,
     build_buckets,
@@ -348,6 +349,101 @@ def build_by_place(sessions, providers_by_id, unallocated, cost) -> list[schemas
         for place in PLACE_ORDER
         if count[place] or total[place]
     ]
+
+
+@router.get("/drive-breakdown", response_model=schemas.DriveBreakdownStats)
+def stats_drive_breakdown(
+    vehicle_id: str | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Mehrverbrauch je Fahrt, aufgeteilt in Tempo, Temperatur und Rest.
+
+    Das Modell (drive_breakdown.py) gilt fuer EIN Fahrzeug und wird aus allen
+    seinen Fahrten mit Tempo angepasst; der Datumsfilter wirkt wie bei
+    `/temperature` erst auf die fertigen Punkte.
+    """
+    vehicles = db.query(models.Vehicle).filter(models.Vehicle.user_id == user.id).all()
+    if vehicle_id is None:
+        with_sessions = {
+            row[0]
+            for row in db.query(models.ChargingSession.vehicle_id)
+            .filter(models.ChargingSession.user_id == user.id)
+            .distinct()
+        }
+        if len(with_sessions) > 1:
+            return schemas.DriveBreakdownStats(
+                needs_vehicle=True, min_drives=drive_breakdown.MIN_DRIVES
+            )
+        vehicle_id = next(iter(with_sessions), None)
+    if vehicle_id is None or not any(v.id == vehicle_id for v in vehicles):
+        return schemas.DriveBreakdownStats(min_drives=drive_breakdown.MIN_DRIVES)
+
+    sessions = (
+        db.query(models.ChargingSession)
+        .filter(
+            models.ChargingSession.user_id == user.id,
+            models.ChargingSession.vehicle_id == vehicle_id,
+        )
+        .all()
+    )
+    capacity = {v.id: v.battery_capacity_kwh for v in vehicles}
+    model, drives, without_speed, without_temp = drive_breakdown.analyse_user(
+        sessions, capacity
+    ).get(vehicle_id, (None, [], 0, 0))
+
+    if start_date:
+        limit = datetime.combine(start_date, time.min)
+        drives = [d for d in drives if d.start_time >= limit]
+    if end_date:
+        limit = datetime.combine(end_date, time.max)
+        drives = [d for d in drives if d.start_time <= limit]
+
+    points = []
+    if model is not None:
+        for d in drives:
+            part = drive_breakdown.split(model, d.speed_kmh, d.temp_c, d.consumption)
+            points.append(
+                schemas.DriveBreakdownPointOut(
+                    session_id=d.session_id,
+                    start_time=d.start_time,
+                    speed_kmh=d.speed_kmh,
+                    temp_c=round(d.temp_c, 1),
+                    km=round(d.km, 1),
+                    consumption_kwh_per_100km=d.consumption,
+                    base=part.base,
+                    speed=part.speed,
+                    temperature=part.temperature,
+                    rest=part.rest,
+                )
+            )
+    return schemas.DriveBreakdownStats(
+        vehicle_id=vehicle_id,
+        model=(
+            schemas.DriveBreakdownModelOut(
+                base_consumption=model.base_consumption,
+                aero=model.aero,
+                base_load_kw=model.base_load_kw,
+                heat_kw_per_k=model.heat_kw_per_k,
+                cool_kw_per_k=model.cool_kw_per_k,
+                heat_below_c=drive_breakdown.HEAT_BELOW_C,
+                cool_above_c=drive_breakdown.COOL_ABOVE_C,
+                reference_speed_kmh=model.reference_speed_kmh,
+                drive_count=model.drive_count,
+                normal_consumption=model.predict(
+                    model.reference_speed_kmh, drive_breakdown.HEAT_BELOW_C
+                ),
+            )
+            if model is not None
+            else None
+        ),
+        drives=sorted(points, key=lambda p: p.start_time, reverse=True),
+        drives_without_speed=without_speed,
+        drives_without_temp=without_temp,
+        min_drives=drive_breakdown.MIN_DRIVES,
+    )
 
 
 @router.get("/temperature", response_model=schemas.TemperatureStats)
