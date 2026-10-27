@@ -6,6 +6,15 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.46.1] — 2026-10-27
+
+### Fixed
+- **Gesamtpreis ließ sich beim Bearbeiten nicht festlegen.** `update_session()`
+  rechnete den Gesamtpreis immer aus dem Preis je kWh neu, sobald einer da war.
+  Die Apps schicken beide Felder bei jedem Speichern mit, also gewann der alte
+  kWh-Preis. Jetzt gewinnt ein geänderter Gesamtpreis, der Preis je kWh wird
+  daraus abgeleitet (`tests/test_session_price_edit.py`).
+
 ## [0.46.0] — 2026-10-26
 
 ### Added

@@ -5,6 +5,14 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.46.1",
+        "date": "2026-10-27",
+        "title": "Gesamtpreis beim Bearbeiten",
+        "changes": [
+            "Ein geänderter Gesamtpreis bleibt jetzt stehen, der Preis je kWh wird daraus berechnet. Bisher hat der alte Preis je kWh den neuen Gesamtpreis beim Speichern sofort wieder überschrieben, vor allem aus den Apps heraus (die beide Felder immer mitschicken) ließ sich der Gesamtpreis so gar nicht festlegen.",
+        ],
+    },
+    {
         "version": "0.46.0",
         "date": "2026-10-26",
         "title": "Mehrere Datenquellen je Fahrzeug",
