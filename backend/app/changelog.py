@@ -5,6 +5,17 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.46.0",
+        "date": "2026-10-26",
+        "title": "Mehrere Datenquellen je Fahrzeug",
+        "changes": [
+            "Für ein Fahrzeug dürfen jetzt mehrere automatische Quellen gleichzeitig laufen (z.B. Home Assistant und VW-Datenportal oder MyŠkoda). Statt einen zweiten Vorgang anzulegen, ergänzt die später kommende Quelle den vorhandenen: leere Felder werden gefüllt, und solange der Vorgang noch zu prüfen ist, gewinnt je Feld die genauere Quelle (Zeiten und SoC: Home Assistant und BMW vor MyŠkoda und Renault vor dem VW-Datenportal; gemessene kWh vor geschätzten; DC vor AC; Fahrzeugtemperatur vor Wetterdienst). Was sich geändert hat, steht in der Notiz. Bestätigte und von Hand angelegte Vorgänge werden nur ergänzt, nie überschrieben.",
+            "Zugeordnet wird über das Fahrzeug und überlappende Ladezeiten. Zwei getrennte Ladungen kurz hintereinander bleiben zwei Vorgänge.",
+            "Die Sperre \"nur eine automatische Quelle je Fahrzeug\" ist entfallen, auch beim automatischen Einschalten des Abrufs.",
+            "VW-Datenportal: die kWh gelten jetzt als geschätzt. Der Energiezähler des Portals rechnet selbst nur aus dem SoC (beim Enyaq genau 0,80 kWh je Prozentpunkt über die ganze Ladung). Neue Vorgänge bekommen die Schätzung des Servers aus SoC-Hub × Akkukapazität, der Zählerstand bleibt nur, wenn der SoC fehlt. Bestehende Vorgänge aus dem Portal werden beim ersten Start einmalig auf \"geschätzt\" umgestellt (Wert bleibt), damit erscheint der Hinweis in den Apps und sie fallen aus Akku-Index und Ladeverlusten.",
+        ],
+    },
+    {
         "version": "0.45.0",
         "date": "2026-10-23",
         "title": "Laufender Ladevorgang",

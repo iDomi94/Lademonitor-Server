@@ -32,7 +32,7 @@ Beta über TestFlight: [testflight.apple.com/join/NMbyFTEK](https://testflight.a
   [Ladehistorie von BMW](#ladehistorie-von-bmw-bmw-cardata)
 - **VW-Konzern (EU Data Act)**: für Volkswagen, Audi, Škoda, SEAT, Cupra,
   Bentley und VW Nutzfahrzeuge liest der Server das Datenportal des Konzerns
-  und erkennt daraus die Ladevorgänge, mit gemessenen kWh aus dem Fahrzeug,
+  und erkennt daraus die Ladevorgänge (kWh geschätzt wie bei MyŠkoda),
   siehe [VW-Datenportal](#vw-konzern-datenportal-nach-eu-data-act)
 - **Renault und Dacia (My Renault)**: der Server fragt dieselbe Schnittstelle
   ab wie die My-Renault-App und erkennt daraus die Ladevorgänge, siehe
@@ -246,9 +246,9 @@ selbst ab, erkennt Beginn und Ende eines Ladevorgangs aus den Zustands-
 
 **Wichtig zu wissen:**
 
-- **Nur einen der beiden Wege pro Fahrzeug aktivieren.** Der HA-Push und diese
-  Erkennung wissen nichts voneinander und würden denselben Ladevorgang doppelt
-  anlegen.
+- Mehrere automatische Quellen für ein Fahrzeug sind seit 0.46.0 erlaubt:
+  die später kommende ergänzt den vorhandenen Vorgang (überlappende Ladezeit),
+  statt einen zweiten anzulegen.
 - **Rate-Limit: 20 Anfragen pro Stunde und API-Key**, geteilt über alle
   Fahrzeuge und alle Clients. Die Standardintervalle (20 min im Leerlauf,
   5 min während eines Ladevorgangs) bleiben mit Reserve darunter. Läuft
@@ -295,8 +295,9 @@ Hinweise:
   mit Verzögerung.
 - Die Anmeldung bleibt gültig, solange mindestens alle zwei Wochen abgerufen
   wird. Läuft sie ab, kommt eine Mail.
-- Pro Fahrzeug nur eine automatische Quelle (Home Assistant, MyŠkoda, BMW)
-  aktivieren, sonst entstehen doppelte Vorgänge.
+- Mehrere automatische Quellen für ein Fahrzeug sind seit 0.46.0 erlaubt:
+  die später kommende ergänzt den vorhandenen Vorgang (überlappende Ladezeit),
+  statt einen zweiten anzulegen.
 - Client-ID und Tokens werden nicht in die Backup-ZIP exportiert.
 
 ## VW-Konzern: Datenportal nach EU Data Act
@@ -306,8 +307,8 @@ Audi, Škoda, SEAT, Cupra, Bentley) gibt es eine vierte automatische Quelle:
 das [Datenportal](https://eu-data-act.drivesomethinggreater.com), in dem jeder
 Halter nach EU Data Act seine Fahrzeugdaten abrufen kann. Das Portal stellt
 alle 15 Minuten einen Datensatz bereit; Lademonitor erkennt daraus wie bei
-MyŠkoda Einstecken, Laden und Ausstecken. Die kWh kommen dabei gemessen aus
-dem Fahrzeug (ohne Ladeverluste).
+MyŠkoda Einstecken, Laden und Ausstecken. Die kWh gelten als geschätzt: der
+Energiezähler des Portals ist im Fahrzeug aus dem SoC gerechnet.
 
 1. Im Portal mit dem Konto der Marke anmelden (Cupra ID, Škoda-Konto, VW ID
    usw.) und für das Fahrzeug eine fortlaufende Datenanfrage **All Data**
@@ -336,8 +337,11 @@ Hinweise:
 - E-Mail, Passwort und FIN werden verschlüsselt gespeichert (mit
   `FIELD_ENCRYPTION_KEY`), nie angezeigt und nicht in die Backup-ZIP
   exportiert.
-- Pro Fahrzeug nur eine automatische Quelle. Solange MyŠkoda oder BMW CarData
-  für das Fahrzeug aktiv ist, lässt sich diese Quelle nicht einschalten.
+- Mehrere automatische Quellen für ein Fahrzeug sind seit 0.46.0 erlaubt:
+  die später kommende ergänzt den vorhandenen Vorgang (überlappende Ladezeit),
+  statt einen zweiten anzulegen.
+- Die kWh gelten als geschätzt: der Energiezähler des Portals ist aus dem
+  SoC gerechnet.
 
 ## Renault und Dacia (My Renault)
 
@@ -373,9 +377,9 @@ Hinweise:
 - E-Mail, Passwort, Anmeldung und FIN werden verschlüsselt gespeichert (mit
   `FIELD_ENCRYPTION_KEY`), nie angezeigt und nicht in die Backup-ZIP
   exportiert.
-- Pro Fahrzeug nur eine automatische Quelle. Solange MyŠkoda, BMW CarData
-  oder das VW-Datenportal für das Fahrzeug aktiv ist, lässt sich diese Quelle
-  nicht einschalten.
+- Mehrere automatische Quellen für ein Fahrzeug sind seit 0.46.0 erlaubt:
+  die später kommende ergänzt den vorhandenen Vorgang (überlappende Ladezeit),
+  statt einen zweiten anzulegen.
 
 ## Backup
 

@@ -111,6 +111,20 @@ genommen fehlten sie (19.10.2026). Ein hoeherer erster Wert ist ein
 Gesamtzaehler und wird zum Ausgangswert. Der
 Messort ist das FAHRZEUG (`energy_meter="vehicle"`), Ladeverluste stecken
 also nicht drin.
+
+**Seit 0.46.0 gilt der Zaehler des VW-Datenportals nicht mehr als gemessen**
+(`DetectionSource.energy_measured=False`): beim Enyaq stieg er ueber die ganze
+Ladung mit genau 0,80 kWh je Prozentpunkt, ist also selbst aus dem SoC
+gerechnet. Der Vorgang bekommt dann die Schaetzung des Servers aus SoC-Hub x
+Akkukapazitaet (Hinweis "geschaetzt" in den Apps, faellt aus Akku-Index und
+Verlusten); nur ohne SoC bleibt der Zaehlerstand, ebenfalls als Schaetzung.
+Fuer die Nacherkennung und den Start-SoC aus der Energie zaehlt er weiter.
+
+## Mehrere Quellen fuer ein Fahrzeug
+
+Vor dem Anlegen sucht `create_session` ueber `session_merge.merge_or_none` einen
+Vorgang, den eine andere Quelle schon angelegt hat, und ergaenzt ihn statt
+eine Dublette anzulegen (Regeln in `session_merge.py`).
 """
 
 from __future__ import annotations
@@ -123,6 +137,7 @@ from typing import Any, Callable
 from sqlalchemy.orm import Session
 
 from . import models
+from .session_merge import merge_or_none
 from .routers.sessions import (
     apply_provider_price,
     estimate_energy_kwh,
@@ -166,6 +181,10 @@ class DetectionSource:
     # Leistung oder Zaehlerstand (siehe finish_open_session).
     charging_states: frozenset[str] = field(default_factory=frozenset)
     saved_location_label: str | None = None
+    # False: der Energiezaehler der Quelle ist selbst nur aus SoC-Hub x
+    # Kapazitaet gerechnet (VW-Datenportal, siehe create_session). Dann gilt
+    # die Schaetzung des Servers, der Zaehler nur als Notbehelf.
+    energy_measured: bool = True
 
 
 # --------------------------------------------------------------------------
@@ -447,7 +466,7 @@ def create_session(
         needs_review=True,
         notes=notes,
     )
-    if energy_kwh is not None:
+    if energy_kwh is not None and source.energy_measured:
         # Vom Fahrzeug selbst gezaehlt, also ohne Ladeverluste (siehe
         # Modul-Docstring, "Gemessene Energie").
         session.energy_kwh = energy_kwh
@@ -456,8 +475,34 @@ def create_session(
 
     resolve_location(session, config.user_id, db)
     estimate_energy_kwh(session, vehicle)
+    if session.energy_kwh is None and energy_kwh is not None:
+        # Zaehler, der selbst nur gerechnet ist (VW-Datenportal): taugt nicht
+        # mehr als die eigene Schaetzung, ist ohne SoC aber besser als nichts.
+        session.energy_kwh = energy_kwh
+        session.energy_is_estimated = True
     apply_provider_price(session, db)
     normalize_energy_meter(session, db)
+
+    # Laeuft fuer das Fahrzeug noch eine zweite Quelle, gibt es den Vorgang
+    # vielleicht schon - dann ergaenzen statt doppelt anlegen.
+    match, changes = merge_or_none(db, session, source.label)
+    if match is not None:
+        source.log(
+            db,
+            config,
+            "session_merged",
+            (
+                f"Vorgang vom {match.start_time:%d.%m.%Y %H:%M} gibt es schon aus einer "
+                "anderen Quelle - ergänzt: " + ", ".join(changes) + "."
+            )
+            if changes
+            else (
+                f"Vorgang vom {match.start_time:%d.%m.%Y %H:%M} gibt es schon aus einer "
+                "anderen Quelle - nichts zu ergänzen."
+            ),
+            force=True,
+        )
+        return None
 
     db.add(session)
     return session
@@ -671,7 +716,7 @@ def finish_open_session(
             db,
             config,
             "session_duplicate",
-            f"Ladevorgang mit diesem Beginn existiert bereits - nicht erneut angelegt "
+            f"Ladevorgang existiert bereits (gleicher Beginn oder aus einer anderen Quelle) - nicht erneut angelegt "
             f"(SoC {soc_start}% -> {soc_end}%).",
             level="warning",
             snapshot=snapshot,
@@ -685,7 +730,12 @@ def finish_open_session(
             f"Ladevorgang angelegt: SoC {soc_start}% -> {soc_end}%, Dauer {duration_min} min, "
             f"max. {fmt_number(max_power)} kW, Lade-Art "
             f"{config.open_charging_type or 'unbekannt'}, {config.open_poll_count} Abfragen"
-            + (f", {fmt_number(energy, 2)} kWh gemessen." if energy is not None else "."),
+            + (
+                f", {fmt_number(energy, 2)} kWh "
+                + ("gemessen." if source.energy_measured else "laut Fahrzeug (gerechnet).")
+                if energy is not None
+                else "."
+            ),
             snapshot=snapshot,
             force=True,
         )

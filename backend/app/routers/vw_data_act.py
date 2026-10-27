@@ -90,22 +90,6 @@ def _to_out(db: Session, config: models.VwDataActConfig) -> schemas.VwDataActCon
     )
 
 
-def _other_active_source(db: Session, user: models.User, vehicle_id: str) -> str | None:
-    """Zwei automatische Quellen fuer dasselbe Fahrzeug legen jeden Vorgang
-    doppelt an (verschiedene external_session_id) - deshalb hier abgelehnt."""
-    for model, label in (
-        (models.MySkodaConfig, "MyŠkoda"),
-        (models.BmwCarDataConfig, "BMW CarData"),
-    ):
-        active = (
-            db.query(model)
-            .filter(model.vehicle_id == vehicle_id, model.user_id == user.id, model.enabled == True)  # noqa: E712
-            .first()
-        )
-        if active:
-            return label
-    return None
-
 
 @router.get("/brands")
 def list_brands() -> list[dict]:
@@ -181,13 +165,6 @@ def update_config(
             raise HTTPException(422, "Ohne E-Mail-Adresse und Passwort kann der Abruf nicht aktiviert werden")
         if not config.vin:
             raise HTTPException(422, "Ohne FIN kann der Abruf nicht aktiviert werden")
-        other = _other_active_source(db, user, vehicle_id)
-        if other:
-            raise HTTPException(
-                422,
-                f"Für dieses Fahrzeug ist bereits {other} aktiv - zwei automatische Quellen "
-                "würden jeden Ladevorgang doppelt anlegen.",
-            )
 
     config.enabled = enabled
     config.poll_interval_minutes = payload.poll_interval_minutes

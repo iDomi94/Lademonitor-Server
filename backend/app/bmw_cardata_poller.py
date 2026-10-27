@@ -68,6 +68,7 @@ from .bmw_cardata import (
     HistorySession,
 )
 from .database import SessionLocal
+from .session_merge import merge_or_none
 from .routers.sessions import (
     apply_provider_price,
     estimate_energy_kwh,
@@ -420,6 +421,20 @@ def import_history_item(
     apply_provider_price(session, db)
     _apply_named_provider(session, item.provider_names, db)
     normalize_energy_meter(session, db)
+    # Laeuft fuer das Fahrzeug noch eine zweite Quelle (z.B. Home Assistant),
+    # gibt es den Vorgang vielleicht schon - dann ergaenzen statt doppelt.
+    match, changes = merge_or_none(db, session, "BMW CarData")
+    if match is not None:
+        if changes:
+            log_event(
+                db,
+                config,
+                "session_merged",
+                f"Ladevorgang vom {item.start_time:%d.%m.%Y %H:%M} gibt es schon aus einer "
+                "anderen Quelle - ergänzt: " + ", ".join(changes) + ".",
+                payload=raw,
+            )
+        return None
     db.add(session)
     db.flush()
     log_event(

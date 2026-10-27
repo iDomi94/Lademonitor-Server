@@ -59,7 +59,7 @@ def test_switching_off_sticks_until_new_credentials(client, api, credentials, _f
     assert client.put(url, json=fresh).json()["enabled"] is True
 
 
-def test_not_switched_on_while_another_source_runs(client, db_session):
+def test_switched_on_even_while_another_source_runs(client, db_session):
     register(client)
     vehicle = create_vehicle(client)
     owner = db_session.get(models.Vehicle, vehicle["id"]).user_id
@@ -70,6 +70,7 @@ def test_not_switched_on_while_another_source_runs(client, db_session):
     res = client.put(f"/api/vw-data-act/configs/{vehicle['id']}",
                      json={"brand": "SKODA", "email": "a@b.de", "password": "geheim", "vin": VIN})
 
-    # Kein 422 beim Speichern, der Abruf bleibt einfach aus.
+    # Seit 0.46.0 ergaenzt die zweite Quelle den Vorgang der ersten
+    # (session_merge.py) - keine Sperre mehr.
     assert res.status_code == 200
-    assert res.json()["enabled"] is False
+    assert res.json()["enabled"] is True

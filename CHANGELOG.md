@@ -6,6 +6,23 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.46.0] — 2026-10-26
+
+### Added
+- **Mehrere automatische Quellen je Fahrzeug ohne Dubletten.** Vor dem Anlegen
+  sucht jede Quelle (HA-Push, MyŠkoda, VW-Datenportal, Renault, BMW CarData)
+  einen Vorgang desselben Fahrzeugs mit überlappender Ladezeit und ergänzt ihn,
+  statt einen zweiten anzulegen (`session_merge.py`). Leere Felder werden immer
+  gefüllt; überschrieben wird nur an noch zu prüfenden automatischen Vorgängen,
+  je Feld nach Genauigkeit der Quelle. Änderungen stehen in der Notiz.
+
+### Changed
+- Die Sperre „nur eine automatische Quelle je Fahrzeug“ ist entfallen.
+- **VW-Datenportal: kWh gelten als geschätzt.** Der Zähler des Portals ist aus
+  dem SoC gerechnet. Neue Vorgänge bekommen die Server-Schätzung (SoC-Hub ×
+  Akkukapazität), der Zählerstand nur ohne SoC. Bestandsvorgänge werden einmalig
+  auf „geschätzt“ umgestellt (neue Tabelle `applied_data_migrations`).
+
 ## [0.45.0] — 2026-10-23
 
 ### Added

@@ -455,11 +455,11 @@ def test_charging_session_with_measured_energy(client, db_session, portal):
     assert session.source == models.SessionSource.AUTOMATIC and session.needs_review
     assert session.external_session_id.startswith(f"vwda-{config.vehicle_id}-")
     assert VIN not in session.external_session_id
-    # Vor dem Einstecken kein Zaehlerstand: der Zaehler begann bei null, die
-    # 0,5 kWh bis zum ersten Bericht zaehlen mit.
-    assert session.energy_kwh == pytest.approx(5.9)
-    assert session.energy_is_estimated is False
-    assert session.energy_meter == "vehicle"  # ohne Anbieter eine Ausnahme von "Ladesaeule"
+    # Der Zaehler des Portals ist selbst nur aus dem SoC gerechnet (seit
+    # 0.46.0): es gilt die Schaetzung des Servers, 6 % von 77 kWh.
+    assert session.energy_kwh == pytest.approx(4.62)
+    assert session.energy_is_estimated is True
+    assert session.energy_meter is None
     assert session.charging_type == models.ChargingType.AC
     assert (session.soc_start, session.soc_end) == (30, 36)
     assert session.outside_temp_c == 15.0
@@ -574,7 +574,7 @@ def test_api_never_returns_password_and_test_fills_vin(client, db_session, porta
     assert result["config"]["last_soc"] is None
 
 
-def test_enabling_requires_credentials_and_rejects_second_source(client, db_session, portal):
+def test_enabling_requires_credentials_and_allows_second_source(client, db_session, portal):
     register(client)
     vehicle = create_vehicle(client, external_id="enyaq", name="Enyaq")
     url = f"/api/vw-data-act/configs/{vehicle['id']}"
@@ -586,8 +586,8 @@ def test_enabling_requires_credentials_and_rejects_second_source(client, db_sess
     db_session.commit()
     res = client.put(url, json={"enabled": True, "brand": "SKODA", "email": EMAIL,
                                 "password": PASSWORD, "vin": VIN})
-    assert res.status_code == 422
-    assert "MyŠkoda" in res.text
+    assert res.status_code == 200, res.text
+    assert res.json()["enabled"] is True
 
 
 def test_foreign_vehicle_is_404(client):

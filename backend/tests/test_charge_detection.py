@@ -6,6 +6,7 @@ muessen dieselbe Energie ergeben. Die Berichte hier sind schlichte Objekte mit
 den Eigenschaften, die die Zustandsmaschine liest.
 """
 
+import dataclasses
 import time
 from datetime import datetime, timedelta
 from types import SimpleNamespace
@@ -13,10 +14,15 @@ from types import SimpleNamespace
 import pytest
 
 from app import charge_detection, models
-from app.vw_data_act_poller import SOURCE
+from app.vw_data_act_poller import SOURCE as VW_SOURCE
 from conftest import create_vehicle, register
 
 T0 = datetime(2026, 10, 3, 18, 0)
+
+# Die Zaehler-Mechanik gilt fuer jede Quelle mit echtem Energiezaehler. Das
+# VW-Datenportal selbst zaehlt seit 0.46.0 nur noch als Schaetzung (siehe
+# test_vw_data_act.py) - hier also eine Quelle, die wirklich misst.
+SOURCE = dataclasses.replace(VW_SOURCE, energy_measured=True)
 
 
 def report(minutes, *, plugged, soc, energy=None, power=0.0, state=None, km=20000):
