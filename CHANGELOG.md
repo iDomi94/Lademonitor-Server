@@ -6,6 +6,17 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.48.0] — 2026-10-27
+
+### Added
+- **Ø-Geschwindigkeit aus der MySkoda-Fahrtenstatistik.** Der MySkoda-Abgleich
+  erkennt den Fahrten-Export der App an den Spalten (`myskoda_trips.py`) und
+  füllt je Ladevorgang `avg_speed_kmh` = Summe km / Summe Fahrzeit der Fahrten
+  seit dem Vorgang davor, zugeordnet über den Kilometerstand (Fahrten mit
+  Ladestopp anteilig). Fehlende km-Stände an Vorgängen mit Uhrzeit werden aus
+  der letzten Fahrt davor ergänzt. Nur leere Felder, Vorschau zum Abhaken,
+  Hinweis bei weniger als 80 % Abdeckung.
+
 ## [0.47.0] — 2026-10-27
 
 ### Added

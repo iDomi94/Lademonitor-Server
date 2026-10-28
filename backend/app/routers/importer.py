@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from .. import models, myskoda_import
+from .. import models, myskoda_import, myskoda_trips
 from ..auth import get_current_user
 from ..database import get_db
 
@@ -231,6 +231,12 @@ class MySkodaChargeOut(BaseModel):
     energy_kwh: float | None
 
 
+class MySkodaTripsOut(BaseModel):
+    count: int
+    km: float
+    minutes: float
+
+
 class MySkodaUpdateOut(BaseModel):
     key: str
     session_id: str
@@ -239,6 +245,8 @@ class MySkodaUpdateOut(BaseModel):
     source: str
     charges: list[MySkodaChargeOut]
     changes: list[MySkodaChangeOut]
+    # Nur bei der Fahrtenstatistik: worauf die Ø-Geschwindigkeit beruht.
+    trips: MySkodaTripsOut | None = None
 
 
 class MySkodaNewOut(BaseModel):
@@ -254,6 +262,9 @@ class MySkodaHintOut(BaseModel):
 
 
 class MySkodaPreviewResponse(BaseModel):
+    # "charges" (Ladestatistik) oder "trips" (Fahrtenstatistik, myskoda_trips.py)
+    kind: str = "charges"
+    trips_total: int = 0
     charges_total: int
     charges_ignored: int
     unchanged: int
@@ -300,6 +311,34 @@ def _json_value(value: object) -> object:
     return value
 
 
+def _trips_preview(plan: myskoda_trips.Plan) -> MySkodaPreviewResponse:
+    return MySkodaPreviewResponse(
+        kind="trips",
+        trips_total=plan.trips_total,
+        charges_total=0,
+        charges_ignored=0,
+        unchanged=plan.unchanged,
+        already_imported=0,
+        updates=[
+            MySkodaUpdateOut(
+                key=u.key,
+                session_id=u.session.id,
+                start_time=u.session.start_time,
+                provider_name=u.session.provider.name if u.session.provider else None,
+                source=u.session.source.value,
+                charges=[],
+                changes=[MySkodaChangeOut(field=c.field, old=c.old, new=c.new) for c in u.changes],
+                trips=MySkodaTripsOut(count=u.trips.count, km=round(u.trips.km, 1), minutes=round(u.trips.minutes))
+                if u.trips
+                else None,
+            )
+            for u in plan.updates
+        ],
+        new_sessions=[],
+        hints=[MySkodaHintOut(kind=h.kind, when=h.when, data=h.data) for h in plan.hints],
+    )
+
+
 @router.post("/myskoda/preview", response_model=MySkodaPreviewResponse)
 async def preview_myskoda(
     vehicle_id: str,
@@ -309,7 +348,10 @@ async def preview_myskoda(
 ):
     """Schreibt nichts - rechnet nur den Abgleich aus."""
     vehicle = _get_owned_vehicle(db, user, vehicle_id)
-    plan = _myskoda_plan(db, user, vehicle, await file.read())
+    content = await file.read()
+    if myskoda_trips.is_trip_export(content):
+        return _trips_preview(myskoda_trips.build_plan(db, user, vehicle, myskoda_trips.parse_trips(content)))
+    plan = _myskoda_plan(db, user, vehicle, content)
     return MySkodaPreviewResponse(
         charges_total=plan.charges_total,
         charges_ignored=plan.charges_ignored,
@@ -360,7 +402,11 @@ async def commit_myskoda(
         raise HTTPException(422, "accept muss eine JSON-Liste sein")
     if not isinstance(accepted, list) or not all(isinstance(k, str) for k in accepted):
         raise HTTPException(422, "accept muss eine JSON-Liste sein")
-    plan = _myskoda_plan(db, user, vehicle, await file.read())
+    content = await file.read()
+    if myskoda_trips.is_trip_export(content):
+        trip_plan = myskoda_trips.build_plan(db, user, vehicle, myskoda_trips.parse_trips(content))
+        return MySkodaCommitResponse(updated=myskoda_trips.apply_plan(db, trip_plan, set(accepted)), created=0)
+    plan = _myskoda_plan(db, user, vehicle, content)
     updated, created = myskoda_import.apply_plan(db, user, vehicle, plan, set(accepted))
     return MySkodaCommitResponse(updated=updated, created=created)
 

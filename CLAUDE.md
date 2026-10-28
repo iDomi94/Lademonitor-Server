@@ -93,6 +93,7 @@ backend/app/
                           MyŠkoda und VW-Datenportal
   myskoda_poller.py  - MyŠkoda-Abruf, Kontingent, Debug-Log (nutzt charge_detection.py)
   myskoda_import.py  - Abgleich mit dem CSV-Export der MySkoda-App (siehe Abschnitt "MySkoda-Abgleich")
+  myskoda_trips.py   - Ø-Geschwindigkeit/km-Stand aus der Fahrtenstatistik der MySkoda-App (ebenda)
   bmw_cardata.py     - Client fuer BMW CarData (Device Code Flow, Ladehistorie)
   bmw_cardata_poller.py - Uebernahme der BMW-Ladehistorie (siehe Abschnitt "BMW CarData")
   vw_data_act.py     - Client fuer das VW-Datenportal (EU Data Act), Datensatz-Auswertung
@@ -1529,6 +1530,9 @@ dieses Projekt real gestolpert ist:
   beiden Reihenfolgen, wiederholter Push, bestaetigter Vorgang, zwei getrennte
   Ladungen, gemessene kWh (BMW) vor geschaetzten, VW-Zaehler als Schaetzung,
   einmalige Umstellung der Bestandsvorgaenge.
+- `test_myskoda_trips.py` - Fahrtenstatistik: Summe km / Summe Fahrzeit,
+  anteilige Fahrt ueber einen Ladestopp, km-Stand aus der letzten Fahrt (nicht
+  bei laufender Fahrt, nach Dateiende oder ohne Uhrzeit), Abdeckungs-Hinweis.
 - `test_myskoda_import.py` - MySkoda-Abgleich an nachgebauten echten Faellen
   (Start-SoC 20, Sammeleintrag mit gemessenen und mit geschaetzten kWh, um 2 h
   verschobener Vorgang, verpasster Ladebeginn, neue Ladung, Hinweis statt
@@ -2950,6 +2954,30 @@ Gegen die echten Daten des Nutzers geprueft (67 Ladungen, 55 Vorgaenge): 46
 Vorgaenge mit Aenderungen, 7 stimmen schon, keine neuen, 5 Hinweise - die
 Sammeleintraege 31.03., 02.04., 26.04., 18.05., 19.07. und 04.08. werden
 erkannt. Nur im Web, die Apps haben auch den Spritmonitor-Import nicht.
+
+### Fahrtenstatistik (`myskoda_trips.py`, ab 2026-10-27, v0.48.0)
+
+Wunsch des Nutzers (27.10.2026) fuer die Aufteilung nach Tempo und Temperatur
+(Abschnitt "Mehrverbrauch nach Tempo und Temperatur"): der Fahrten-Export der
+App hat je Fahrt Beginn/Ende (LOKALE Zeit, anders als die Ladestatistik),
+Strecke, km-Stand Anfang/Ende und Fahrzeit in Minuten. Derselbe Upload und
+dieselben Endpunkte wie der Abgleich; `is_trip_export()` entscheidet an den
+Spalten, die Antwort traegt `kind: "trips"` und je Zeile `trips` (Fahrten, km,
+Minuten).
+
+- `avg_speed_kmh` von Vorgang N = Summe km / Summe Fahrzeit aller Fahrten
+  zwischen den km-Staenden von N-1 und N - zugeordnet ueber den km-Stand, nicht
+  die Zeit (Spritmonitor-Importe ohne Uhrzeit). Eine Fahrt ueber einen
+  Ladestopp zaehlt anteilig nach km auf beiden Seiten; 0-km-Fahrten mit ihrer
+  Zeit. Nur bei mindestens 80 % Abdeckung der Strecke und innerhalb der Datei,
+  sonst Hinweis `trip_gap`. Fehlender Start-km-Stand = Ende minus Strecke.
+- `odometer_km` eines Vorgangs MIT Uhrzeit = Ende der letzten Fahrt vor dem
+  Ladebeginn (10 min Toleranz), nur wenn keine Fahrt ueber den Ladebeginn
+  laeuft und danach noch eine Fahrt in der Datei steht. Wird vor der
+  Geschwindigkeit gerechnet und dort schon benutzt.
+- Nur leere Felder; Notizzeile "MySkoda-Fahrten: ...". Gegen die echte Datei
+  des Nutzers (228 Fahrten ab 22.04.) mit nachgebauten Ladungen geprueft:
+  34 von 39 Vorgaengen bekommen einen Wert, 4 Hinweise wegen fehlender Fahrten.
 
 ## Ladevorgang bearbeiten: alle Felder (`templates/sessions.html`, ab 2026-10-19, v0.44.0)
 
