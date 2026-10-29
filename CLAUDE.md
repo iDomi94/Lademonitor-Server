@@ -2327,9 +2327,15 @@ sind Vertrag** mit Lademonitor-HA und den Apps - nicht umbenennen.
   statt den Push per 422 abzulehnen (wie bei Lade-Art und Temperatur).
 - Migration: `ADD COLUMN IF NOT EXISTS grid_energy_kwh`, kein Backfill.
   Backup: Spalte hinten an `sessions.csv`. Tests: `tests/test_home_solar.py`.
-- **Offen:** die Apps muessen das Feld noch in ihr lokales Modell und den
-  Sync-Payload aufnehmen (Android: Room-Migration), und die Verlust-/Akku-
-  Auswertung nutzt den Netzbezug bisher nicht.
+- **Apps (seit 2026-10-29, Android 1.6, iOS 1.13.0):** beide fuehren das Feld
+  im lokalen Modell (Android Room 10 -> 11, iOS leichte SwiftData-Migration)
+  und im Sync, bearbeitbar als "Davon aus dem Netz" (0 <= Netz <= Energie),
+  Anteil in Detail, Liste ("☀ 78 %") und Dashboard unter "Gesamt kWh" - lokal
+  gerechnet nur ueber Vorgaenge mit bekanntem Netzbezug, wie `solar_kwh`.
+  Wie die uebrigen optionalen Felder laesst sich ein einmal gesetzter Wert
+  aus den Apps nicht wieder leeren (`null` = unveraendert). Beide Apps sind
+  hier ungebaut.
+- **Offen:** die Verlust-/Akku-Auswertung nutzt den Netzbezug bisher nicht.
 
 ## Zuhause, Arbeit, unterwegs (`Provider.charging_place`, ab 2026-10-10, v0.31.0)
 
