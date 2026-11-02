@@ -2371,7 +2371,18 @@ ein Posten. Plan und Entscheidungen des Nutzers (10.10.2026):
 Ankertag-Logik wie bei den Grundgebuehren (`fees.add_months`). **Ein
 Jahresbetrag zaehlt in dem Monat, in dem er faellig ist**, nicht auf zwoelf
 Monate verteilt (wie auf dem Konto). Eine Beitragsaenderung ist eine zweite
-Zeile. Strings statt Postgres-Enums (wie `energy_meter`), `label`/`notes`
+Zeile. **Seit v0.49.0** (Wunsch des Nutzers 02.11.2026: "Kosten wie Reifen auf
+laengere Zeitraeume aufteilen") kann jeder Eintrag optional `spread_months`
+tragen: jede Zahlung wird dann gleichmaessig auf so viele Monate ab dem Zahltag
+verteilt (`vehicle_costs.spread_shares`, Ankertag-Logik wie oben, Cent-Rundung,
+Rundungsrest im LETZTEN Anteil), und es zaehlen wie bei Wertverlust/Leasing nur
+begonnene Monate - Reifen fuer 800 EUR auf 48 Monate stehen also nach drei
+Monaten mit 50 EUR in den Kosten. Gilt auch fuer wiederkehrende Zahlungen (jede
+fuer sich, z. B. Jahresversicherung auf 12 Monate). Basis ist bewusst die Zeit,
+nicht die km: die kuenftige Fahrleistung ist unbekannt. 1 Monat wird als NULL
+gespeichert. `paid_to_date` bleibt der gezahlte Betrag, `spread_to_date`/
+`spread_monthly` (nur Antwort) zeigen den verteilten Stand. Ein Server vor
+0.49.0 kennt das Feld nicht - die Apps setzen es dann beim Pull zurueck. Strings statt Postgres-Enums (wie `energy_meter`), `label`/`notes`
 verschluesselt. Grabstein-Typ `vehicle_cost`; das Loeschen eines Fahrzeugs
 legt auch fuer seine Kosten Grabsteine an (ORM-Kaskade), `_purge_owned_data()`
 loescht sie vor den Fahrzeugen.

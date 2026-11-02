@@ -15,7 +15,7 @@ from ..auth import get_current_user
 from ..database import get_db
 from ..fees import load_allocation
 from ..sync import record_deletion
-from ..vehicle_costs import cost_entries, occurrences, ownership_entries
+from ..vehicle_costs import cost_entries, occurrences, ownership_entries, spread_shares
 
 router = APIRouter(prefix="/api/vehicle-costs", tags=["vehicle-costs"])
 
@@ -33,6 +33,9 @@ def _validate(cost: models.VehicleCost) -> None:
     # "einmalig" nicht am alten Enddatum scheitert.
     if cost.interval == "once":
         cost.end_date = None
+    # 1 Monat ist dasselbe wie gar nicht verteilen - einheitlich NULL.
+    if cost.spread_months is not None and cost.spread_months <= 1:
+        cost.spread_months = None
     if cost.end_date is not None and cost.end_date < cost.start_date:
         raise HTTPException(422, "Das Enddatum liegt vor dem Startdatum")
 
@@ -49,7 +52,11 @@ def _require_own_vehicle(db: Session, user: models.User, vehicle_id: str) -> Non
 
 def _out(cost: models.VehicleCost) -> schemas.VehicleCostOut:
     out = schemas.VehicleCostOut.model_validate(cost)
-    out.paid_to_date = round(cost.amount * len(occurrences(cost, date.today())), 2)
+    today = date.today()
+    out.paid_to_date = round(cost.amount * len(occurrences(cost, today)), 2)
+    out.spread_to_date = round(sum(e.amount for e in cost_entries([cost], today)), 2)
+    if cost.spread_months:
+        out.spread_monthly = spread_shares(cost.amount, today, cost.spread_months)[0][1]
     return out
 
 
@@ -170,7 +177,7 @@ def update_cost(
     if fields.get("vehicle_id"):
         _require_own_vehicle(db, user, fields["vehicle_id"])
     # null = unveraendert bei allen Pflichtfeldern; leeren lassen sich nur
-    # Enddatum, km-Stand, Bezeichnung und Notiz.
+    # Enddatum, km-Stand, Verteilung, Bezeichnung und Notiz.
     for key in ("vehicle_id", "amount", "category", "interval", "start_date"):
         if key in fields and fields[key] is None:
             fields.pop(key)

@@ -5,6 +5,17 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.49.0",
+        "date": "2026-11-02",
+        "title": "Kosten auf längere Zeiträume verteilen",
+        "changes": [
+            "Fahrzeugkosten lassen sich jetzt über einen längeren Zeitraum verteilen: neues Feld „Verteilen auf“ (Monate oder Jahre) im Kostenformular auf der Seite „Fahrzeug“.",
+            "Reifen für 800 € auf 4 Jahre zählen dann mit 16,67 € je Monat in Gesamtkosten, Kosten je km und Jahresübersicht – Monat für Monat ab dem Kaufdatum, statt alles im Kaufmonat. Noch nicht begonnene Monate zählen erst, wenn sie dran sind.",
+            "Bei wiederkehrenden Kosten wird jede Zahlung für sich verteilt, z. B. die Jahresversicherung auf 12 Monate.",
+            "Die Kostenliste zeigt bei verteilten Einträgen den Monatsanteil und wie viel davon bisher in die Kosten eingeflossen ist. Die Verteilung kommt mit ins Backup und wird mit den Apps synchronisiert.",
+        ],
+    },
+    {
         "version": "0.48.0",
         "date": "2026-10-27",
         "title": "Ø-Geschwindigkeit aus der MySkoda-Fahrtenstatistik",

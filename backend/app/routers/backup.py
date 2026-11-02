@@ -103,6 +103,8 @@ FEE_FIELDS = [
 COST_FIELDS = [
     "id", "vehicle_id", "vehicle_name", "amount", "category", "interval",
     "start_date", "end_date", "odometer_km", "label", "notes", "created_at",
+    # Seit v0.49.0 hinten angehaengt, beim Import optional.
+    "spread_months",
 ]
 
 # Seit v0.35.0 (Erstattungssaetze, siehe models.ReimbursementRate), optional.
@@ -330,7 +332,7 @@ def build_backup_zip(db: Session, user: models.User) -> bytes:
             "vehicle_name": _c(vehicles_by_id[c.vehicle_id].name) if c.vehicle_id in vehicles_by_id else "",
             "amount": _c(c.amount), "category": _c(c.category), "interval": _c(c.interval),
             "start_date": _c(c.start_date), "end_date": _c(c.end_date),
-            "odometer_km": _c(c.odometer_km),
+            "odometer_km": _c(c.odometer_km), "spread_months": _c(c.spread_months),
             "label": _c(c.label), "notes": _c(c.notes), "created_at": _c(c.created_at),
         }
         for c in costs
@@ -417,6 +419,16 @@ def _parse_float(v: str | None) -> float | None:
 def _parse_int(v: str | None) -> int | None:
     v = (v or "").strip()
     return int(v) if v else None
+
+
+def _spread(v: str | None) -> int | None:
+    """spread_months aus costs.csv: fehlend, leer, unlesbar oder <= 1 = keine
+    Verteilung (aeltere ZIPs haben die Spalte nicht)."""
+    try:
+        months = _parse_int(v)
+    except ValueError:
+        return None
+    return months if months and 1 < months <= 600 else None
 
 
 def _parse_str(v: str | None) -> str | None:
@@ -878,6 +890,7 @@ async def import_backup(
                     start_date=start_date,
                     end_date=_parse_dt(row.get("end_date")) if interval != "once" else None,
                     odometer_km=_parse_int(row.get("odometer_km")),
+                    spread_months=_spread(row.get("spread_months")),
                     label=_parse_str(row.get("label")),
                     notes=_parse_str(row.get("notes")),
                     created_at=_parse_dt(row.get("created_at")),

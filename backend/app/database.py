@@ -671,6 +671,10 @@ def run_light_migrations() -> None:
                 "ADD COLUMN IF NOT EXISTS last_failure_notified_at TIMESTAMP"
             )
         )
+        # v0.49.0: Kosten auf Monate verteilen (vehicle_costs.spread_shares).
+        conn.execute(
+            text("ALTER TABLE vehicle_costs ADD COLUMN IF NOT EXISTS spread_months INTEGER")
+        )
 
         # Einmalige Datenkorrekturen. Anders als ADD COLUMN IF NOT EXISTS sind
         # sie nicht von selbst idempotent: ein Nutzer kann den Wert danach von

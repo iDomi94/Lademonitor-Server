@@ -4,7 +4,10 @@ Drei Kostenarten neben dem Laden, alle je Fahrzeug:
 
 * **Sonstige Kosten** (models.VehicleCost): einzelne oder wiederkehrende
   Zahlungen. Ein Jahresbetrag zaehlt in dem Monat, in dem er faellig ist -
-  wie auf dem Konto, nicht auf zwoelf Monate verteilt.
+  wie auf dem Konto, nicht auf zwoelf Monate verteilt. Seit v0.49.0 laesst
+  sich jede Zahlung optional gleichmaessig auf `spread_months` Monate
+  verteilen (Reifen auf vier Jahre, Versicherung auf zwoelf Monate), siehe
+  spread_shares().
 * **Leasing**: Monatsrate plus die Sonderzahlung, gleichmaessig auf die
   Laufzeit verteilt.
 * **Wertverlust** beim Kauf: aus einer Restwertkurve, oder ein fester
@@ -100,12 +103,37 @@ def occurrences(cost, until: date) -> list[date]:
     return result
 
 
+MAX_SPREAD_MONTHS = 600
+
+
+def spread_shares(amount: float, day: date, months: int | None) -> list[tuple[date, float]]:
+    """Eine Zahlung, verteilt auf `months` Monatsanteile ab dem Zahltag.
+
+    Ohne Verteilung (None, 0 oder 1) bleibt es die eine Zahlung. Sonst je
+    Monat ab dem Zahltag ein gleicher Anteil (Ankertag wie bei
+    occurrences(): 31.01. -> 28.02. -> 31.03.), auf den Cent gerundet; der
+    Rundungsrest landet im LETZTEN Anteil, damit die Summe am Ende exakt
+    stimmt und die laufenden Monate trotzdem alle gleich aussehen.
+    Anteile nach `until` filtert erst cost_entries() - eine Ausgabe wird also
+    Monat fuer Monat sichtbar, wie Wertverlust und Leasing.
+    """
+    if not months or months <= 1:
+        return [(day, amount)]
+    share = round(amount / months, 2)
+    last = round(amount - share * (months - 1), 2)
+    return [(add_months(day, k), last if k == months - 1 else share) for k in range(months)]
+
+
 def cost_entries(costs, until: date) -> list[CostEntry]:
-    return [
-        CostEntry(c.vehicle_id, day, c.amount, c.category if c.category in CATEGORIES else "other")
-        for c in costs
-        for day in occurrences(c, until)
-    ]
+    result = []
+    for c in costs:
+        category = c.category if c.category in CATEGORIES else "other"
+        months = getattr(c, "spread_months", None)
+        for day in occurrences(c, until):
+            for share_day, amount in spread_shares(c.amount, day, months):
+                if share_day <= until:
+                    result.append(CostEntry(c.vehicle_id, share_day, amount, category))
+    return result
 
 
 # ---------- Wertverlust ----------
