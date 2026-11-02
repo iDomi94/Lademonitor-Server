@@ -16,7 +16,7 @@ from conftest import create_vehicle, login, register
 from app import vehicle_costs as vc
 
 
-def _cost(start, interval="once", end=None, amount=100.0, category="insurance"):
+def _cost(start, interval="once", end=None, amount=100.0, category="insurance", spread=None):
     return SimpleNamespace(
         vehicle_id="v1",
         amount=amount,
@@ -24,6 +24,7 @@ def _cost(start, interval="once", end=None, amount=100.0, category="insurance"):
         interval=interval,
         start_date=datetime.fromisoformat(start),
         end_date=datetime.fromisoformat(end) if end else None,
+        spread_months=spread,
     )
 
 
@@ -60,6 +61,41 @@ def test_monthly_keeps_the_anchor_day():
     assert vc.occurrences(cost, date(2026, 4, 30)) == [
         date(2026, 1, 31), date(2026, 2, 28), date(2026, 3, 31), date(2026, 4, 30),
     ]
+
+
+# ---------- Verteilen auf Monate (seit v0.49.0) ----------
+
+
+def test_spread_shares_add_up_exactly():
+    shares = vc.spread_shares(1000.0, date(2026, 1, 31), 48)
+    assert len(shares) == 48
+    assert shares[0] == (date(2026, 1, 31), 20.83)
+    assert shares[1] == (date(2026, 2, 28), 20.83)
+    assert shares[-1] == (date(2029, 12, 31), 20.99)  # Rundungsrest im letzten Anteil
+    assert shares[2][0] == date(2026, 3, 31)
+    assert round(sum(a for _, a in shares), 2) == 1000.0
+    assert vc.spread_shares(100.0, date(2026, 1, 1), None) == [(date(2026, 1, 1), 100.0)]
+    assert vc.spread_shares(100.0, date(2026, 1, 1), 1) == [(date(2026, 1, 1), 100.0)]
+
+
+def test_spread_cost_counts_month_by_month_until_today():
+    """Reifen fuer 800 EUR auf 4 Jahre: bis heute zaehlen nur die begonnenen Monate."""
+    tires = _cost("2026-01-15", amount=800.0, category="tires", spread=48)
+    entries = vc.cost_entries([tires], date(2026, 3, 20))
+    assert [e.day for e in entries] == [date(2026, 1, 15), date(2026, 2, 15), date(2026, 3, 15)]
+    assert all(e.category == "tires" for e in entries)
+    assert sum(e.amount for e in entries) == pytest.approx(3 * 16.67)
+    # Nach Ablauf der Verteilung ist alles drin, nicht mehr.
+    done = vc.cost_entries([tires], date(2031, 1, 1))
+    assert round(sum(e.amount for e in done), 2) == 800.0
+
+
+def test_spread_yearly_payment_over_twelve_months():
+    """Jahresversicherung je Zahlung auf 12 Monate: ein gleichmaessiger Monatsbetrag."""
+    insurance = _cost("2025-01-01", interval="yearly", amount=600.0, spread=12)
+    entries = vc.cost_entries([insurance], date(2026, 6, 30))
+    assert len(entries) == 18
+    assert {e.amount for e in entries} == {50.0}
 
 
 # ---------- Restwertkurve ----------
@@ -175,6 +211,36 @@ def test_cost_crud_and_tombstone(client):
     assert client.delete(f"/api/vehicle-costs/{cost['id']}").status_code == 204
     deletions = client.get("/api/sync/deletions").json()["deletions"]
     assert ("vehicle_cost", cost["id"]) in {(d["entity_type"], d["entity_id"]) for d in deletions}
+
+
+def test_spread_months_via_api_and_stats(client):
+    register(client)
+    vehicle = create_vehicle(client)
+    today = date.today()
+    start = date(today.year - 1, today.month, 1)
+    created = client.post(
+        "/api/vehicle-costs",
+        json={"vehicle_id": vehicle["id"], "amount": 960, "category": "tires",
+              "start_date": start.isoformat(), "spread_months": 48},
+    ).json()
+    assert created["spread_months"] == 48
+    assert created["paid_to_date"] == 960
+    assert created["spread_monthly"] == 20
+    assert created["spread_to_date"] == 13 * 20  # 13 begonnene Monate
+
+    stats = client.get(f"/api/stats/summary?start_date={today.year}-01-01").json()
+    assert stats["vehicle_costs"]["other_cost"] == today.month * 20
+    years = {y["year"]: y["total"] for y in client.get("/api/vehicle-costs/summary").json()}
+    assert years[today.year - 1] == (13 - today.month) * 20
+
+    # 1 Monat = nicht verteilen, null leert die Verteilung.
+    one = client.patch(f"/api/vehicle-costs/{created['id']}", json={"spread_months": 1}).json()
+    assert one["spread_months"] is None and one["spread_monthly"] is None
+    client.patch(f"/api/vehicle-costs/{created['id']}", json={"spread_months": 24})
+    cleared = client.patch(f"/api/vehicle-costs/{created['id']}", json={"spread_months": None}).json()
+    assert cleared["spread_months"] is None
+    assert cleared["spread_to_date"] == 960
+    assert client.patch(f"/api/vehicle-costs/{created['id']}", json={"spread_months": 601}).status_code == 422
 
 
 def test_cost_validation_and_isolation(client):
@@ -314,7 +380,7 @@ def test_backup_roundtrip_with_costs_and_ownership(client):
     client.post(
         "/api/vehicle-costs",
         json={"vehicle_id": vehicle["id"], "amount": 120, "category": "tax", "interval": "yearly",
-              "start_date": "2025-04-01", "label": "Steuer"},
+              "start_date": "2025-04-01", "label": "Steuer", "spread_months": 12},
     )
     archive = client.get("/api/backup/export").content
     assert "costs.csv" in zipfile.ZipFile(io.BytesIO(archive)).namelist()
@@ -332,6 +398,7 @@ def test_backup_roundtrip_with_costs_and_ownership(client):
     assert len(costs) == 1
     assert costs[0]["vehicle_id"] == vehicles[0]["id"]
     assert costs[0]["label"] == "Steuer"
+    assert costs[0]["spread_months"] == 12
 
 
 def test_backup_without_costs_csv_still_imports(client):

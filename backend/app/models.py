@@ -478,6 +478,9 @@ class VehicleCost(Base):
     start_date: Mapped[datetime] = mapped_column(DateTime, index=True)
     end_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     odometer_km: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Seit v0.49.0: jede Zahlung gleichmaessig auf so viele Monate ab dem
+    # Zahltag verteilen (vehicle_costs.spread_shares). NULL/1 = nicht verteilen.
+    spread_months: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Verschluesselt (siehe crypto.py) - Freitext.
     label: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
     notes: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)

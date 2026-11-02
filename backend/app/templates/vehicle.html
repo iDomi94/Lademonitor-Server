@@ -76,6 +76,16 @@
             <input type="date" id="vc-end">
           </div>
           <div>
+            <label>{{ t('vehicle_page.form.spread') }}</label>
+            <div style="display:flex; gap:6px">
+              <input type="number" step="1" min="1" id="vc-spread" placeholder="–" style="flex:1; min-width:0">
+              <select id="vc-spread-unit" style="width:auto">
+                <option value="months">{{ t('vehicle_page.unit.months') }}</option>
+                <option value="years">{{ t('vehicle_page.unit.years') }}</option>
+              </select>
+            </div>
+          </div>
+          <div>
             <label>{{ t('vehicle_page.form.odometer') }}</label>
             <input type="number" step="1" min="0" id="vc-odometer">
           </div>
@@ -89,6 +99,9 @@
           </div>
           <div class="vc-recurring" style="grid-column:1/-1; color:var(--muted); font-size:0.85em">
             {{ t('vehicle_page.form.recurring_hint') }}
+          </div>
+          <div style="grid-column:1/-1; color:var(--muted); font-size:0.85em">
+            {{ t('vehicle_page.form.spread_hint') }}
           </div>
           <div class="form-actions">
             <button type="submit" id="vc-submit">{{ t('vehicle_page.form.submit_new') }}</button>
@@ -236,6 +249,8 @@ const T = {
   colPaid: {{ t('vehicle_page.col.paid')|tojson }},
   colVehicle: {{ t('vehicle_page.col.vehicle')|tojson }},
   until: {{ t('vehicle_page.until')|tojson }},
+  spreadInfo: {{ t('vehicle_page.spread_info')|tojson }},
+  spreadSoFar: {{ t('vehicle_page.spread_so_far')|tojson }},
   dateLabel: {{ t('vehicle_page.form.date')|tojson }},
   startLabel: {{ t('vehicle_page.form.start_date')|tojson }},
   formNew: {{ t('vehicle_page.form.new_heading')|tojson }},
@@ -360,8 +375,10 @@ async function loadCosts() {
         (c.end_date ? ' · ' + T.until.replace('{date}', shortDate(c.end_date)) : ''));
       return `<tr><td>${shortDate(c.start_date)}${c.odometer_km != null ? muted(c.odometer_km.toLocaleString(window.LADEMONITOR_LANG) + ' km') : ''}</td>` +
         `<td>${T.categories[c.category] || c.category}${c.label || c.notes ? muted([c.label, c.notes].filter(Boolean).join(' · ')) : ''}</td>` +
-        `<td>${money(c.amount)}${period}</td>` +
-        `<td>${money(c.paid_to_date)}</td>` +
+        `<td>${money(c.amount)}${period}${c.spread_months ? muted(T.spreadInfo
+          .replace('{months}', c.spread_months).replace('{monthly}', money(c.spread_monthly))) : ''}</td>` +
+        `<td>${money(c.paid_to_date)}${c.spread_months ? muted(T.spreadSoFar
+          .replace('{amount}', money(c.spread_to_date))) : ''}</td>` +
         (withVehicle ? `<td>${vehicleName(c.vehicle_id)}</td>` : '') +
         `<td>${editDeleteButtons(`startEdit('${c.id}')`, `deleteCost('${c.id}')`, T.edit, T.del)}</td></tr>`;
     }).join('');
@@ -396,6 +413,9 @@ function startEdit(id) {
   document.getElementById('vc-interval').value = c.interval;
   document.getElementById('vc-start').value = c.start_date.slice(0, 10);
   document.getElementById('vc-end').value = c.end_date ? c.end_date.slice(0, 10) : '';
+  const years = c.spread_months && c.spread_months % 12 === 0;
+  document.getElementById('vc-spread').value = c.spread_months ? (years ? c.spread_months / 12 : c.spread_months) : '';
+  document.getElementById('vc-spread-unit').value = years ? 'years' : 'months';
   document.getElementById('vc-odometer').value = c.odometer_km ?? '';
   document.getElementById('vc-label').value = c.label || '';
   document.getElementById('vc-notes').value = c.notes || '';
@@ -415,6 +435,13 @@ async function deleteCost(id) {
   refresh();
 }
 
+function spreadMonths() {
+  const n = parseInt(document.getElementById('vc-spread').value, 10);
+  if (!n || n < 1) return null;
+  const months = document.getElementById('vc-spread-unit').value === 'years' ? n * 12 : n;
+  return months > 1 ? Math.min(months, 600) : null;
+}
+
 document.getElementById('vc-form').addEventListener('submit', async e => {
   e.preventDefault();
   const value = id => document.getElementById(id).value;
@@ -426,6 +453,7 @@ document.getElementById('vc-form').addEventListener('submit', async e => {
     start_date: value('vc-start'),
     end_date: value('vc-interval') === 'once' ? null : (value('vc-end') || null),
     odometer_km: value('vc-odometer') || null,
+    spread_months: spreadMonths(),
     label: value('vc-label') || null,
     notes: value('vc-notes') || null,
   };

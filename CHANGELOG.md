@@ -6,6 +6,21 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.49.0] — 2026-11-02
+
+### Added
+- **Kosten auf längere Zeiträume verteilen.** Neues Feld „Verteilen auf“
+  (Monate oder Jahre) an jedem Fahrzeug-Kosteneintrag. Reifen für 800 € auf
+  4 Jahre zählen dann mit 16,67 € je Monat in Gesamtkosten, Kosten je km und
+  Jahresübersicht – Monat für Monat ab dem Kaufdatum, statt alles im
+  Kaufmonat; noch nicht begonnene Monate zählen erst, wenn sie dran sind. Bei
+  wiederkehrenden Kosten wird jede Zahlung für sich verteilt (z. B. die
+  Jahresversicherung auf 12 Monate).
+- Die Kostenliste zeigt Monatsanteil und bisher eingeflossenen Betrag
+  (`spread_monthly`, `spread_to_date` in der API). Neue Spalte
+  `spread_months` (Migration), im Backup hinten an `costs.csv`, im Sync der
+  Apps (iOS 1.16.0, Android 1.9).
+
 ## [0.48.0] — 2026-10-27
 
 ### Added

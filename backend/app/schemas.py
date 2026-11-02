@@ -283,6 +283,8 @@ class VehicleCostBase(BaseModel):
     # Nur bei wiederkehrenden: letzter Tag, an dem noch gezahlt wird.
     end_date: datetime | None = None
     odometer_km: int | None = Field(default=None, ge=0)
+    # Seit v0.49.0: jede Zahlung auf so viele Monate verteilen (null/1 = nein).
+    spread_months: int | None = Field(default=None, ge=1, le=600)
     label: str | None = None
     notes: str | None = None
 
@@ -299,6 +301,7 @@ class VehicleCostUpdate(BaseModel):
     start_date: datetime | None = None
     end_date: datetime | None = None
     odometer_km: int | None = Field(default=None, ge=0)
+    spread_months: int | None = Field(default=None, ge=1, le=600)
     label: str | None = None
     notes: str | None = None
 
@@ -310,6 +313,10 @@ class VehicleCostOut(VehicleCostBase):
     updated_at: datetime
     # Nur lesend: Summe aller Zahlungen bis heute.
     paid_to_date: float = 0
+    # Nur lesend, seit v0.49.0: davon bis heute in die Kosten eingeflossen
+    # (bei Verteilung weniger als paid_to_date) und der Monatsanteil.
+    spread_to_date: float = 0
+    spread_monthly: float | None = None
 
 
 # ---------- Erstattung Dienstwagen (siehe models.ReimbursementRate, reimbursement.py) ----------
