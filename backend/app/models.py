@@ -468,7 +468,8 @@ class VehicleCost(Base):
     # Betrag je Zahlung in EUR.
     amount: Mapped[float] = mapped_column(Float)
     # insurance | tax | maintenance | repair | tires | wallbox | parking |
-    # toll | cleaning | other (schemas.CostCategory). String statt Enum.
+    # toll | cleaning | thg | other (schemas.CostCategory). String statt Enum.
+    # "thg" ist eine Gutschrift (vehicle_costs.CREDIT_CATEGORIES).
     category: Mapped[str] = mapped_column(String, default="other")
     # once | monthly | yearly
     interval: Mapped[str] = mapped_column(String, default="once")

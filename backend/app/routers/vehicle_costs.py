@@ -15,7 +15,15 @@ from ..auth import get_current_user
 from ..database import get_db
 from ..fees import load_allocation
 from ..sync import record_deletion
-from ..vehicle_costs import cost_entries, occurrences, ownership_entries, spread_shares
+from ..vehicle_costs import (
+    CREDIT_CATEGORIES,
+    cost_entries,
+    occurrences,
+    ownership_entries,
+    ownership_start,
+    spread_shares,
+    thg_shares,
+)
 
 router = APIRouter(prefix="/api/vehicle-costs", tags=["vehicle-costs"])
 
@@ -33,6 +41,10 @@ def _validate(cost: models.VehicleCost) -> None:
     # "einmalig" nicht am alten Enddatum scheitert.
     if cost.interval == "once":
         cost.end_date = None
+    # Die THG-Quote verteilt sich immer selbst ueber ihr Kalenderjahr
+    # (vehicle_costs.thg_shares) - eine eigene Verteilung waere widerspruechlich.
+    if cost.category in CREDIT_CATEGORIES:
+        cost.spread_months = None
     # 1 Monat ist dasselbe wie gar nicht verteilen - einheitlich NULL.
     if cost.spread_months is not None and cost.spread_months <= 1:
         cost.spread_months = None
@@ -55,7 +67,12 @@ def _out(cost: models.VehicleCost) -> schemas.VehicleCostOut:
     today = date.today()
     out.paid_to_date = round(cost.amount * len(occurrences(cost, today)), 2)
     out.spread_to_date = round(sum(e.amount for e in cost_entries([cost], today)), 2)
-    if cost.spread_months:
+    if cost.category in CREDIT_CATEGORIES:
+        # Monatsanteil der Gutschrift (positiv; das Vorzeichen steckt in
+        # spread_to_date und in allen Summen).
+        start = cost.start_date.date() if isinstance(cost.start_date, datetime) else cost.start_date
+        out.spread_monthly = thg_shares(cost.amount, start, ownership_start(cost.vehicle))[0][1]
+    elif cost.spread_months:
         out.spread_monthly = spread_shares(cost.amount, today, cost.spread_months)[0][1]
     return out
 

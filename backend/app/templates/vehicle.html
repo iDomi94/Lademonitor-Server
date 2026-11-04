@@ -50,7 +50,7 @@
           <div>
             <label>{{ t('vehicle_page.form.category') }}</label>
             <select id="vc-category" required>
-              {% for c in ['insurance', 'tax', 'maintenance', 'repair', 'tires', 'wallbox', 'parking', 'toll', 'cleaning', 'other'] %}
+              {% for c in ['insurance', 'tax', 'maintenance', 'repair', 'tires', 'wallbox', 'parking', 'toll', 'cleaning', 'thg', 'other'] %}
               <option value="{{ c }}">{{ cost_category_labels[c] }}</option>
               {% endfor %}
             </select>
@@ -75,7 +75,7 @@
             <label>{{ t('vehicle_page.form.end_date') }}</label>
             <input type="date" id="vc-end">
           </div>
-          <div>
+          <div class="vc-spread-row">
             <label>{{ t('vehicle_page.form.spread') }}</label>
             <div style="display:flex; gap:6px">
               <input type="number" step="1" min="1" id="vc-spread" placeholder="–" style="flex:1; min-width:0">
@@ -100,8 +100,11 @@
           <div class="vc-recurring" style="grid-column:1/-1; color:var(--muted); font-size:0.85em">
             {{ t('vehicle_page.form.recurring_hint') }}
           </div>
-          <div style="grid-column:1/-1; color:var(--muted); font-size:0.85em">
+          <div class="vc-spread-row" style="grid-column:1/-1; color:var(--muted); font-size:0.85em">
             {{ t('vehicle_page.form.spread_hint') }}
+          </div>
+          <div class="vc-thg-row" style="grid-column:1/-1; color:var(--muted); font-size:0.85em" hidden>
+            {{ t('vehicle_page.form.thg_hint') }}
           </div>
           <div class="form-actions">
             <button type="submit" id="vc-submit">{{ t('vehicle_page.form.submit_new') }}</button>
@@ -251,6 +254,8 @@ const T = {
   until: {{ t('vehicle_page.until')|tojson }},
   spreadInfo: {{ t('vehicle_page.spread_info')|tojson }},
   spreadSoFar: {{ t('vehicle_page.spread_so_far')|tojson }},
+  thgInfo: {{ t('vehicle_page.thg_info')|tojson }},
+  thgDateLabel: {{ t('vehicle_page.form.thg_year_label')|tojson }},
   dateLabel: {{ t('vehicle_page.form.date')|tojson }},
   startLabel: {{ t('vehicle_page.form.start_date')|tojson }},
   formNew: {{ t('vehicle_page.form.new_heading')|tojson }},
@@ -375,9 +380,11 @@ async function loadCosts() {
         (c.end_date ? ' · ' + T.until.replace('{date}', shortDate(c.end_date)) : ''));
       return `<tr><td>${shortDate(c.start_date)}${c.odometer_km != null ? muted(c.odometer_km.toLocaleString(window.LADEMONITOR_LANG) + ' km') : ''}</td>` +
         `<td>${T.categories[c.category] || c.category}${c.label || c.notes ? muted([c.label, c.notes].filter(Boolean).join(' · ')) : ''}</td>` +
-        `<td>${money(c.amount)}${period}${c.spread_months ? muted(T.spreadInfo
-          .replace('{months}', c.spread_months).replace('{monthly}', money(c.spread_monthly))) : ''}</td>` +
-        `<td>${money(c.paid_to_date)}${c.spread_months ? muted(T.spreadSoFar
+        `<td>${c.category === 'thg' ? '−' : ''}${money(c.amount)}${period}${c.category === 'thg'
+          ? muted(T.thgInfo.replace('{monthly}', money(c.spread_monthly ?? 0)))
+          : (c.spread_months ? muted(T.spreadInfo
+            .replace('{months}', c.spread_months).replace('{monthly}', money(c.spread_monthly))) : '')}</td>` +
+        `<td>${money(c.paid_to_date)}${c.spread_months || c.category === 'thg' ? muted(T.spreadSoFar
           .replace('{amount}', money(c.spread_to_date))) : ''}</td>` +
         (withVehicle ? `<td>${vehicleName(c.vehicle_id)}</td>` : '') +
         `<td>${editDeleteButtons(`startEdit('${c.id}')`, `deleteCost('${c.id}')`, T.edit, T.del)}</td></tr>`;
@@ -386,10 +393,15 @@ async function loadCosts() {
 
 function syncIntervalFields() {
   const once = document.getElementById('vc-interval').value === 'once';
+  // THG-Quote: verteilt sich selbst ueber ihr Kalenderjahr, kein "Verteilen auf".
+  const thg = document.getElementById('vc-category').value === 'thg';
   document.querySelectorAll('.vc-recurring').forEach(el => el.hidden = once);
-  document.getElementById('vc-start-label').textContent = once ? T.dateLabel : T.startLabel;
+  document.querySelectorAll('.vc-spread-row').forEach(el => el.hidden = thg);
+  document.querySelectorAll('.vc-thg-row').forEach(el => el.hidden = !thg);
+  document.getElementById('vc-start-label').textContent = thg ? T.thgDateLabel : (once ? T.dateLabel : T.startLabel);
 }
 document.getElementById('vc-interval').addEventListener('change', syncIntervalFields);
+document.getElementById('vc-category').addEventListener('change', syncIntervalFields);
 
 function resetForm() {
   editingId = null;
@@ -453,7 +465,7 @@ document.getElementById('vc-form').addEventListener('submit', async e => {
     start_date: value('vc-start'),
     end_date: value('vc-interval') === 'once' ? null : (value('vc-end') || null),
     odometer_km: value('vc-odometer') || null,
-    spread_months: spreadMonths(),
+    spread_months: value('vc-category') === 'thg' ? null : spreadMonths(),
     label: value('vc-label') || null,
     notes: value('vc-notes') || null,
   };

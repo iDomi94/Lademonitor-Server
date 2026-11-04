@@ -243,6 +243,78 @@ def test_spread_months_via_api_and_stats(client):
     assert client.patch(f"/api/vehicle-costs/{created['id']}", json={"spread_months": 601}).status_code == 422
 
 
+# ---------- THG-Quote (seit v0.50.0) ----------
+
+
+def _thg(start, interval="once", amount=300.0, vehicle=None):
+    cost = _cost(start, interval=interval, amount=amount, category="thg")
+    cost.vehicle = vehicle
+    return cost
+
+
+def test_thg_counts_negative_over_its_calendar_year():
+    entries = vc.cost_entries([_thg("2026-05-20")], date(2026, 12, 31))
+    assert [e.day for e in entries] == [date(2026, m, 1) for m in range(1, 13)]
+    assert all(e.amount == -25 for e in entries)
+    assert all(e.category == "thg" for e in entries)
+
+
+def test_thg_only_counts_started_months_even_before_its_date():
+    # Datum im Mai, Stichtag Maerz: Januar bis Maerz zaehlen schon.
+    entries = vc.cost_entries([_thg("2026-05-20")], date(2026, 3, 10))
+    assert sum(e.amount for e in entries) == -75
+
+
+def test_thg_is_spread_from_purchase_in_that_year():
+    car = _vehicle(purchase_date="2026-07-15")
+    entries = vc.cost_entries([_thg("2026-03-01", vehicle=car)], date(2027, 1, 1))
+    assert [e.day for e in entries] == [date(2026, m, 15) for m in range(7, 13)]
+    assert sum(e.amount for e in entries) == -300
+    assert entries[0].amount == -50
+    # Ein Kauf in einem frueheren Jahr verteilt wieder auf zwoelf Monate.
+    old = _vehicle(purchase_date="2025-07-15")
+    assert len(vc.cost_entries([_thg("2026-03-01", vehicle=old)], date(2027, 1, 1))) == 12
+    # Leasingbeginn zaehlt genauso.
+    leased = _vehicle(ownership="leasing", leasing_start="2026-10-01")
+    assert len(vc.cost_entries([_thg("2026-01-01", vehicle=leased)], date(2027, 1, 1))) == 3
+
+
+def test_thg_yearly_repeats_per_calendar_year_and_rounds():
+    entries = vc.cost_entries([_thg("2025-01-01", interval="yearly", amount=100)], date(2026, 12, 31))
+    assert len(entries) == 24
+    year = [e.amount for e in entries if e.day.year == 2026]
+    assert year[:11] == [-8.33] * 11 and year[-1] == -8.37
+    assert round(sum(year), 2) == -100
+
+
+def test_thg_via_api_and_stats(client):
+    register(client)
+    vehicle = create_vehicle(client)
+    today = date.today()
+    client.post(
+        "/api/vehicle-costs",
+        json={"vehicle_id": vehicle["id"], "amount": 600, "category": "insurance",
+              "start_date": f"{today.year}-01-01"},
+    )
+    created = client.post(
+        "/api/vehicle-costs",
+        json={"vehicle_id": vehicle["id"], "amount": 240, "category": "thg",
+              "start_date": f"{today.year}-03-01", "spread_months": 24},
+    )
+    assert created.status_code == 201, created.text
+    thg = created.json()
+    assert thg["spread_months"] is None  # verteilt sich selbst
+    assert thg["spread_monthly"] == 20
+    assert thg["spread_to_date"] == -20 * today.month
+
+    stats = client.get(f"/api/stats/summary?start_date={today.year}-01-01").json()
+    costs = stats["vehicle_costs"]
+    assert costs["other_cost"] == 600 - 20 * today.month
+    assert costs["by_category"][-1] == {"category": "thg", "amount": -20 * today.month}
+    years = {y["year"]: y["total"] for y in client.get("/api/vehicle-costs/summary").json()}
+    assert years[today.year] == 600 - 20 * today.month
+
+
 def test_cost_validation_and_isolation(client):
     register(client, username="erste")
     vehicle = create_vehicle(client)

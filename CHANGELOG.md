@@ -6,6 +6,13 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.50.0] — 2026-11-04
+
+### Added
+- THG-Quote eintragen: neue Kategorie „THG-Quote“ im Kostenformular auf der Seite „Fahrzeug“. Sie ist eine Gutschrift und zählt negativ für das Kalenderjahr ihres Datums, gleichmäßig auf die Monate verteilt – 300 € sind 25 € pro Monat in Gesamtkosten, Kosten je km und Jahresübersicht. Nur begonnene Monate zählen.
+- Wurde das Auto erst im Laufe des Jahres gekauft oder geleast (Kaufdatum bzw. Leasingbeginn am Fahrzeug), verteilt sich der volle Betrag auf die Monate ab dann – Kauf im Juli, 300 €: 6 × 50 €.
+- „Jährlich“ trägt die Quote für jedes Folgejahr ein. Sie kommt mit ins Backup und wird mit den Apps synchronisiert (iOS 1.17.0, Android 1.10).
+
 ## [0.49.1] — 2026-11-04
 
 ### Fixed

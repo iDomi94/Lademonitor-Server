@@ -2396,7 +2396,25 @@ fuer sich, z. B. Jahresversicherung auf 12 Monate). Basis ist bewusst die Zeit,
 nicht die km: die kuenftige Fahrleistung ist unbekannt. 1 Monat wird als NULL
 gespeichert. `paid_to_date` bleibt der gezahlte Betrag, `spread_to_date`/
 `spread_monthly` (nur Antwort) zeigen den verteilten Stand. Ein Server vor
-0.49.0 kennt das Feld nicht - die Apps setzen es dann beim Pull zurueck. Strings statt Postgres-Enums (wie `energy_meter`), `label`/`notes`
+0.49.0 kennt das Feld nicht - die Apps setzen es dann beim Pull zurueck.
+
+**THG-Quote (seit v0.50.0, Wunsch des Nutzers 04.11.2026)** ist keine eigene
+Tabelle, sondern die Kategorie `thg` an `VehicleCost`
+(`vehicle_costs.CREDIT_CATEGORIES`): `amount` bleibt positiv, gezaehlt wird er
+NEGATIV in allen Summen (Gesamtkosten, Kosten je km, Jahresuebersicht,
+Kategoriebalken). Verteilt wird immer ueber das Kalenderjahr des Datums
+(`thg_shares`, Anteile am 1. jedes Monats), nur begonnene Monate zaehlen - auch
+die vor dem Datum (Quote im Mai eingetragen, Januar-April zaehlen schon).
+Liegt Kaufdatum bzw. Leasingbeginn (`ownership_start`) in DIESEM Jahr, verteilt
+sich der VOLLE Betrag auf die Monate ab dann (Kauf im Juli: 6 x 50 EUR statt
+12 x 25) - die Praemie wird auch bei Kauf unter dem Jahr voll ausgezahlt.
+`spread_months` wird fuer `thg` immer NULL. `yearly` wiederholt sie je Jahr.
+`spread_to_date` ist dann negativ, `spread_monthly` der positive Anteil.
+Die Apps sperren die Kategorie gegen einen aelteren Server (der lehnt `thg`
+mit 422 ab) ueber ihren neuen `ServerCapabilities`-Mechanismus (Version aus
+`/health` bei jedem Sync, Mindestversion je Funktion, Hinweis "Benoetigt
+Server X.Y.Z oder neuer", im Local-Only-Modus nie gesperrt). Ein Verkaufs-
+oder Leasingende kuerzt die Quote bisher nicht. Strings statt Postgres-Enums (wie `energy_meter`), `label`/`notes`
 verschluesselt. Grabstein-Typ `vehicle_cost`; das Loeschen eines Fahrzeugs
 legt auch fuer seine Kosten Grabsteine an (ORM-Kaskade), `_purge_owned_data()`
 loescht sie vor den Fahrzeugen.

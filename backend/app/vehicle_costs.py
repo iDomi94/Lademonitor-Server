@@ -8,6 +8,11 @@ Drei Kostenarten neben dem Laden, alle je Fahrzeug:
   sich jede Zahlung optional gleichmaessig auf `spread_months` Monate
   verteilen (Reifen auf vier Jahre, Versicherung auf zwoelf Monate), siehe
   spread_shares().
+* **THG-Quote** (seit v0.50.0, Kategorie "thg" an VehicleCost): eine
+  Gutschrift, die NEGATIV fuer das Kalenderjahr ihres Datums zaehlt - der
+  Betrag gleichmaessig auf dessen Monate verteilt, bei einem Fahrzeug, das
+  erst im Laufe des Jahres gekauft bzw. geleast wurde, nur auf die Monate ab
+  dann (siehe thg_shares()).
 * **Leasing**: Monatsrate plus die Sonderzahlung, gleichmaessig auf die
   Laufzeit verteilt.
 * **Wertverlust** beim Kauf: aus einer Restwertkurve, oder ein fester
@@ -45,8 +50,13 @@ CATEGORIES = (
     "parking",
     "toll",
     "cleaning",
+    "thg",
     "other",
 )
+
+# Gutschriften statt Kosten (seit v0.50.0): zaehlen NEGATIV in alle
+# Kostenkennzahlen. Bisher nur die THG-Quote, siehe thg_shares().
+CREDIT_CATEGORIES = frozenset({"thg"})
 
 # Jahresfahrleistung, die das "wirksame Alter" einem Kalenderjahr gleichsetzt.
 KM_PER_YEAR_REFERENCE = 15000.0
@@ -124,15 +134,49 @@ def spread_shares(amount: float, day: date, months: int | None) -> list[tuple[da
     return [(add_months(day, k), last if k == months - 1 else share) for k in range(months)]
 
 
+def ownership_start(vehicle) -> date | None:
+    """Ab wann das Fahrzeug dem Nutzer gehoert: Kauf- bzw. Leasingbeginn,
+    ohne Angabe None (dann zaehlt das ganze Jahr)."""
+    if vehicle is None:
+        return None
+    if vehicle.ownership == "purchase":
+        return _as_date(vehicle.purchase_date)
+    if vehicle.ownership == "leasing":
+        return _as_date(vehicle.leasing_start)
+    return None
+
+
+def thg_shares(amount: float, day: date, owned_from: date | None) -> list[tuple[date, float]]:
+    """Eine THG-Quote als Monatsanteile ueber das Kalenderjahr von `day`.
+
+    Vom 1. Januar bis Dezember je ein gleicher Anteil (1.1., 1.2., ...).
+    Liegt der Kauf-/Leasingbeginn in DIESEM Jahr, beginnt die Verteilung
+    erst an diesem Tag und laeuft bis Dezember - der volle Betrag verteilt
+    sich dann auf weniger Monate (Kauf im Juli, 300 EUR: 6 x 50 EUR), so wie
+    die Praemie auch bei Kauf unter dem Jahr voll ausgezahlt wird. Ein
+    Beginn in einem spaeteren Jahr wird ignoriert (Tippfehler im Datum soll
+    die Quote nicht verschlucken). Rundung wie spread_shares(); die
+    Vorzeichenumkehr macht erst cost_entries().
+    """
+    first = date(day.year, 1, 1)
+    if owned_from is not None and first < owned_from <= date(day.year, 12, 31):
+        first = owned_from
+    months = 12 - first.month + 1
+    return spread_shares(amount, first, months)
+
+
 def cost_entries(costs, until: date) -> list[CostEntry]:
     result = []
     for c in costs:
         category = c.category if c.category in CATEGORIES else "other"
         months = getattr(c, "spread_months", None)
-        for day in occurrences(c, until):
-            for share_day, amount in spread_shares(c.amount, day, months):
+        credit = category in CREDIT_CATEGORIES
+        owned_from = ownership_start(getattr(c, "vehicle", None)) if credit else None
+        for day in occurrences(c, until if not credit else date(until.year, 12, 31)):
+            shares = thg_shares(c.amount, day, owned_from) if credit else spread_shares(c.amount, day, months)
+            for share_day, amount in shares:
                 if share_day <= until:
-                    result.append(CostEntry(c.vehicle_id, share_day, amount, category))
+                    result.append(CostEntry(c.vehicle_id, share_day, -amount if credit else amount, category))
     return result
 
 
