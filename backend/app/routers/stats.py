@@ -98,25 +98,71 @@ def stats_summary(
         if s.energy_kwh is not None and s.grid_energy_kwh is not None
     )
 
-    # Verbrauch: kWh pro 100km ueber Kilometerstand-Differenzen zwischen aufeinanderfolgenden Sessions
-    with_odo = [s for s in sessions if s.odometer_km is not None]
-    consumption = None
-    price_per_100km = None
-    if len(with_odo) >= 2:
-        km_driven = with_odo[-1].odometer_km - with_odo[0].odometer_km
-        kwh_in_range = sum(s.energy_kwh or 0 for s in with_odo[1:])
-        if km_driven > 0:
-            consumption = round(kwh_in_range / km_driven * 100, 1)
-            # Wie bei den kWh zaehlen die Kosten ab dem zweiten Vorgang (die
-            # Strecke VOR dem ersten liegt ausserhalb der km-Differenz), und
-            # von den nicht umgelegten Gebuehren nur die, deren Periode in
-            # genau diesem Zeitraum beginnt.
-            first_day = with_odo[0].start_time.date()
-            last_day = with_odo[-1].start_time.date()
-            cost_in_range = sum(cost(s) for s in with_odo[1:]) + sum(
-                p.amount for p in unallocated if first_day < p.start <= last_day
-            )
-            price_per_100km = round(cost_in_range / km_driven * 100, 2)
+    # Verbrauch, Preis je 100 km und km - Fix 2026-11-04 (0.49.1). Vorher:
+    # Summe der kWh ab dem zweiten Vorgang im Zeitraum / km zwischen erstem
+    # und letztem Kilometerstand. Ueber lange Zeitraeume passte das, bei
+    # kurzen aber haengt es allein daran, WANN geladen wurde: "Monat bis
+    # jetzt" mit zwei Ladungen (01.11. 40,6 kWh, 03.11. 30,7 kWh, 104 km
+    # dazwischen) ergab 29,5 kWh/100 km, obwohl beide Vorgaenge einzeln bei
+    # 19-21 lagen - die 30,7 kWh fuellten den Akku weit ueber den Stand vom
+    # 01.11. hinaus. Ausserdem wurden bei mehreren Fahrzeugen ohne Filter die
+    # Kilometerstaende verschiedener Autos voneinander abgezogen.
+    #
+    # Jetzt wie im Rueckblick (review.py) und im Monatsdiagramm: Verbrauch je
+    # Vorgang aus der VOLLSTAENDIGEN Fahrzeughistorie (consumption.py, also
+    # SoC-korrigiert), km-gewichtet ueber die Vorgaenge im Zeitraum. Bei
+    # lueckenloser SoC-Kette ist das eine Teleskopsumme - (geladene kWh minus
+    # Zuwachs im Akku) / km -, glaettet also genauso wie vorher, nur ohne den
+    # Fehler durch den Akkustand am Rand des Zeitraums.
+    history = sessions
+    if start_date or end_date:
+        hq = db.query(models.ChargingSession).filter(models.ChargingSession.user_id == user.id)
+        if vehicle_id:
+            hq = hq.filter(models.ChargingSession.vehicle_id == vehicle_id)
+        history = hq.order_by(models.ChargingSession.start_time).all()
+
+    consumption_by_session_id = {}
+    for vid in {s.vehicle_id for s in history}:
+        vehicle = db.get(models.Vehicle, vid)
+        vehicle_sessions = [s for s in history if s.vehicle_id == vid]
+        capacity = vehicle.battery_capacity_kwh if vehicle else None
+        consumption_by_session_id.update(compute_vehicle_consumptions(vehicle_sessions, capacity))
+
+    consumption_num = consumption_km = 0.0
+    for s in sessions:
+        result = consumption_by_session_id.get(s.id)
+        if result and result.value is not None and result.km:
+            consumption_num += result.value * result.km
+            consumption_km += result.km
+    raw_consumption = consumption_num / consumption_km if consumption_km else None
+    consumption = round(raw_consumption, 1) if raw_consumption is not None else None
+
+    # Preis je 100 km = dieser Verbrauch x Ø Preis je kWh (inkl. Grundgebuehren).
+    # Gesamtkosten / km haette denselben Randfehler wie oben: wer am letzten
+    # Tag des Zeitraums 60 kWh laedt, faehrt sie erst danach.
+    price_per_100km = (
+        round(raw_consumption * total_cost / total_kwh, 2)
+        if raw_consumption is not None and total_kwh
+        else None
+    )
+
+    # Gefahrene km je Fahrzeug: letzter Stand im Zeitraum minus Anker (letzter
+    # Stand VOR dem Zeitraum, ohne den der erste im Zeitraum) - dieselbe Regel
+    # wie review.py::_km, und genau die Strecke, ueber die der Verbrauch oben
+    # gemittelt ist. Negativ (Zahlendreher) wird 0.
+    total_km_driven = None
+    first_day = datetime.combine(start_date, time.min) if start_date else None
+    in_range_ids = {s.id for s in sessions}
+    for vid in {s.vehicle_id for s in sessions}:
+        readings = [s for s in history if s.vehicle_id == vid and s.odometer_km is not None]
+        inside = [s for s in readings if s.id in in_range_ids]
+        if not inside:
+            continue
+        before = [s for s in readings if first_day and s.start_time < first_day]
+        if not before and len(inside) < 2:
+            continue
+        anchor = before[-1].odometer_km if before else inside[0].odometer_km
+        total_km_driven = (total_km_driven or 0) + max(inside[-1].odometer_km - anchor, 0)
 
     # Anbieter-Aufteilung (kWh + bezahlt) - Sessions ohne Anbieter landen in
     # einem eigenen "Ohne Anbieter"-Eintrag, damit die Summen vollstaendig bleiben
@@ -168,15 +214,9 @@ def stats_summary(
     by_place = build_by_place(sessions, providers_by_id, unallocated, cost)
 
     # Monatlicher Verbrauch: dieselbe Fallback-Kette wie pro Ladevorgang
-    # (consumption.py), km-gewichtet gemittelt statt naiv pro Session -
-    # sessions ist hier bereits die vollstaendige (ungepaginierte) Menge,
-    # daher reicht Gruppieren in Python statt erneuter DB-Abfrage pro Fahrzeug
-    consumption_by_session_id = {}
-    for vid in {s.vehicle_id for s in sessions}:
-        vehicle = db.get(models.Vehicle, vid)
-        vehicle_sessions = [s for s in sessions if s.vehicle_id == vid]
-        capacity = vehicle.battery_capacity_kwh if vehicle else None
-        consumption_by_session_id.update(compute_vehicle_consumptions(vehicle_sessions, capacity))
+    # (consumption.py), km-gewichtet gemittelt statt naiv pro Session.
+    # consumption_by_session_id kommt von oben, aus der ganzen Historie -
+    # sonst fehlte dem ersten Vorgang im Zeitraum sein Vorgaenger.
 
     monthly_cost: dict[str, float] = defaultdict(float)
     monthly_fees: dict[str, float] = defaultdict(float)
@@ -216,12 +256,6 @@ def stats_summary(
         # Neuester Monat zuerst
         for month in sorted(monthly_cost.keys(), reverse=True)
     ]
-
-    total_km_driven = (
-        with_odo[-1].odometer_km - with_odo[0].odometer_km
-        if len(with_odo) >= 2
-        else None
-    )
 
     return schemas.StatsSummary(
         total_sessions=total_sessions,

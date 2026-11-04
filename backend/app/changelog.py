@@ -5,6 +5,17 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.49.1",
+        "date": "2026-11-04",
+        "title": "Ø Verbrauch und Preis je 100 km mit Zeitraumfilter",
+        "changes": [
+            "Ø Verbrauch im Dashboard passt jetzt auch bei kurzen Zeiträumen wie „Monat bis jetzt“: Er ist der nach km gewichtete Durchschnitt der Verbrauchswerte der einzelnen Ladevorgänge (wie im Rückblick). Vorher zählten nur die kWh ab der zweiten Ladung im Zeitraum, egal wie voll der Akku danach war – zwei Ladungen mit 19,4 und 20,6 kWh/100 km ergaben so 29,5.",
+            "Preis je 100 km = Ø Verbrauch × Ø Preis je kWh (inkl. Grundgebühren) – damit hat er denselben Fehler nicht mehr.",
+            "Gefahrene Kilometer zählen ab dem letzten Kilometerstand vor dem Zeitraum, wie im Rückblick. Bei mehreren Fahrzeugen ohne Filter werden die Kilometer je Fahrzeug addiert, statt Kilometerstände verschiedener Autos voneinander abzuziehen.",
+            "Der Monatsverbrauch im Diagramm berücksichtigt beim ersten Ladevorgang im Zeitraum jetzt auch dessen Vorgänger.",
+        ],
+    },
+    {
         "version": "0.49.0",
         "date": "2026-11-02",
         "title": "Kosten auf längere Zeiträume verteilen",
