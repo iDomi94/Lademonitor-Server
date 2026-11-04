@@ -6,6 +6,23 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.49.1] — 2026-11-04
+
+### Fixed
+- **Ø Verbrauch mit Zeitraumfilter.** Der Ø Verbrauch im Dashboard ist jetzt
+  der nach km gewichtete Durchschnitt der Verbrauchswerte der einzelnen
+  Ladevorgänge (über die ganze Fahrzeughistorie gerechnet, wie im
+  Rückblick). Vorher: kWh ab der zweiten Ladung im Zeitraum ÷ km zwischen
+  erstem und letztem Kilometerstand – bei „Monat bis jetzt“ mit zwei
+  Ladungen (19,4 und 20,6 kWh/100 km) kamen so 29,5 heraus.
+- **Preis je 100 km** = Ø Verbrauch × Ø Preis je kWh (inkl. Grundgebühren),
+  statt Kosten ab der zweiten Ladung ÷ km.
+- **Gefahrene Kilometer** zählen je Fahrzeug ab dem letzten Kilometerstand
+  vor dem Zeitraum (wie im Rückblick) und werden über die Fahrzeuge summiert –
+  vorher wurden ohne Fahrzeugfilter Kilometerstände verschiedener Autos
+  voneinander abgezogen.
+- Monatsverbrauch: der erste Vorgang im Zeitraum bekommt seinen Vorgänger.
+
 ## [0.49.0] — 2026-11-02
 
 ### Added

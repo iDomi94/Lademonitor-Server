@@ -1,3 +1,4 @@
+import pytest
 """Grundgebuehren/Abos der Anbieter (fees.py, routers/provider_fees.py).
 
 Die Regeln hier sind Vertrag: beide Apps rechnen die Umlage lokal nach
@@ -201,8 +202,11 @@ def test_stats_include_fees_everywhere(client):
     assert stats["unallocated_fees"] == 0
     assert stats["total_cost"] == round(charger + 15.0, 2)
     assert stats["avg_price_per_kwh"] == round((charger + 15.0) / 85.0, 4)
-    # Wie bei den kWh zaehlen die Kosten ab dem zweiten Vorgang (600 km).
-    assert stats["price_per_100km"] == round((15.6 + 7.8 + 5.85 + 15.0) / 600 * 100, 2)
+    # Preis je 100 km = Verbrauch x Ø Preis je kWh, die Gebuehren stecken
+    # also ueber den Ø Preis mit drin (seit 0.49.1, siehe routers/stats.py).
+    assert stats["price_per_100km"] == pytest.approx(
+        stats["avg_consumption_kwh_per_100km"] * stats["avg_price_per_kwh"], abs=0.02
+    )
     ionity = next(p for p in stats["by_provider"] if p["provider_name"] == "Ionity")
     assert ionity["total_cost"] == round(15.6 + 7.8 + 5.85 + 15.0, 2)
     assert ionity["total_fees"] == 15.0

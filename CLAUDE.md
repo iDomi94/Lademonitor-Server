@@ -779,11 +779,25 @@ Icon/Tooltip-Logik in der SessionsList-View.
 
 - `avg_price_per_kwh` = gewichteter Durchschnitt (Gesamtkosten ÷ Gesamt-kWh),
   bewusst NICHT der einfache Mittelwert der Einzelpreise
-- `price_per_100km` und `avg_consumption_kwh_per_100km` werden aus der
-  Differenz von erstem/letztem bekanntem Kilometerstand berechnet (nicht aus
-  allen Sessions einzeln aufsummiert, um Messfehler zu glätten)
+- `avg_consumption_kwh_per_100km` = km-gewichtetes Mittel der
+  Einzelverbraeuche (`consumption.py`, ueber die VOLLSTAENDIGE
+  Fahrzeughistorie gerechnet) der Vorgaenge im Zeitraum - wie der Rueckblick
+  und `monthly[]`. **Bis 0.49.0** war es "kWh ab dem zweiten Vorgang / km
+  zwischen erstem und letztem Kilometerstand"; das glaettete ueber lange
+  Zeitraeume, bei kurzen hing es aber am Akkustand an den Raendern
+  (Fehlermeldung 04.11.2026, "Monat bis jetzt": 29,5 statt ~20 kWh/100 km
+  bei zwei Ladungen mit 19,4 und 20,6). Bei lueckenloser SoC-Kette ist das
+  neue Mittel eine Teleskopsumme und glaettet genauso.
+- `price_per_100km` = dieser Verbrauch x `avg_price_per_kwh` (inkl.
+  Grundgebuehren) - Gesamtkosten / km haette denselben Randfehler. Bewusst
+  anders als `review.py` (dort Kosten / km).
 - `monthly` Liste ist **absteigend sortiert** (neuester Monat zuerst)
-- `total_km_driven` = Differenz erster/letzter bekannter Kilometerstand
+- `total_km_driven` = je Fahrzeug letzter Stand im Zeitraum minus Anker
+  (letzter Stand VOR dem Zeitraum, ohne den der erste im Zeitraum), summiert
+  - dieselbe Regel wie `review.py::_km` (seit 0.49.1; vorher ohne Anker und
+  ueber alle Fahrzeuge gemeinsam, also bei zwei Autos ohne Filter
+  Kilometerstaende verschiedener Fahrzeuge voneinander abgezogen)
+- Apps (`LocalStatsCalculator`) rechnen dieselben drei Regeln nach
 - `ac_share_pct`/`dc_share_pct` sind **kWh-gewichtet**, NICHT Anteil an der
   Vorgangs-ANZAHL (war urspruenglich anders, bewusst umgestellt - ein langer
   AC-Vorgang zaehlte sonst genauso viel wie eine kurze DC-Schnellladung).
@@ -2556,8 +2570,8 @@ Wert).
   gefiltert: Verbrauch (Kette, `consumption.py`), km (Anker = letzter Stand
   desselben Fahrzeugs VOR dem Zeitraum, ohne den der erste im Zeitraum;
   negativ wird 0) und Grundgebuehren (Umlage ueber alle Vorgaenge, `fees.py`).
-  Darin unterscheidet sich `totals.km` bewusst von `StatsSummary.total_km_driven`
-  mit Datumsfilter, das ohne Anker rechnet.
+  Seit 0.49.1 rechnet `StatsSummary.total_km_driven` genauso (vorher ohne
+  Anker).
 - `cost` enthaelt den Gebuehrenanteil und die nicht umgelegten Perioden, die im
   Zeitraum beginnen - letztere nur ohne Fahrzeugfilter (wie im Dashboard).
 - `previous` ist null, wenn die Vorperiode keinen Vorgang hat; `savings` null
