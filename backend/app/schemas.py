@@ -269,7 +269,7 @@ class VehicleOut(VehicleBase):
 
 CostCategory = Literal[
     "insurance", "tax", "maintenance", "repair", "tires",
-    "wallbox", "parking", "toll", "cleaning", "other",
+    "wallbox", "parking", "toll", "cleaning", "thg", "other",
 ]
 CostInterval = Literal["once", "monthly", "yearly"]
 
@@ -304,6 +304,10 @@ class VehicleCostUpdate(BaseModel):
     spread_months: int | None = Field(default=None, ge=1, le=600)
     label: str | None = None
     notes: str | None = None
+
+
+# "thg" (seit v0.50.0) ist eine Gutschrift: `amount` bleibt positiv, gezaehlt
+# wird er negativ und ueber das Kalenderjahr verteilt (vehicle_costs.thg_shares).
 
 
 class VehicleCostOut(VehicleCostBase):

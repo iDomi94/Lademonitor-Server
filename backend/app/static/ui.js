@@ -37,20 +37,22 @@
     charging: '#5b8def', depreciation: '#a78bfa', leasing: '#a78bfa',
     insurance: '#4fd1a5', tax: '#f2b84b', maintenance: '#f08a5d', repair: '#e5534b',
     tires: '#8b98a9', wallbox: '#2ea87f', parking: '#d48ac8', toll: '#c9a227',
-    cleaning: '#6cc4e0', other: '#6b7280',
+    cleaning: '#6cc4e0', thg: '#16a34a', other: '#6b7280',
   };
 
   /** Je Kategorie eine Zeile mit Balken (relativ zur groessten), Betrag und
    *  Anteil an der Summe. `labels` bildet die Kategorie auf ihren Namen ab. */
   window.renderCostBars = function (items, labels) {
-    const total = items.reduce((sum, c) => sum + c.amount, 0);
-    const max = Math.max(...items.map(c => c.amount), 0);
+    // Gutschriften (THG-Quote) kommen negativ: Balken nach Betrag, Anteil
+    // gegen die Summe der Kosten, damit "-8 %" lesbar bleibt.
+    const total = items.reduce((sum, c) => sum + Math.max(c.amount, 0), 0);
+    const max = Math.max(...items.map(c => Math.abs(c.amount)), 0);
     const money = n => Number(n).toLocaleString(window.LADEMONITOR_LANG,
       { style: 'currency', currency: 'EUR' });
     return items.map(c => `
       <div class="cost-row">
         <div class="cost-name">${labels[c.category] || c.category}</div>
-        <div class="cost-bar"><div style="width:${max ? c.amount / max * 100 : 0}%;
+        <div class="cost-bar"><div style="width:${max ? Math.abs(c.amount) / max * 100 : 0}%;
           background:${window.COST_COLORS[c.category] || window.COST_COLORS.other}"></div></div>
         <div class="cost-amount">${money(c.amount)}
           <small>${total ? Math.round(c.amount / total * 100) : 0}%</small></div>

@@ -5,6 +5,16 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.50.0",
+        "date": "2026-11-04",
+        "title": "THG-Quote als Gutschrift",
+        "changes": [
+            "THG-Quote eintragen: neue Kategorie „THG-Quote“ im Kostenformular auf der Seite „Fahrzeug“. Sie ist eine Gutschrift und zählt negativ für das Kalenderjahr ihres Datums, gleichmäßig auf die Monate verteilt – 300 € sind 25 € pro Monat in Gesamtkosten, Kosten je km und Jahresübersicht. Nur begonnene Monate zählen.",
+            "Wurde das Auto erst im Laufe des Jahres gekauft oder geleast (Kaufdatum bzw. Leasingbeginn am Fahrzeug), verteilt sich der volle Betrag auf die Monate ab dann – Kauf im Juli, 300 €: 6 × 50 €.",
+            "„Jährlich“ trägt die Quote für jedes Folgejahr ein. Sie kommt mit ins Backup und wird mit den Apps synchronisiert (iOS 1.17.0, Android 1.10).",
+        ],
+    },
+    {
         "version": "0.49.1",
         "date": "2026-11-04",
         "title": "Ø Verbrauch und Preis je 100 km mit Zeitraumfilter",
