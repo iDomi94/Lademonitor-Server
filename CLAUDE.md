@@ -1462,7 +1462,7 @@ geloescht, wird neu angelegt. Ohne Header unveraendert (Web, HA). **Keine
 Versionssperre in den Apps:** ein aelterer Server ignoriert den Header, der
 Schutz fehlt dann nur. Tests: `tests/test_idempotency.py`.
 
-**Reifen offline (iOS 1.18.0, Android 1.10):** Reifensaetze und Profilmessungen
+**Reifen offline (iOS 1.18.0, Android 1.11):** Reifensaetze und Profilmessungen
 sind nicht Teil des lokalen Spiegels (siehe "Reifensaetze"). Statt sie dort
 aufzunehmen, haben beide Apps eine kleine Warteschlange (`TireOutbox`) fuer
 Anlegen/Aendern/Loeschen, die ohne Netz greift, als "wartet auf Upload"
