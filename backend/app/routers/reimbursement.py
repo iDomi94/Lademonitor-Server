@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..auth import get_current_user
+from ..idempotency import existing as existing_for_key, key_header, remember as remember_key
 from ..database import get_db
 from ..i18n import language_context
 from ..reimbursement import build_report, to_csv
@@ -66,12 +67,18 @@ def create_rate(
     payload: schemas.ReimbursementRateCreate,
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
+    idem_key: str | None = Depends(key_header),
 ):
+    # Wiederholte Anlage (Antwort ging verloren): dieselbe Zeile zurueck.
+    found = existing_for_key(db, user, idem_key, models.ReimbursementRate)
+    if found is not None:
+        return found
     _own_vehicle(db, user, payload.vehicle_id)
     data = payload.model_dump()
     data["valid_from"] = _day(data["valid_from"])
     rate = models.ReimbursementRate(**data, user_id=user.id)
     db.add(rate)
+    remember_key(db, user, idem_key, rate)
     db.commit()
     db.refresh(rate)
     return rate

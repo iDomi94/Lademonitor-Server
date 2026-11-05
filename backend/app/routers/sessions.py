@@ -7,6 +7,7 @@ from .. import models, schemas
 from ..battery import METER_CHARGER, effective_meter
 from ..active_sessions import clear_report, list_active
 from ..auth import get_current_user
+from ..idempotency import existing as existing_for_key, key_header, remember as remember_key
 from ..drive_breakdown import breakdowns_for_vehicle
 from ..consumption import compute_vehicle_consumptions
 from ..database import get_db
@@ -323,7 +324,13 @@ def create_session(
     payload: schemas.SessionCreate,
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
+    idem_key: str | None = Depends(key_header),
 ):
+    # Wiederholte Anlage (Antwort ging verloren): dieselbe Zeile zurueck.
+    found = existing_for_key(db, user, idem_key, models.ChargingSession)
+    if found is not None:
+        attach_consumption(db, user.id, [found])
+        return found
     vehicle = _get_owned_vehicle(db, user, payload.vehicle_id)
 
     session = models.ChargingSession(
@@ -346,6 +353,7 @@ def create_session(
     sync_provider_last_price(session, db)
 
     db.add(session)
+    remember_key(db, user, idem_key, session)
     db.commit()
     db.refresh(session)
     attach_consumption(db, user.id, [session])

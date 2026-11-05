@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..auth import get_current_user
+from ..idempotency import existing as existing_for_key, key_header, remember as remember_key
 from ..database import get_db
 from ..sync import record_deletion
 
@@ -53,9 +54,15 @@ def create_location(
     payload: schemas.LocationCreate,
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
+    idem_key: str | None = Depends(key_header),
 ):
+    # Wiederholte Anlage (Antwort ging verloren): dieselbe Zeile zurueck.
+    found = existing_for_key(db, user, idem_key, models.ChargingLocation)
+    if found is not None:
+        return found
     location = models.ChargingLocation(**payload.model_dump(), user_id=user.id)
     db.add(location)
+    remember_key(db, user, idem_key, location)
     db.commit()
     db.refresh(location)
     return location

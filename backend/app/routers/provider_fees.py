@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..auth import get_current_user
+from ..idempotency import existing as existing_for_key, key_header, remember as remember_key
 from ..database import get_db
 from ..fees import charged_to_date
 from ..sync import record_deletion
@@ -69,7 +70,12 @@ def create_fee(
     payload: schemas.ProviderFeeCreate,
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
+    idem_key: str | None = Depends(key_header),
 ):
+    # Wiederholte Anlage (Antwort ging verloren): dieselbe Zeile zurueck.
+    found = existing_for_key(db, user, idem_key, models.ProviderFee)
+    if found is not None:
+        return _out(found)
     _require_own_provider(db, user, payload.provider_id)
     data = payload.model_dump()
     data["start_date"] = _day(data["start_date"])
@@ -77,6 +83,7 @@ def create_fee(
     fee = models.ProviderFee(**data, user_id=user.id)
     _validate(fee)
     db.add(fee)
+    remember_key(db, user, idem_key, fee)
     db.commit()
     db.refresh(fee)
     return _out(fee)

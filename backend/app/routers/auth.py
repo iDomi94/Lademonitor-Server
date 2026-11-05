@@ -92,6 +92,9 @@ def _purge_owned_data(db: Session, user_id: str) -> None:
     db.query(models.ActiveChargeReport).filter(
         models.ActiveChargeReport.user_id == user_id
     ).delete(synchronize_session=False)
+    db.query(models.IdempotencyKey).filter(
+        models.IdempotencyKey.user_id == user_id
+    ).delete(synchronize_session=False)
     db.query(models.ChargingLocation).filter(
         models.ChargingLocation.user_id == user_id
     ).delete(synchronize_session=False)

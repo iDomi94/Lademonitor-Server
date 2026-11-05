@@ -1445,6 +1445,29 @@ Grabsteine mit weg - sie haengen per Fremdschluessel am Nutzer, eine
 verbliebene Zeile liesse das Loeschen des Kontos an Postgres scheitern (genau
 der Fehlertyp, der 2026-09-09 schon einmal in der Admin-Loeschfunktion steckte).
 
+## Dublettenschutz beim Anlegen (`idempotency.py`, ab 2026-11-05, v0.51.0)
+
+Die Apps speichern im Server-Modus zuerst lokal und laden beim Sync hoch
+(Offline-Puffer, siehe `AppRepository`). Geht die Antwort auf ein POST verloren,
+bleibt die lokale Zeile "dirty" ohne `serverId` und wird beim naechsten Sync
+erneut angelegt - vorher eine echte Dublettenquelle. Jetzt schicken die Apps
+ihre lokale UUID als Header `Idempotency-Key`; die zehn Anlage-Endpunkte
+(Fahrzeuge, Anbieter, Gebuehren, Ladeorte, Ladevorgaenge, Fahrzeugkosten,
+Erinnerungen, Erstattungssaetze, Reifensaetze, Profilmessungen) liefern zu einem
+bekannten Schluessel die schon angelegte Zeile zurueck (201, gleiche Antwort).
+Tabelle `idempotency_keys` (`user_id`, `entity_type` = `__tablename__`, `key`,
+`entity_id`), angelegt per `create_all()`, im selben Commit wie die Zeile,
+ohne Ablauf; `_purge_owned_data()` loescht sie mit. Ist die Zeile inzwischen
+geloescht, wird neu angelegt. Ohne Header unveraendert (Web, HA). **Keine
+Versionssperre in den Apps:** ein aelterer Server ignoriert den Header, der
+Schutz fehlt dann nur. Tests: `tests/test_idempotency.py`.
+
+**Reifen offline (iOS 1.18.0, Android 1.11):** Reifensaetze und Profilmessungen
+sind nicht Teil des lokalen Spiegels (siehe "Reifensaetze"). Statt sie dort
+aufzunehmen, haben beide Apps eine kleine Warteschlange (`TireOutbox`) fuer
+Anlegen/Aendern/Loeschen, die ohne Netz greift, als "wartet auf Upload"
+angezeigt und beim naechsten Sync abgearbeitet wird - mit demselben Header.
+
 ## Paginierung von `GET /api/sessions` (Fix 2026-09-20, v0.22.0)
 
 Der Endpunkt hatte `limit: int = Query(default=200, le=1000)` - und **kein
