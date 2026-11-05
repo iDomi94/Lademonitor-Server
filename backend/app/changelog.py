@@ -5,6 +5,15 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.51.0",
+        "date": "2026-11-05",
+        "title": "Kein doppelter Eintrag nach Funkloch",
+        "changes": [
+            "Wenn die App offline Eingaben gesammelt hat und beim Hochladen die Antwort des Servers verloren geht (Funkloch, Zeitüberschreitung), schickt sie den Eintrag beim nächsten Abgleich noch einmal. Bisher stand er dann doppelt da. Jetzt erkennt der Server die Wiederholung am mitgeschickten Schlüssel und legt nichts neu an.",
+            "Gilt für Ladevorgänge, Fahrzeuge, Anbieter, Ladeorte, Grundgebühren, Fahrzeugkosten, Erinnerungen, Erstattungssätze, Reifensätze und Profilmessungen. Braucht iOS 1.18.0 bzw. Android 1.11; ältere Apps und die Weboberfläche verhalten sich wie bisher.",
+        ],
+    },
+    {
         "version": "0.50.0",
         "date": "2026-11-04",
         "title": "THG-Quote als Gutschrift",

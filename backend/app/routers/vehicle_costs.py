@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..auth import get_current_user
+from ..idempotency import existing as existing_for_key, key_header, remember as remember_key
 from ..database import get_db
 from ..fees import load_allocation
 from ..sync import record_deletion
@@ -169,7 +170,12 @@ def create_cost(
     payload: schemas.VehicleCostCreate,
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
+    idem_key: str | None = Depends(key_header),
 ):
+    # Wiederholte Anlage (Antwort ging verloren): dieselbe Zeile zurueck.
+    found = existing_for_key(db, user, idem_key, models.VehicleCost)
+    if found is not None:
+        return _out(found)
     _require_own_vehicle(db, user, payload.vehicle_id)
     data = payload.model_dump()
     data["start_date"] = _day(data["start_date"])
@@ -177,6 +183,7 @@ def create_cost(
     cost = models.VehicleCost(**data, user_id=user.id)
     _validate(cost)
     db.add(cost)
+    remember_key(db, user, idem_key, cost)
     db.commit()
     db.refresh(cost)
     return _out(cost)

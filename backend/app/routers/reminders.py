@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..auth import get_current_user
+from ..idempotency import existing as existing_for_key, key_header, remember as remember_key
 from ..database import get_db
 from ..reminders import (
     COST_CATEGORY,
@@ -163,13 +164,19 @@ def create_reminder(
     payload: schemas.ReminderCreate,
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
+    idem_key: str | None = Depends(key_header),
 ):
+    # Wiederholte Anlage (Antwort ging verloren): dieselbe Zeile zurueck.
+    found = existing_for_key(db, user, idem_key, models.Reminder)
+    if found is not None:
+        return _single_out(db, found)
     _require_own_vehicle(db, user, payload.vehicle_id)
     data = payload.model_dump()
     for key in ("due_date", "last_done_date"):
         data[key] = _day(data[key])
     reminder = models.Reminder(**data, user_id=user.id)
     db.add(reminder)
+    remember_key(db, user, idem_key, reminder)
     db.commit()
     db.refresh(reminder)
     return _single_out(db, reminder)

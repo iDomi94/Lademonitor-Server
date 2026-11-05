@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas, tires
 from ..auth import get_current_user
+from ..idempotency import existing as existing_for_key, key_header, remember as remember_key
 from ..consumption import compute_vehicle_consumptions
 from ..database import get_db
 from ..temperature import collect_points
@@ -38,7 +39,12 @@ def create_tire_set(
     payload: schemas.TireSetCreate,
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
+    idem_key: str | None = Depends(key_header),
 ):
+    # Wiederholte Anlage (Antwort ging verloren): dieselbe Zeile zurueck.
+    found = existing_for_key(db, user, idem_key, models.TireSet)
+    if found is not None:
+        return found
     _require_own_vehicle(db, user, payload.vehicle_id)
     tread = payload.tread
     removed_tread = payload.removed_tread
@@ -71,6 +77,7 @@ def create_tire_set(
         db.add(_measurement(user, tire_set, tread, payload.installed_on, payload.odometer_km))
     # Passende Erinnerung "Reifenwechsel Winter/Sommer" abhaken.
     complete_for_tire_change(db, tire_set)
+    remember_key(db, user, idem_key, tire_set)
     db.commit()
     db.refresh(tire_set)
     return tire_set
@@ -136,12 +143,18 @@ def create_tread_measurement(
     payload: schemas.TreadMeasurementCreate,
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
+    idem_key: str | None = Depends(key_header),
 ):
+    # Wiederholte Anlage (Antwort ging verloren): dieselbe Zeile zurueck.
+    found = existing_for_key(db, user, idem_key, models.TireTreadMeasurement)
+    if found is not None:
+        return found
     tire_set = _get_owned(db, user, tire_set_id)
     if payload.minimum() is None:
         raise HTTPException(422, "Profiltiefe fehlt")
     measurement = _measurement(user, tire_set, payload, payload.measured_on, payload.odometer_km)
     db.add(measurement)
+    remember_key(db, user, idem_key, measurement)
     db.commit()
     db.refresh(measurement)
     return measurement

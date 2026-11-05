@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..auth import get_current_user
+from ..idempotency import existing as existing_for_key, key_header, remember as remember_key
 from ..database import get_db
 from ..sync import record_deletion
 from ..vehicle_costs import ownership_info
@@ -61,7 +62,12 @@ def create_vehicle(
     payload: schemas.VehicleCreate,
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
+    idem_key: str | None = Depends(key_header),
 ):
+    # Wiederholte Anlage (Antwort ging verloren): dieselbe Zeile zurueck.
+    found = existing_for_key(db, user, idem_key, models.Vehicle)
+    if found is not None:
+        return vehicle_out(db, found)
     existing = (
         db.query(models.Vehicle)
         .filter(
@@ -77,6 +83,7 @@ def create_vehicle(
         data[key] = _day(data[key])
     vehicle = models.Vehicle(**data, user_id=user.id)
     db.add(vehicle)
+    remember_key(db, user, idem_key, vehicle)
     db.commit()
     db.refresh(vehicle)
     return vehicle_out(db, vehicle)

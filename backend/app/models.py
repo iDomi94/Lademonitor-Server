@@ -707,6 +707,31 @@ class ActiveChargeReport(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class IdempotencyKey(Base):
+    """Merkt sich, welche Zeile eine Anlage-Anfrage mit `Idempotency-Key` erzeugt hat.
+
+    Die Apps speichern offline zuerst lokal und laden spaeter hoch. Geht die
+    Antwort auf ein POST verloren (Funkloch), wiederholen sie es beim naechsten
+    Sync - ohne diese Tabelle stuende die Zeile dann doppelt da. Schickt ein
+    Client denselben Schluessel noch einmal, liefert der Endpunkt die schon
+    angelegte Zeile zurueck (siehe idempotency.py). Ist sie inzwischen
+    geloescht, wird neu angelegt. Bewusst ohne Ablauf: eine Zeile je angelegtem
+    Datensatz, ein paar Dutzend Byte.
+    """
+    __tablename__ = "idempotency_keys"
+    __table_args__ = (
+        UniqueConstraint("user_id", "entity_type", "key", name="uq_idempotency_user_type_key"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    # __tablename__ des angelegten Modells, z.B. "charging_sessions".
+    entity_type: Mapped[str] = mapped_column(String)
+    key: Mapped[str] = mapped_column(String)
+    entity_id: Mapped[str] = mapped_column(String)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class TireSet(Base):
     """Ein Reifensatz ab seinem Montagedatum.
 

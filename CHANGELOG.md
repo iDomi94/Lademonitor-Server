@@ -6,6 +6,11 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.51.0] — 2026-11-05
+
+### Fixed
+- Kein doppelter Eintrag nach einem Funkloch: Die Apps schicken beim Anlegen ihre lokale ID als `Idempotency-Key` mit. Kommt dieselbe Anlage noch einmal (die Antwort auf den ersten Versuch ging verloren), liefert der Server den schon angelegten Eintrag zurück statt einen zweiten anzulegen. Gilt für Ladevorgänge, Fahrzeuge, Anbieter, Ladeorte, Grundgebühren, Fahrzeugkosten, Erinnerungen, Erstattungssätze, Reifensätze und Profilmessungen (iOS 1.18.0, Android 1.11). Ohne den Header – Weboberfläche, Home Assistant, ältere Apps – bleibt alles wie bisher.
+
 ## [0.50.0] — 2026-11-04
 
 ### Added

@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..auth import get_current_user
+from ..idempotency import existing as existing_for_key, key_header, remember as remember_key
 from ..database import get_db
 from ..sync import record_deletion
 
@@ -24,7 +25,12 @@ def create_provider(
     payload: schemas.ProviderCreate,
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
+    idem_key: str | None = Depends(key_header),
 ):
+    # Wiederholte Anlage (Antwort ging verloren): dieselbe Zeile zurueck.
+    found = existing_for_key(db, user, idem_key, models.Provider)
+    if found is not None:
+        return found
     existing = (
         db.query(models.Provider)
         .filter(models.Provider.name == payload.name, models.Provider.user_id == user.id)
@@ -34,6 +40,7 @@ def create_provider(
         raise HTTPException(409, "Anbieter mit diesem Namen existiert bereits")
     provider = models.Provider(**payload.model_dump(), user_id=user.id)
     db.add(provider)
+    remember_key(db, user, idem_key, provider)
     db.commit()
     db.refresh(provider)
     return provider
