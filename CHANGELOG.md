@@ -6,6 +6,12 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.51.1] — 2026-11-09
+
+### Fixed
+- VW-Datenportal: Zählt ein Fahrzeug die geladene Energie je Ladevorgang (ID.3, Enyaq), wurde bisher der Stand der vorigen Ladung abgezogen, wenn der Rücksprung auf null zwischen zwei Datensätzen lag – z. B. 16 statt 31 kWh. Fällt der Zähler einmal, merkt sich der Server jetzt, dass er je Vorgang zählt, und rechnet ab null.
+- VW-Datenportal: Kam der erste Bericht mit Ladezustand erst mitten in oder nach der Ladung, stand der Vorgang mit zu hohem Start-SoC da, im schlimmsten Fall 100 % → 100 % mit 0 kWh. Der Start-SoC wird dann aus dem Energiezähler nachgerechnet (höchstens bis zum Wert des Berichts vor dem Einstecken) und die Startzeit entsprechend vorgezogen. Bereits angelegte Vorgänge werden nicht geändert.
+
 ## [0.51.0] — 2026-11-05
 
 ### Fixed

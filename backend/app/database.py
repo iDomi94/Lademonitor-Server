@@ -665,6 +665,20 @@ def run_light_migrations() -> None:
                         f"ADD COLUMN IF NOT EXISTS {odometer_column} INTEGER"
                     )
                 )
+            # v0.51.1: Zaehler je Vorgang (charge_detection._note_counter_drop)
+            # und Energie beim ersten Bericht mit steckendem Kabel.
+            conn.execute(
+                text(
+                    f"ALTER TABLE {detection_table} "
+                    "ADD COLUMN IF NOT EXISTS energy_counter_per_session BOOLEAN"
+                )
+            )
+            conn.execute(
+                text(
+                    f"ALTER TABLE {detection_table} "
+                    "ADD COLUMN IF NOT EXISTS open_energy_first_kwh DOUBLE PRECISION"
+                )
+            )
         conn.execute(
             text(
                 "ALTER TABLE webdav_backup_configs "

@@ -108,7 +108,19 @@ beide Varianten auf. Ausgangswert ist der letzte Stand VOR dem Einstecken
 gilt null, solange der erste Wert ein plausibler Einzelvorgang ist: der Enyaq
 meldete im ersten Ladebericht schon 13 kWh (SoC 10 -> 25 %), als Ausgangswert
 genommen fehlten sie (19.10.2026). Ein hoeherer erster Wert ist ein
-Gesamtzaehler und wird zum Ausgangswert. Der
+Gesamtzaehler und wird zum Ausgangswert.
+
+Faellt der Zaehler einmal (`_note_counter_drop`), zaehlt er je Vorgang -
+`energy_counter_per_session` haelt das dauerhaft fest. Ab dann zaehlt die
+erste Aenderung seit dem Einstecken ab null, auch wenn der Ruecksprung auf null
+zwischen zwei Berichten lag: beim ID.3 kamen am 07./09.11.2026 waehrend der
+Ladung kaum Berichte mit Ladezustand, der Server zog den Stand der vorigen
+Ladung ab und kam auf 16 statt 31 bzw. 12 statt 43 kWh. Was der Zaehler schon
+beim ersten Bericht mit steckendem Kabel hatte (`open_energy_first_kwh`),
+zeigt ausserdem, dass die Ladung da schon lief - dann rechnet
+`energy_based_start` den Start-SoC auch aus einem frischen Wert nach (am
+09.11. kam der erste Ladezustand erst nach Ladeende: 100 % -> 100 %, 0 kWh)
+und zieht die Startzeit mit. Der
 Messort ist das FAHRZEUG (`energy_meter="vehicle"`), Ladeverluste stecken
 also nicht drin.
 
@@ -217,6 +229,21 @@ def _snapshot_energy(snapshot: Any) -> float | None:
     return getattr(snapshot, "charged_energy_kwh", None)
 
 
+# Ab diesem Rueckgang gilt ein Zaehlerstand als zurueckgesetzt - kleinere
+# Abweichungen sind Rundung im Bericht.
+COUNTER_RESET_MIN_DROP_KWH = 0.5
+
+
+def _note_counter_drop(config: Any, previous: float | None, raw: float | None) -> None:
+    """Ein Gesamtzaehler faellt nie. Faellt er doch, zaehlt er je Vorgang -
+    das gilt fuer dieses Fahrzeug dann dauerhaft (siehe Modul-Docstring,
+    "Gemessene Energie")."""
+    if previous is None or raw is None:
+        return
+    if raw < previous - COUNTER_RESET_MIN_DROP_KWH:
+        config.energy_counter_per_session = True
+
+
 def _add_energy(config: Any, raw: float | None) -> None:
     """Zuwachs des Energiezaehlers auf den laufenden Vorgang buchen (siehe
     Modul-Docstring, "Gemessene Energie")."""
@@ -226,7 +253,15 @@ def _add_energy(config: Any, raw: float | None) -> None:
     if previous is None:
         config.open_energy_raw_kwh = raw
         return
-    gained = raw - previous if raw >= previous else raw
+    _note_counter_drop(config, previous, raw)
+    if config.energy_counter_per_session and not config.open_energy_kwh and raw != previous:
+        # Erste Aenderung seit dem Einstecken bei einem Zaehler je Vorgang:
+        # er hat beim Einstecken bei null begonnen, auch wenn der Rueckgang
+        # zwischen zwei Berichten lag (ID.3 07.11.2026: 15 -> 31 kWh waren
+        # 31 kWh, nicht 16).
+        gained = raw
+    else:
+        gained = raw - previous if raw >= previous else raw
     config.open_energy_kwh = round((config.open_energy_kwh or 0.0) + gained, 3)
     config.open_energy_raw_kwh = raw
 
@@ -318,6 +353,9 @@ def energy_based_start(
     energy: float | None,
     capacity_kwh: float | None,
     driven_km: int | None = None,
+    soc_before: int | None = None,
+    charged_before_first_report: float | None = None,
+    counter_per_session: bool = False,
 ) -> tuple[int | None, str | None]:
     """Start-SoC aus gemessener Energie nachrechnen: `(soc_start, Begruendung)`.
 
@@ -335,23 +373,64 @@ def energy_based_start(
     `ENERGY_START_TOLERANCE_DRIVEN_PCT`; None (unbekannt) ab
     `ENERGY_START_TOLERANCE_PCT`. Ergibt die Rechnung weniger als 0 %, passen
     Zaehler und Kapazitaet nicht zusammen - dann bleibt der erfasste Wert.
+
+    `charged_before_first_report`: was der Zaehler schon beim ersten Bericht
+    mit steckendem Kabel gezaehlt hatte. Ab `MISSED_SESSION_MIN_ENERGY_KWH`
+    lief die Ladung da schon, der SoC dieses Berichts ist dann nicht der
+    Start, auch wenn er frisch ist (ID.3 09.11.2026: erster Bericht mit
+    Ladezustand erst nach Ladeende, 100 %, Zaehler 43 kWh) - die km-Regel
+    oben greift dann nicht. Dasselbe gilt bei einem Zaehler je Vorgang
+    (`counter_per_session`), wenn der erste Bericht schon einen hoeheren SoC
+    zeigte als der davor (07.11.2026: 27 % -> erster Ladebericht 35 % bei
+    10,5 kW) - der Zaehler deckt dann den ganzen Vorgang ab, auch den Teil vor
+    dem ersten Bericht.
+
+    `soc_before`: der SoC des letzten Berichts VOR dem Einstecken. Ohne Laden
+    faellt der SoC nur, der echte Start liegt also hoechstens dort. Liegt die
+    Rechnung darunter (der Zaehler zaehlt auch Standby und Vorklimatisierung
+    am Kabel mit), ist dieser Wert die bessere Angabe.
     """
     if soc_start is None or soc_end is None or not energy or not capacity_kwh:
         return soc_start, None
-    if driven_km is not None and driven_km <= 0:
+    counted_before = (
+        charged_before_first_report is not None
+        and charged_before_first_report >= MISSED_SESSION_MIN_ENERGY_KWH
+    )
+    rose_before = counter_per_session and soc_before is not None and soc_before < soc_start
+    charged_before = counted_before or rose_before
+    if not charged_before and driven_km is not None and driven_km <= 0:
         return soc_start, None
     tolerance = (
-        ENERGY_START_TOLERANCE_PCT if driven_km is None else ENERGY_START_TOLERANCE_DRIVEN_PCT
+        ENERGY_START_TOLERANCE_PCT
+        if driven_km is None and not charged_before
+        else ENERGY_START_TOLERANCE_DRIVEN_PCT
     )
     derived = soc_end - energy / capacity_kwh * 100
     if derived < 0 or soc_start - derived < tolerance:
         return soc_start, None
     corrected = int(round(derived))
-    because = (
-        f"Der erfasste Wert stammte aus einem Bericht {driven_km} km vor dem Einstecken."
-        if driven_km is not None
-        else "Der erfasste Wert stammte vermutlich aus einem Bericht vor einer Fahrt."
-    )
+    capped = soc_before is not None and corrected < soc_before < soc_start
+    if capped:
+        corrected = soc_before
+    if counted_before:
+        because = (
+            f"Beim ersten Bericht mit steckendem Kabel hatte der Zähler schon "
+            f"{fmt_number(charged_before_first_report, 2)} kWh gezählt - die Ladung lief da bereits."
+        )
+    elif rose_before:
+        because = (
+            f"Beim ersten Bericht mit steckendem Kabel stand der SoC schon über den "
+            f"{soc_before} % davor - die Ladung lief da bereits, der Zähler zählt je Vorgang."
+        )
+    elif driven_km is not None:
+        because = f"Der erfasste Wert stammte aus einem Bericht {driven_km} km vor dem Einstecken."
+    else:
+        because = "Der erfasste Wert stammte vermutlich aus einem Bericht vor einer Fahrt."
+    if capped:
+        because += (
+            f" Begrenzt auf {soc_before} % aus dem letzten Bericht vor dem Einstecken "
+            "(der Zähler enthält auch Standby am Kabel)."
+        )
     reason = (
         f"Start-SoC aus der gemessenen Energie nachgerechnet: {soc_start} % → {corrected} % "
         f"({fmt_number(energy, 2)} kWh bis {soc_end} % bei {fmt_number(capacity_kwh)} kWh "
@@ -377,6 +456,7 @@ def reset_open_session(config: Any) -> None:
     config.open_in_saved_location = None
     config.open_energy_kwh = None
     config.open_energy_raw_kwh = None
+    config.open_energy_first_kwh = None
     config.open_charging_seen = None
 
 
@@ -560,6 +640,8 @@ def start_open_session(db: Session, config: Any, snapshot: Any, source: Detectio
         # null (siehe Modul-Docstring, "Gemessene Energie").
         config.open_energy_raw_kwh = 0.0
     _add_energy(config, first_energy)
+    # Was davon schon vor dem ersten Bericht geladen war (energy_based_start).
+    config.open_energy_first_kwh = config.open_energy_kwh
 
     source.log(
         db,
@@ -608,6 +690,42 @@ def update_open_session(db: Session, config: Any, snapshot: Any) -> None:
     _add_energy(config, _snapshot_energy(snapshot))
 
 
+def _energy_backdated_time(
+    config: Any,
+    start_time: datetime,
+    observed_soc: int | None,
+    corrected_soc: int | None,
+    capacity_kwh: float | None,
+) -> tuple[datetime, str | None]:
+    """Startzeit zum Start-SoC aus der Energie mitziehen - aber nur, wenn der
+    erste Bericht mit steckendem Kabel schon MEHR zeigte als der Bericht davor,
+    also nachweislich schon geladen wurde. War der Start-SoC nur veraltet (nach
+    einer Fahrt), stimmt die Startzeit.
+
+    Zurueck geht es um die Zeit, die die fehlenden Punkte bei der beobachteten
+    Leistung brauchen; ohne Leistung bis zum Bericht davor. Hoechstens bis
+    dorthin - davor stand das Kabel nachweislich nicht (wie backdated_start)."""
+    before = config.open_soc_before
+    gap = config.open_gap_before_seconds
+    if (
+        observed_soc is None
+        or corrected_soc is None
+        or before is None
+        or gap is None
+        or not (before < observed_soc and corrected_soc < observed_soc)
+    ):
+        return start_time, None
+    offset = float(gap)
+    power = config.open_max_power_kw or 0.0
+    if capacity_kwh and power > 0:
+        hours = (observed_soc - corrected_soc) / 100 * capacity_kwh / power
+        offset = min(offset, hours * 3600)
+    if offset <= 0:
+        return start_time, None
+    corrected_time = (start_time - timedelta(seconds=offset)).replace(microsecond=0)
+    return corrected_time, f"Startzeit um {fmt_minutes(int(offset))} vorgezogen."
+
+
 def finish_open_session(
     db: Session, config: Any, snapshot: Any, source: DetectionSource
 ) -> None:
@@ -648,13 +766,24 @@ def finish_open_session(
         if plugged_km is not None and config.open_soc_start_odometer_km is not None
         else None
     )
+    capacity = vehicle.battery_capacity_kwh if vehicle else None
+    observed_start = soc_start
     soc_start, energy_reason = energy_based_start(
         soc_start,
         soc_end,
         energy,
-        vehicle.battery_capacity_kwh if vehicle else None,
+        capacity,
         driven_km,
+        soc_before=config.open_soc_before,
+        charged_before_first_report=config.open_energy_first_kwh,
+        counter_per_session=bool(config.energy_counter_per_session),
     )
+    if energy_reason and backdate_reason is None:
+        start_time, shift_reason = _energy_backdated_time(
+            config, start_time, observed_start, soc_start, capacity
+        )
+        if shift_reason:
+            energy_reason = f"{energy_reason} {shift_reason}"
     if energy_reason:
         source.log(db, config, "session_backdated", energy_reason, snapshot=snapshot)
     delta = (soc_end - soc_start) if (soc_start is not None and soc_end is not None) else None
@@ -974,5 +1103,6 @@ def apply_snapshot(db: Session, config: Any, snapshot: Any, source: DetectionSou
     config.last_captured_at = snapshot.captured_at
     raw_energy = _snapshot_energy(snapshot)
     if raw_energy is not None:
+        _note_counter_drop(config, config.last_energy_raw_kwh, raw_energy)
         config.last_energy_raw_kwh = raw_energy
     return True
