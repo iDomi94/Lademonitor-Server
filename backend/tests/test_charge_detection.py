@@ -360,3 +360,93 @@ def test_energy_based_start_guards(soc_start, soc_end, energy, capacity, driven,
         soc_start, soc_end, energy, capacity, driven
     )
     assert corrected == expected
+
+
+# --- Zaehler je Vorgang, Ruecksprung zwischen zwei Berichten (ID.3, 07./09.11.2026) ---
+
+
+def run_vw(db, cfg, reports):
+    """Wie `run`, aber mit der echten VW-Quelle (Zaehler nur als Schaetzung)."""
+    for r in reports:
+        assert charge_detection.apply_snapshot(db, cfg, r, VW_SOURCE)
+    db.commit()
+    return db.query(models.ChargingSession).order_by(models.ChargingSession.start_time).all()
+
+
+def test_falling_counter_marks_it_as_per_session(db_session, config):
+    assert not config.energy_counter_per_session
+    run_vw(db_session, config, [
+        report(0, plugged=False, soc=23, energy=35.0),
+        report(400, plugged=False, soc=51, energy=15.0),
+    ])
+    assert config.energy_counter_per_session is True
+
+
+def test_per_session_counter_reset_between_reports_counts_from_zero(db_session, config):
+    # 07.11.2026: Zaehler stand nach der Ladung davor auf 15 kWh, der erste
+    # Bericht mit Ladezustand hatte keinen Zaehler, beim Ausstecken stand er
+    # auf 31. Bisher 31 - 15 = 16 kWh; der Start-SoC blieb beim ersten
+    # Ladebericht (35 %), obwohl 106 min vorher noch 27 % gemeldet waren.
+    db_session.get(models.Vehicle, config.vehicle_id).battery_capacity_kwh = 52.0
+    config.energy_counter_per_session = True
+    sessions = run_vw(db_session, config, [
+        report(0, plugged=False, soc=27, energy=15.0, km=53063),
+        report(106, plugged=True, soc=35, energy=None, power=10.5, km=53063),
+        report(1203, plugged=False, soc=81, energy=31.0, km=53065),
+    ])
+    assert len(sessions) == 1
+    s = sessions[0]
+    assert "31,00 kWh" in s.notes
+    # 81 - 31/52 = 21 % liegt unter dem Bericht davor (27 %): der Zaehler
+    # enthaelt Standby am Kabel, der echte Start liegt hoechstens bei 27 %.
+    assert s.soc_start == 27
+    assert s.energy_is_estimated is True
+    assert s.energy_kwh == pytest.approx(54 * 0.52, abs=0.1)
+    # 8 Punkte bei 10,5 kW: 24 min vor dem ersten Ladebericht.
+    first_report = charge_detection.utc_to_local(T0 + timedelta(minutes=106))
+    expected = first_report - timedelta(hours=8 / 100 * 52 / 10.5)
+    assert abs((s.start_time - expected).total_seconds()) < 2
+
+
+def test_first_report_after_charge_end_is_backdated_by_the_counter(db_session, config):
+    # 09.11.2026: 22 % vor dem Einstecken, der erste Bericht mit Ladezustand
+    # kam erst nach Ladeende (100 %, Zaehler 43 kWh). Bisher: 100 % -> 100 %,
+    # 0 kWh, 12 kWh "laut Fahrzeug".
+    db_session.get(models.Vehicle, config.vehicle_id).battery_capacity_kwh = 52.0
+    config.energy_counter_per_session = True
+    sessions = run_vw(db_session, config, [
+        report(0, plugged=False, soc=22, energy=31.0, km=53228),
+        report(290, plugged=True, soc=100, energy=43.0, power=0.0,
+               state="CHARGE_PURPOSE_REACHED_AND_NOT_CONSERVATION_CHARGING", km=53228),
+        report(337, plugged=False, soc=91, energy=43.0, km=None),
+    ])
+    assert len(sessions) == 1
+    s = sessions[0]
+    assert (s.soc_start, s.soc_end) == (22, 100)
+    assert s.energy_kwh == pytest.approx(78 * 0.52, abs=0.1)
+    assert "43,00 kWh" in s.notes
+    # Ohne beobachtete Leistung zurueck bis zum Bericht davor.
+    assert s.start_time == charge_detection.utc_to_local(T0)
+
+
+def test_cumulative_counter_is_not_treated_as_per_session(db_session, config):
+    # Ohne beobachteten Rueckgang bleibt es bei der Differenz.
+    sessions = run(db_session, config, [
+        report(0, plugged=False, soc=40, energy=1200.0),
+        report(15, plugged=True, soc=42, energy=None, power=11),
+        report(45, plugged=False, soc=55, energy=1209.0),
+    ])
+    assert not config.energy_counter_per_session
+    assert sessions[0].energy_kwh == pytest.approx(9.0)
+
+
+def test_stale_counter_at_plug_in_is_not_counted_twice(db_session, config):
+    # Zaehler je Vorgang, der beim ersten Bericht noch den alten Stand zeigt.
+    config.energy_counter_per_session = True
+    sessions = run(db_session, config, [
+        report(0, plugged=False, soc=40, energy=25.0),
+        report(15, plugged=True, soc=42, energy=25.0, power=11),
+        report(30, plugged=True, soc=50, energy=4.0, power=11),
+        report(45, plugged=False, soc=55, energy=8.0),
+    ])
+    assert sessions[0].energy_kwh == pytest.approx(8.0)

@@ -2810,6 +2810,24 @@ DEMSELBEN Bericht wie der SoC (`last_soc_odometer_km` ->
 nicht gefahren: nie (frischer Wert); unbekannt: ab 5 Punkten. Haengt an einer
 korrekt eingetragenen NETTO-Kapazitaet; die Startzeit bleibt.
 
+**Zaehler je Vorgang, Ruecksprung zwischen zwei Berichten (v0.51.1):** beim
+ID.3 (07./09.11.2026) kamen waehrend der Ladung fast nur Berichte ohne
+Ladezustand; der Server zog den Zaehlerstand der vorigen Ladung ab (16 statt 31,
+12 statt 43 kWh), und am 09.11. kam der erste Ladezustand erst nach Ladeende
+(Vorgang 100 % -> 100 %, 0 kWh statt 22 -> 100 %). Seitdem merkt sich
+`energy_counter_per_session` (Mixin, faellt der Zaehler einmal um mehr als
+0,5 kWh), dass er je Vorgang zaehlt - die erste Aenderung nach dem Einstecken
+zaehlt dann ab null. `open_energy_first_kwh` (Zaehler beim ersten Bericht mit
+Kabel) bzw. ein schon gestiegener SoC beim ersten Bericht zeigen, dass die
+Ladung schon lief: `energy_based_start` rechnet den Start-SoC dann auch aus
+einem frischen Wert nach, nie unter den SoC vor dem Einstecken (der Zaehler
+zaehlt Standby am Kabel mit), und zieht die Startzeit mit
+(`_energy_backdated_time`, ohne Leistung bis zum Bericht davor). Die
+Nacherkennung (`missed_energy`) bleibt bewusst bei der Differenz - ein spaeter
+Nachlauf desselben Vorgangs saehe sonst wie eine neue Ladung aus.
+`battery_level_HV.value` (kommt teils allein, ohne Ladezustand) wird weiterhin
+nicht ausgewertet.
+
 **Keine Position** - Geo-Matching greift nicht, Ort und Anbieter traegt man
 beim Pruefen nach. Temperatur: `outside_temperature` (dK), sonst die
 `outdoor_temperature*`-Varianten, plausibel -50..60 Grad.

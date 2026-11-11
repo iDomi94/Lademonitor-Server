@@ -5,6 +5,16 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.51.1",
+        "date": "2026-11-09",
+        "title": "VW-Datenportal: Energie und Ladebeginn bei lückenhaften Berichten",
+        "changes": [
+            "Zählt ein Fahrzeug die geladene Energie je Ladevorgang (ID.3, Enyaq), wurde bisher der Stand der vorigen Ladung abgezogen, wenn der Rücksprung auf null zwischen zwei Datensätzen lag – z. B. 16 statt 31 kWh. Fällt der Zähler einmal, merkt sich der Server jetzt, dass er je Vorgang zählt, und rechnet ab null.",
+            "Kam der erste Bericht mit Ladezustand erst mitten in oder nach der Ladung, stand der Vorgang mit zu hohem Start-SoC da, im schlimmsten Fall 100 % → 100 % mit 0 kWh. Der Start-SoC wird dann aus dem Energiezähler nachgerechnet (höchstens bis zum Wert des Berichts vor dem Einstecken) und die Startzeit entsprechend vorgezogen.",
+            "Bereits angelegte Vorgänge werden nicht geändert.",
+        ],
+    },
+    {
         "version": "0.51.0",
         "date": "2026-11-05",
         "title": "Kein doppelter Eintrag nach Funkloch",

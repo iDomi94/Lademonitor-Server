@@ -980,6 +980,10 @@ class ChargeDetectionStateMixin:
     # er keinen trug). Daran erkennt charge_detection.energy_based_start(), ob
     # seit dem letzten SoC gefahren wurde (dann ist er als Start zu hoch).
     last_soc_odometer_km: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Der Energiezaehler ist schon einmal gefallen, zaehlt also je Vorgang
+    # (siehe charge_detection.py, "Gemessene Energie"). Dauerhaft, kein
+    # Zustand des laufenden Vorgangs.
+    energy_counter_per_session: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     # --- Laufender, noch nicht abgeschlossener Ladevorgang -------------------
     open_start_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -1015,6 +1019,9 @@ class ChargeDetectionStateMixin:
     # zuletzt gesehener Rohwert (siehe charge_detection.py::_add_energy).
     open_energy_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
     open_energy_raw_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Davon schon beim ersten Bericht mit steckendem Kabel gezaehlt - dann lief
+    # die Ladung bereits (charge_detection.energy_based_start).
+    open_energy_first_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Hat die Quelle waehrend des Steckens einmal "laedt" gemeldet? Dann wird
     # der Vorgang auch ohne SoC-Zuwachs/Leistung/Zaehler angelegt.
     open_charging_seen: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
