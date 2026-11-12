@@ -5,6 +5,15 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.54.0",
+        "date": "2026-11-13",
+        "title": "Passwortmanager in der iOS-App",
+        "changes": [
+            "Der Server liefert jetzt die Datei /.well-known/apple-app-site-association aus. Zusammen mit iOS 1.21.0 schlägt der Passwortmanager (Schlüsselbund, 1Password usw.) die Zugangsdaten für lademonitor.cloud direkt im Anmeldeformular der App vor und speichert neue mit Adresse.",
+            "Bei einem eigenen Server unter eigener Domain greift die automatische Zuordnung nicht, weil iOS die Domains fest in der App erwartet. Wer eine eigene Version der App baut, trägt deren App-ID per Umgebungsvariable APPLE_APP_IDS ein.",
+        ],
+    },
+    {
         "version": "0.53.0",
         "date": "2026-11-13",
         "title": "Neues Logo: Säule lädt Auto",
