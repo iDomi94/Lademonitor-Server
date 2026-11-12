@@ -6,6 +6,11 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.52.0] — 2026-11-12
+
+### Added
+- Datei `/.well-known/apple-app-site-association` (ohne Anmeldung): verknüpft die Domain mit der iOS-App, damit Passwortmanager die Zugangsdaten im Anmeldeformular der App vorschlagen (ab iOS 1.19.0, wirkt für lademonitor.cloud). Eigene App-Builds tragen ihre App-ID per `APPLE_APP_IDS` ein.
+
 ## [0.51.1] — 2026-11-09
 
 ### Fixed
