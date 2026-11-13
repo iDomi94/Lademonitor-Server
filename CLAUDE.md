@@ -1487,6 +1487,18 @@ Verbrauchskette braucht sie) - ein Limit auf der Ergebnismenge hat die
 eigentliche Arbeit also noch nie gespart. Die Clients mussten dafuer nicht
 angefasst werden: sie schickten ja nie einen Wert.
 
+## Logo (`design/logo/`, ab 2026-11-13, v0.53.0)
+
+Seit 0.53.0 ist das Logo „Saeule laedt Auto“ (Entwurf aus Lademonitor-App PR
+#53, Quell-SVGs in `design/logo/saeule-auto/`). `design/logo/icons.py` ist die
+EINZIGE Stelle, aus der Icons entstehen - auch fuer die anderen vier Repos
+(`--ios`, `--android`, `--ha`, `--addon`; Android ruft es ueber
+`tools/generate_icons.py` auf). Die alten Entwuerfe (`build.py`, `parts.py`,
+`out/`, Variante 17) bleiben nur als Archiv. Markenfarbe `--brand` = Tuerkis
+`#5EEAD4` (vorher Gruen `#3bf07c`). Das PWA-Manifest hat seitdem ein eigenes
+maskierbares Icon (`icon-maskable-512.png`), die gerundete Kachel wurde von der
+Maske angeschnitten.
+
 ## PWA: installierbare Web-Oberflaeche (ab 2026-09-20, v0.22.0)
 
 `icon-192.png`/`icon-512.png` lagen seit dem Logo-Wechsel (v0.18.0) im Repo und

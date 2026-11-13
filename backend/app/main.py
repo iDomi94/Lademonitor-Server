@@ -528,12 +528,15 @@ def web_app_manifest():
             # Wie style.css (--bg / --brand) - sonst blitzt beim Start ein
             # weisser Rahmen um die dunkle Oberflaeche auf.
             "background_color": "#0f1420",
-            "theme_color": "#3bf07c",
+            "theme_color": "#5eead4",
             "icons": [
                 {"src": "static/icon-192.png", "sizes": "192x192", "type": "image/png"},
                 {"src": "static/icon-512.png", "sizes": "512x512", "type": "image/png"},
                 {
-                    "src": "static/icon-512.png",
+                    # Eigene Fassung: das Motiv liegt verkleinert in der
+                    # Sicherheitszone (Kreis mit 80 % Durchmesser), die
+                    # gerundete Kachel wuerde von der Maske angeschnitten.
+                    "src": "static/icon-maskable-512.png",
                     "sizes": "512x512",
                     "type": "image/png",
                     "purpose": "maskable",

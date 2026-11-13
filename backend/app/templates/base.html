@@ -47,14 +47,13 @@
 <body>
   <nav class="topnav" id="topnav">
     {# Wort-Bild-Marke statt des bisherigen ⚡-Emojis. Das Zeichen liegt hier
-       bewusst QUER (static/logo-mark.svg, erzeugt von design/logo/icons.py):
-       in der Leiste gilt die Quadrat-Beschraenkung des App-Icons nicht, quer
-       passt die ganze Szene bei gleicher Hoehe rund dreimal so breit hinein
-       und bleibt dadurch lesbar. alt="" weil der Schriftzug daneben denselben
+       ohne Kachel (static/logo-mark.svg, erzeugt von design/logo/icons.py):
+       nur das Motiv, auf seine Ausdehnung beschnitten - in der Leiste bringt
+       --card den Grund mit, eine zweite dunkle Kachel saehe aufgeklebt aus. alt="" weil der Schriftzug daneben denselben
        Namen schon traegt - sonst liest ein Screenreader ihn zweimal vor. #}
     <div class="brand">
       <img src="static/logo-mark.svg?v={{ version|default('dev') }}"
-           alt="" width="240" height="94">
+           alt="" width="237" height="153">
       <span class="brandname">Lade<b>monitor</b></span>
     </div>
     {% if version %}

@@ -8,10 +8,10 @@
   --accent2: #5b8def;
   --warn: #f2b84b;
   --danger: #ef6461;
-  /* Logo-Gruen. Bewusst NICHT --accent (#4fd1a5): das ist der Bedienfarbton
-     der Oberflaeche, das hier ist die Farbe der Marke (Kabel im Logo) und
+  /* Logo-Tuerkis (seit 0.53.0, vorher Gruen #3bf07c). Bewusst NICHT
+     --accent (#4fd1a5): das ist der Bedienfarbton der Oberflaeche, das hier ist die Farbe der Marke (Kabel im Logo) und
      soll nur dort auftauchen. */
-  --brand: #3bf07c;
+  --brand: #5eead4;
 }
 
 * { box-sizing: border-box; }
@@ -35,7 +35,7 @@ body {
 /* Wort-Bild-Marke: Zeichen und Schriftzug sind EIN Objekt, deshalb
    gemeinsame Flexbox statt Rand am Bild - der Abstand bleibt so bei jeder
    Schriftgroesse gleich. Die Hoehe steuert das Bild, die Breite folgt aus
-   dem Seitenverhaeltnis des SVG (2,55:1).
+   dem Seitenverhaeltnis des SVG (1,55:1).
 
    Bewusst NICHT an .topnav gebunden: dieselbe Marke steht auch ueber den
    Anmeldeseiten (auth_base.html), die keine Navigationsleiste haben. Zwei
