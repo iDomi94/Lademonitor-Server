@@ -6,6 +6,13 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.53.0] — 2026-11-13
+
+### Changed
+- Neues Logo „Säule lädt Auto“ (aus Lademonitor-App PR #53): Kopfleiste, Anmeldeseiten, Favicon, Apple-Touch- und PWA-Icons sowie das `icon.png` für Unraid. Markenfarbe `--brand` und `theme_color` jetzt Türkis `#5EEAD4` statt Grün.
+- Eigenes maskierbares PWA-Icon (`icon-maskable-512.png`), das Motiv liegt ganz in der Sicherheitszone.
+- `design/logo/icons.py` erzeugt jetzt alle Icons aller fünf Repos (Server, iOS, Android, HA-Integration, HA-Add-on) aus den SVGs in `design/logo/saeule-auto/`.
+
 ## [0.51.1] — 2026-11-09
 
 ### Fixed

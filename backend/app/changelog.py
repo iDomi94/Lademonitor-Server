@@ -5,6 +5,16 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.53.0",
+        "date": "2026-11-13",
+        "title": "Neues Logo: Säule lädt Auto",
+        "changes": [
+            "Neues Logo in der Kopfleiste, auf den Anmeldeseiten, als Browser-Tab-Symbol, App-Symbol beim Installieren (PWA) und im Unraid-Eintrag: eine Ladesäule, per Kabel mit einem Auto verbunden, auf dem eine Batterie den Ladestand zeigt.",
+            "Die Markenfarbe im Schriftzug ist jetzt das Türkis des Logos statt Grün.",
+            "Beim Installieren als App auf Android passt das Symbol jetzt in jede Maskenform, ohne angeschnitten zu werden.",
+        ],
+    },
+    {
         "version": "0.51.1",
         "date": "2026-11-09",
         "title": "VW-Datenportal: Energie und Ladebeginn bei lückenhaften Berichten",

@@ -1,74 +1,58 @@
-# Lademonitor – Logo-Entwürfe
+# Lademonitor – Logo
 
-17 Varianten für ein neues Lademonitor-Logo. Vorgabe: **gestauchte,
-comic-hafte Fahrzeugsilhouette in Anlehnung an den Škoda Enyaq, Ladesäule,
-gestricheltes Kabel** – dunkler Hintergrund, graue Silhouette und Säule,
-Kabel in Electric Green.
+## Aktuell: „Säule lädt Auto“ (seit 0.53.0)
 
-## Ausgewählt: 17 „Angeschnitten"
+Eine Ladesäule mit Ring-Display, per Kabel mit einem Auto (von oben)
+verbunden, auf dem eine Batterie den Ladestand zeigt. Entworfen in
+Lademonitor-App PR #53; die Quell-SVGs liegen hier in `saeule-auto/`:
 
-Diese Variante ist seit v0.18.0 das Logo der App. Der Icon-Satz wird daraus
-erzeugt:
+| Datei | Zweck |
+|---|---|
+| `light.svg` | Standard (Verlauf #3A4A6B → #1F2A44, Akzent #5EEAD4) |
+| `dark.svg` | iOS-Dark-Mode-Icon |
+| `tinted.svg` | iOS-getöntes Icon (Graustufen) |
+| `foreground.svg` | nur das Motiv, ohne Grund |
 
-```bash
-python3 design/logo/icons.py
-```
-
-schreibt `favicon.ico`, `favicon-16/32.png`, `apple-touch-icon.png` und
-`icon-192/512.png` nach `backend/app/static/` sowie das `icon.png` im
-Repo-Wurzelverzeichnis, auf das die Unraid-CA-Vorlagen verweisen.
-
-Die iOS-App liegt in einem **eigenen Repo** (`iDomi94/Lademonitor-App`) und
-wird auf Wunsch mitbedient:
+**Alle Icons und Logos aller fünf Repos** entstehen aus diesen Dateien:
 
 ```bash
-python3 design/logo/icons.py --ios ../lademonitor-app
+python3 design/logo/icons.py \
+  --ios ../Lademonitor-App --android ../Lademonitor-Android \
+  --ha ../Lademonitor-HA --addon ../Lademonitor-HA-Addon
 ```
 
-Der Generator liegt bewusst hier und nicht dort: die Zeichnung hat nur einen
-Ursprung, zwei Kopien würden früher oder später auseinanderlaufen. Für iOS
-gelten zwei Besonderheiten – das `AppIcon` wird **ohne Alphakanal**
-geschrieben (App Store Connect weist Icons mit Transparenz zurück), und das
-Zeichen im Erststart-Screen ist ein **PNG statt SVG**: Asset-Kataloge können
-zwar SVG, aber Xcodes Importer unterstützt `stroke-dasharray` nicht
-zuverlässig – und genau daraus besteht das Kabel.
+Ohne Optionen nur Server und Unraid. Was wohin geht und warum, steht im
+Docstring von `icons.py`. Kurz:
 
-Drei Fassungen derselben Variante, alle aus `build._v17()`:
+| Ziel | Dateien |
+|---|---|
+| Server | `favicon.ico`, `favicon-16/32.png`, `apple-touch-icon.png` (randlos), `icon-192/512.png` (Kachel), `icon-maskable-512.png` (PWA, Motiv in der Sicherheitszone), `logo-mark.svg` (Kopfleiste, ohne Grund) |
+| Unraid | `icon.png` im Repo-Wurzelverzeichnis |
+| iOS | `AppIcon-1024(-dark/-tinted).png` ohne Alpha, `LogoMark.png` (Erststart) |
+| Android | Adaptive Icon (Vordergrund, Verlauf, monochrom für Themensymbole), `logo_mark.png`, `ic_launcher-playstore.png` |
+| HA-Integration | `custom_components/lademonitor/brand/` (icon, logo, dark_logo, je @2x) |
+| HA-Add-on | `lademonitor/icon.png`, `lademonitor/logo.png` |
 
-| Fassung | Größen | Warum |
-|---|---|---|
-| voll | 512, 256, 192 | die komplette Zeichnung |
-| klein | 48, 32, 16 | ohne Türfugen, Griffe, Leuchten, Displaydetails, dafür kräftigeres Kabel – die volle Zeichnung zerläuft bei 32 px zu einem Fleck |
-| quadratisch | 180 (apple-touch) | randlos ohne Rundung: iOS legt seine eigene Maske darüber, eine schon gerundete Vorlage ergäbe doppelt gerundete Ecken, und transparente Ecken füllt iOS mit Schwarz oder Weiß |
-| quer | `logo-mark.svg` | Navigationsleiste. Bleibt SVG (nicht gerastert), damit es mit der Schriftgröße mitskaliert |
-
-**Warum das Zeichen in der Leiste quer liegt:** dort gilt die
-Quadrat-Beschränkung nicht, die Variante 17 überhaupt erst nötig gemacht hat.
-Quer passt die ganze Szene bei gleicher Höhe rund dreimal so breit hinein – bei
-30 px Höhe ist das Fahrzeug damit rund 60 px breit statt 24 px und liegt damit
-klar über der Schwelle, ab der es zum Fleck zerläuft. Kachel und Hintergrund
-entfallen, weil die Leiste ihren eigenen Grund mitbringt (`--card`) – ein
-zweiter dunkler Kasten darin sähe aus wie ein hineingeklebtes App-Icon.
-
-Rasterung läuft über das im Container vorhandene headless Chromium (kein
-cairosvg/rsvg im Image), einmal bei 1024 px und dann mit LANCZOS
-heruntergerechnet – direkt bei 16 px zu rendern ergibt sichtbar rauhere
-Kanten. Die `.ico` wird von Hand zusammengesetzt (PNG-Nutzlast je Eintrag),
-damit jede Größe einzeln mit LANCZOS gerechnet wird.
+Das Motiv ist schlicht genug, dass die Kachel ohne eigene Kleinfassung bis
+16 px lesbar bleibt. Die Marken-Farbe der Weboberfläche (`--brand` in
+`style.css`, `theme_color` im Manifest) ist das Türkis des Akzents.
 
 **Nach jeder Änderung an den Icons die Version in `backend/app/changelog.py`
 hochzählen** – die Icon-Verweise in `base.html`/`auth_base.html` tragen
 `?v={{ version }}`, sonst bleibt das alte Symbol im Tab stehen.
 
-```
-design/logo/
-  parts.py      gemeinsame Bausteine (Fahrzeug, Säule, Wallbox, Kabel, Farben)
-  build.py      die 17 Varianten + Übersichtsseite
-  icons.py      erzeugt den App-Icon-Satz aus Variante 17
-  out/          erzeugte SVGs + preview.html   (generiert, nicht von Hand ändern)
-```
+## Archiv: frühere Entwürfe (Logo bis 0.52)
 
-Neu erzeugen:
+Die folgenden 17 Varianten waren die Entwürfe für das Logo bis 0.52.x
+(Vorgabe: gestauchte Fahrzeugsilhouette, Ladesäule, gestricheltes Kabel in
+Electric Green). `build.py`, `parts.py` und `out/` bleiben als Archiv stehen,
+`icons.py` benutzt sie nicht mehr.
+
+### Damals ausgewählt: 17 „Angeschnitten"
+
+Diese Variante war von v0.18.0 bis 0.52 das Logo der App.
+
+Entwürfe neu erzeugen:
 
 ```bash
 python3 design/logo/build.py
