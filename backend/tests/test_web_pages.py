@@ -200,3 +200,19 @@ def test_api_page_remembers_the_chosen_source(client):
     assert _initial_source(client) == "renault"
     assert client.put("/api/auth/api-debug-source", json={"source": "tesla"}).status_code == 422
     assert _initial_source(client) == "renault"
+
+
+def test_apple_app_site_association_is_public_json(client):
+    """Ohne Anmeldung, ohne Weiterleitung, als JSON - sonst verwirft Apple die
+    Datei und der Passwortmanager schlaegt in der iOS-App nichts vor."""
+    response = client.get("/.well-known/apple-app-site-association", follow_redirects=False)
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/json")
+    apps = response.json()["webcredentials"]["apps"]
+    assert "258758J335.com.dominiqueherbrigpersonalteam.Lademonitor" in apps
+
+
+def test_apple_app_ids_can_be_overridden(client, monkeypatch):
+    monkeypatch.setenv("APPLE_APP_IDS", "ABCDE12345.org.example.App, ")
+    apps = client.get("/.well-known/apple-app-site-association").json()["webcredentials"]["apps"]
+    assert apps == ["ABCDE12345.org.example.App"]

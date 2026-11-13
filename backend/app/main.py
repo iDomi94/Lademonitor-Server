@@ -561,6 +561,34 @@ def service_worker():
     )
 
 
+# App-ID der offiziellen iOS-App (Team-ID + Bundle-ID), siehe
+# apple_app_site_association(). Ein eigener Build der App mit anderer Team- oder
+# Bundle-ID traegt seine ID per Umgebungsvariable APPLE_APP_IDS ein.
+DEFAULT_APPLE_APP_IDS = ("258758J335.com.dominiqueherbrigpersonalteam.Lademonitor",)
+
+
+@app.get("/.well-known/apple-app-site-association", include_in_schema=False)
+def apple_app_site_association():
+    """Verknuepft diese Domain mit der iOS-App, damit iOS-Passwortmanager
+    (Schluesselbund, 1Password usw.) die Zugangsdaten der Weboberflaeche im
+    Anmeldeformular der App vorschlagen und beim Speichern die Domain als
+    Adresse eintragen.
+
+    Wirkt nur fuer Domains, die zusaetzlich als `webcredentials:<domain>` im
+    Entitlement der App stehen - Apple prueft beide Seiten. In der
+    offiziellen App ist das lademonitor.cloud; ein selbst gehosteter Server
+    unter eigener Domain profitiert davon also nicht (die Liste ist fest in
+    die App eingebaut). Schadet dort aber auch nicht.
+
+    Muss ohne Anmeldung, ohne Weiterleitung und als JSON am Domain-Root
+    erreichbar sein (Apple holt die Datei ueber sein CDN). Unter dem
+    HA-Ingress-Unterpfad ist sie bedeutungslos.
+    """
+    raw = os.getenv("APPLE_APP_IDS", "")
+    apps = [a.strip() for a in raw.split(",") if a.strip()] or list(DEFAULT_APPLE_APP_IDS)
+    return JSONResponse({"webcredentials": {"apps": apps}})
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "version": VERSION, "field_encryption": crypto.is_enabled()}
