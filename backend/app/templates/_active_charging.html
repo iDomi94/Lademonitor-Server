@@ -12,6 +12,9 @@
     asOf: {{ t('active.as_of')|tojson }},
     maxPower: {{ t('active.max_power')|tojson }},
     hint: {{ t('active.hint')|tojson }},
+    price: {{ t('active.price_estimate')|tojson }},
+    priceProvider: {{ t('active.price_provider')|tojson }},
+    priceAverage: {{ t('active.price_average')|tojson }},
     sources: {
       myskoda: 'MyŠkoda', vw_data_act: {{ t('active.source.vw_data_act')|tojson }},
       renault: 'Renault', home_assistant: 'Home Assistant',
@@ -49,6 +52,16 @@
       if (a.max_power_kw) parts.push(T.maxPower.replace('{kw}', num(a.max_power_kw, 1)));
       if (a.odometer_km != null) parts.push(num(a.odometer_km) + ' km');
       if (a.outside_temp_c != null) parts.push(num(a.outside_temp_c, 1) + ' °C');
+      const place = [a.provider_name, a.location_name].filter(Boolean).map(esc).join(' · ');
+      let price = '';
+      if (a.price_per_kwh != null) {
+        const text = a.price_total != null
+          ? T.price.replace('{total}', num(a.price_total, 2)).replace('{per_kwh}', num(a.price_per_kwh, 3))
+          : num(a.price_per_kwh, 3) + ' €/kWh';
+        const why = a.price_source === 'provider'
+          ? T.priceProvider.replace('{provider}', a.provider_name || '') : T.priceAverage;
+        price = `<span class="active-price" title="${esc(why)}">${text}</span>`;
+      }
       const meta = [T.sources[a.source] || a.source];
       if (a.updated_at) meta.push(T.asOf.replace('{time}', when(a.updated_at)));
       return `<div class="active-line">
@@ -56,6 +69,8 @@
         <strong>${esc(a.vehicle_name)}</strong>
         ${a.charging_type ? `<span class="type-badge type-${a.charging_type.toLowerCase()}">${a.charging_type}</span>` : ''}
         <span>${parts.join(' · ')}</span>
+        ${price}
+        ${place ? `<span class="active-meta">${place}</span>` : ''}
         <span class="active-meta">${meta.join(' · ')}</span></div>`;
     }).join('') + `<p class="chartnote">${T.hint}</p>`;
   }

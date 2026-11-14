@@ -1145,6 +1145,7 @@ button.ghost:hover { border-color: var(--accent2); color: var(--accent2); opacit
 .active-charging { margin-bottom: 16px; border-left: 3px solid var(--accent); }
 .active-line { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; padding: 3px 0; }
 .active-meta { color: var(--muted); font-size: 12px; }
+.active-price { font-variant-numeric: tabular-nums; cursor: help; }
 .badge-active { background: rgba(79, 209, 165, 0.15); color: var(--accent); }
 .active-dot {
   display: inline-block; width: 7px; height: 7px; margin-right: 5px; border-radius: 50%;

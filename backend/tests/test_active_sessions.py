@@ -137,3 +137,87 @@ def test_deleting_vehicle_removes_report(client):
     client.post("/api/sessions/active", json={"vehicle_external_id": "enyaq", "soc_start": 30})
     assert client.delete(f"/api/vehicles/{vehicle['id']}").status_code == 204
     assert _active(client) == []
+
+
+# --- Preisschaetzung (seit 0.55.0) ----------------------------------------
+
+def _session(client, vehicle_id, days_ago, kwh, total, charging_type="AC"):
+    start = (datetime.now() - timedelta(days=days_ago)).replace(microsecond=0)
+    r = client.post("/api/sessions", json={
+        "vehicle_id": vehicle_id, "start_time": start.isoformat(),
+        "charging_type": charging_type, "energy_kwh": kwh, "price_total": total,
+    })
+    assert r.status_code == 201, r.text
+
+
+def _start(client, **extra):
+    body = {"vehicle_external_id": "enyaq", "charging_type": "ac",
+            "soc_start": 40, "soc_current": 60}
+    body.update(extra)
+    r = client.post("/api/sessions/active", json=body)
+    assert r.status_code == 204, r.text
+
+
+def test_price_from_provider_at_matched_location(client):
+    register(client)
+    create_vehicle(client, capacity=50.0)
+    home = client.post("/api/providers", json={
+        "name": "Zuhause", "last_price_ac_per_kwh": 0.30, "last_price_dc_per_kwh": 0.50,
+    }).json()
+    client.post("/api/locations", json={
+        "name": "Garage", "latitude": 48.8, "longitude": 9.0, "default_provider_id": home["id"],
+    })
+    _start(client, latitude="48.8", longitude=9.0)
+
+    [entry] = _active(client)
+    assert entry["energy_kwh"] == 10.0
+    assert entry["price_source"] == "provider"
+    assert entry["provider_name"] == "Zuhause" and entry["location_name"] == "Garage"
+    assert entry["price_per_kwh"] == 0.30 and entry["price_total"] == 3.0
+
+    # Ein Zwischenstand ohne Position behaelt die gemerkte.
+    client.post("/api/sessions/active", json={"vehicle_external_id": "enyaq", "soc_current": 70})
+    [entry] = _active(client)
+    assert entry["price_source"] == "provider" and entry["price_total"] == 4.5
+
+
+def test_average_price_without_location(client):
+    register(client)
+    vehicle = create_vehicle(client, capacity=50.0)
+    other = create_vehicle(client, external_id="zoe", name="Zoe")
+    _session(client, vehicle["id"], 10, 20.0, 8.0)            # 0,40 AC
+    _session(client, vehicle["id"], 20, 30.0, 9.0)            # 0,30 AC
+    _session(client, vehicle["id"], 30, 40.0, 24.0, "DC")     # 0,60 DC
+    _session(client, vehicle["id"], 400, 10.0, 9.0)           # aelter als ein Jahr
+    _session(client, other["id"], 5, 10.0, 1.0)               # anderes Fahrzeug
+    _start(client)
+
+    [entry] = _active(client)
+    assert entry["price_source"] == "average"
+    assert entry["provider_name"] is None and entry["location_name"] is None
+    # Nur AC dieses Fahrzeugs im letzten Jahr: 17 EUR / 50 kWh.
+    assert entry["price_per_kwh"] == 0.34
+    assert entry["price_total"] == 3.4
+
+
+def test_average_price_falls_back_to_other_types_and_vehicles(client):
+    register(client)
+    vehicle = create_vehicle(client, capacity=50.0)
+    other = create_vehicle(client, external_id="zoe", name="Zoe")
+    _session(client, other["id"], 5, 10.0, 5.0)
+    _start(client)
+    [entry] = _active(client)
+    assert entry["price_source"] == "average" and entry["price_per_kwh"] == 0.5
+
+    _session(client, vehicle["id"], 5, 10.0, 6.0, "DC")
+    [entry] = _active(client)
+    assert entry["price_per_kwh"] == 0.6
+
+
+def test_no_price_without_any_priced_session(client):
+    register(client)
+    create_vehicle(client)
+    _start(client, latitude="unknown", longitude=None)
+    [entry] = _active(client)
+    assert entry["price_source"] is None
+    assert entry["price_per_kwh"] is None and entry["price_total"] is None

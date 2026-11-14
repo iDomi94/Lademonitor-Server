@@ -703,6 +703,10 @@ class ActiveChargeReport(Base):
     energy_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
     odometer_km: Mapped[int | None] = mapped_column(Integer, nullable=True)
     outside_temp_c: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Position beim Einstecken (seit 0.55.0) - nur fuer die Preisschaetzung
+    # ueber den Ladeort. Verschluesselt wie jede andere GPS-Spalte.
+    latitude: Mapped[float | None] = mapped_column(EncryptedFloat, nullable=True)
+    longitude: Mapped[float | None] = mapped_column(EncryptedFloat, nullable=True)
     # Naive UTC: wann HA zuletzt etwas gemeldet hat (Stand der Anzeige).
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 

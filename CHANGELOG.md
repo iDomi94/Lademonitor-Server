@@ -6,6 +6,12 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.55.0] — 2026-11-14
+
+### Added
+- „Lädt gerade“ zeigt eine Preisschätzung (Gesamtpreis und €/kWh für die bisher geladenen kWh, mit ~ gekennzeichnet). Passt die Position beim Einstecken zu einem Ladeort mit Anbieter, gilt dessen letzter Preis der Lade-Art; sonst der Durchschnittspreis (Gesamtpreis / kWh der Vorgänge dieses Fahrzeugs der letzten 12 Monate, bevorzugt derselben Lade-Art, ohne Grundgebühren). Neue Felder in `GET /api/sessions/active`: `price_per_kwh`, `price_total`, `price_source` (`provider`/`average`), `provider_name`, `location_name`.
+- `POST /api/sessions/active` nimmt optional `latitude`/`longitude` an (Lademonitor-HA 0.10.0), verschlüsselt gespeichert wie alle GPS-Spalten.
+
 ## [0.54.0] — 2026-11-13
 
 ### Added
