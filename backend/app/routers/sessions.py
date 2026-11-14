@@ -301,6 +301,9 @@ def report_active_session(
             setattr(report, field, value)
     if payload.charging_type is not None:
         report.charging_type = payload.charging_type.value
+    if payload.latitude is not None and payload.longitude is not None:
+        report.latitude = payload.latitude
+        report.longitude = payload.longitude
     if report.soc_current is None:
         report.soc_current = report.soc_start
     report.updated_at = datetime.utcnow()

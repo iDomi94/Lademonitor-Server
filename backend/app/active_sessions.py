@@ -13,6 +13,17 @@ erst beim Ausstecken. Bis dahin kommen die Angaben aus zwei Stellen:
 
 BMW CarData liefert nur abgeschlossene Vorgaenge und taucht hier nie auf.
 
+**Preisschaetzung (seit 0.55.0):** liegt eine Position vor (Poller:
+`open_latitude/longitude`, HA: Koordinaten aus der Startmeldung) und passt
+sie zu einem Ladeort mit Standardanbieter, gilt dessen letzter Preis der
+Lade-Art - dieselbe Regel wie `routers/sessions.py::apply_provider_price()`
+beim fertigen Vorgang. Sonst (kein Ort, kein Anbieter, kein Preis) der
+Durchschnittspreis: kWh-gewichteter Saeulenpreis (Summe Gesamtpreis / Summe
+kWh, wie `avg_price_per_kwh`, aber OHNE Grundgebuehren - die zeigt die Liste
+auch beim fertigen Vorgang getrennt) der Vorgaenge DIESES Fahrzeugs aus den
+letzten 365 Tagen, bevorzugt derselben Lade-Art; ohne solche alle Fahrzeuge.
+`price_source` sagt, welcher Weg es war.
+
 Es wird nichts gespeichert und nichts korrigiert: Rueckdatierung und
 Start-SoC aus der Energie (charge_detection.py) greifen erst beim Anlegen des
 Vorgangs. Die Anzeige zeigt die Rohwerte - sie ist ein Zwischenstand.
@@ -33,6 +44,13 @@ HA_REPORT_MAX_AGE = timedelta(days=3)
 
 SOURCE_HOME_ASSISTANT = "home_assistant"
 
+# Zeitraum fuer den Durchschnittspreis: ein Jahr, damit alte Tarife nicht
+# ewig mitschleppen, aber genug Vorgaenge fuer einen stabilen Wert.
+AVERAGE_PRICE_WINDOW = timedelta(days=365)
+
+PRICE_SOURCE_PROVIDER = "provider"
+PRICE_SOURCE_AVERAGE = "average"
+
 _POLLER_SOURCES = (
     ("myskoda", models.MySkodaConfig),
     ("vw_data_act", models.VwDataActConfig),
@@ -52,7 +70,97 @@ def _estimate_kwh(
     return round(vehicle.battery_capacity_kwh * delta / 100, 2)
 
 
+def _weighted_price(sessions: list[models.ChargingSession]) -> float | None:
+    """Summe Gesamtpreis / Summe kWh - wie avg_price_per_kwh im Dashboard."""
+    kwh = sum(s.energy_kwh for s in sessions)
+    if kwh <= 0:
+        return None
+    return sum(s.price_total for s in sessions) / kwh
+
+
+def average_price_per_kwh(
+    db: Session,
+    user_id: str,
+    vehicle_id: str,
+    charging_type: str | None,
+    now: datetime,
+) -> float | None:
+    """Durchschnittspreis fuer die Schaetzung (Regel siehe Modul-Docstring)."""
+    priced = (
+        db.query(models.ChargingSession)
+        .filter(
+            models.ChargingSession.user_id == user_id,
+            models.ChargingSession.start_time >= now - AVERAGE_PRICE_WINDOW,
+            models.ChargingSession.price_total.isnot(None),
+            models.ChargingSession.energy_kwh > 0,
+        )
+        .all()
+    )
+
+    def of_type(sessions):
+        if charging_type not in ("AC", "DC"):
+            return sessions
+        return [
+            s for s in sessions
+            if s.charging_type is not None and s.charging_type.value == charging_type
+        ]
+
+    own = [s for s in priced if s.vehicle_id == vehicle_id]
+    for candidates in (of_type(own), own, of_type(priced), priced):
+        price = _weighted_price(candidates)
+        if price is not None:
+            return price
+    return None
+
+
+def estimate_price(
+    db: Session,
+    vehicle: models.Vehicle,
+    *,
+    charging_type: str | None,
+    energy_kwh: float | None,
+    latitude: float | None,
+    longitude: float | None,
+    now: datetime,
+) -> dict:
+    """Preisschaetzung fuer einen laufenden Vorgang, siehe Modul-Docstring."""
+    from .routers.locations import match_location
+
+    location = None
+    provider = None
+    price = None
+    source = None
+    if latitude is not None and longitude is not None:
+        location = match_location(db, vehicle.user_id, latitude, longitude)
+        if location is not None and location.default_provider_id:
+            provider = db.get(models.Provider, location.default_provider_id)
+    if provider is not None:
+        price = (
+            provider.last_price_dc_per_kwh
+            if charging_type == "DC"
+            else provider.last_price_ac_per_kwh
+        )
+        if price is not None:
+            source = PRICE_SOURCE_PROVIDER
+    if price is None:
+        price = average_price_per_kwh(db, vehicle.user_id, vehicle.id, charging_type, now)
+        if price is not None:
+            source = PRICE_SOURCE_AVERAGE
+    return {
+        "location_name": location.name if location is not None else None,
+        "provider_name": provider.name if provider is not None else None,
+        "price_per_kwh": round(price, 3) if price is not None else None,
+        "price_total": (
+            round(price * energy_kwh, 2)
+            if price is not None and energy_kwh is not None
+            else None
+        ),
+        "price_source": source,
+    }
+
+
 def _entry(
+    db: Session,
     vehicle: models.Vehicle,
     *,
     source: str,
@@ -66,6 +174,9 @@ def _entry(
     outside_temp_c: float | None,
     updated_at: datetime | None,
     charging_state: str | None,
+    latitude: float | None,
+    longitude: float | None,
+    now: datetime,
 ) -> dict:
     energy = measured_kwh if measured_kwh is not None else _estimate_kwh(
         soc_start, soc_current, vehicle
@@ -85,6 +196,15 @@ def _entry(
         "outside_temp_c": outside_temp_c,
         "updated_at": updated_at,
         "charging_state": charging_state,
+        **estimate_price(
+            db,
+            vehicle,
+            charging_type=charging_type,
+            energy_kwh=energy,
+            latitude=latitude,
+            longitude=longitude,
+            now=now,
+        ),
     }
 
 
@@ -100,6 +220,7 @@ def list_active(db: Session, user: models.User, now: datetime | None = None) -> 
     from .charge_detection import utc_to_local
 
     now_utc = now or datetime.utcnow()
+    now_local = utc_to_local(now_utc)
     vehicles = {
         v.id: v
         for v in db.query(models.Vehicle).filter(models.Vehicle.user_id == user.id)
@@ -122,6 +243,7 @@ def list_active(db: Session, user: models.User, now: datetime | None = None) -> 
                 continue
             soc_now = config.last_soc if config.last_soc is not None else config.open_soc_last
             by_vehicle[vehicle.id] = _entry(
+                db,
                 vehicle,
                 source=source,
                 # Die Zustandsmaschine rechnet in naiver UTC, die Liste in
@@ -138,6 +260,9 @@ def list_active(db: Session, user: models.User, now: datetime | None = None) -> 
                     utc_to_local(config.last_captured_at) if config.last_captured_at else None
                 ),
                 charging_state=config.last_charging_state,
+                latitude=config.open_latitude,
+                longitude=config.open_longitude,
+                now=now_local,
             )
 
     reports = (
@@ -152,6 +277,7 @@ def list_active(db: Session, user: models.User, now: datetime | None = None) -> 
         if vehicle is None or vehicle.id in by_vehicle:
             continue
         by_vehicle[vehicle.id] = _entry(
+            db,
             vehicle,
             source=SOURCE_HOME_ASSISTANT,
             start_time=report.start_time,
@@ -164,6 +290,9 @@ def list_active(db: Session, user: models.User, now: datetime | None = None) -> 
             outside_temp_c=report.outside_temp_c,
             updated_at=utc_to_local(report.updated_at),
             charging_state=None,
+            latitude=report.latitude,
+            longitude=report.longitude,
+            now=now_local,
         )
 
     return sorted(

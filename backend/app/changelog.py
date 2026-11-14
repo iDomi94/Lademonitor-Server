@@ -5,6 +5,16 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.55.0",
+        "date": "2026-11-14",
+        "title": "Preisschätzung beim laufenden Ladevorgang",
+        "changes": [
+            "„Lädt gerade“ zeigt jetzt eine Preisschätzung: Gesamtpreis und Preis je kWh für die bisher geladenen kWh, mit ~ als Schätzung gekennzeichnet.",
+            "Passt die Position beim Einstecken zu einem Ladeort mit Anbieter, gilt dessen letzter Preis der Lade-Art (wie beim fertigen Vorgang). Sonst wird dein Durchschnittspreis angenommen: Gesamtpreis durch kWh der Ladevorgänge dieses Fahrzeugs aus den letzten zwölf Monaten, bevorzugt derselben Lade-Art, ohne Grundgebühren.",
+            "Home Assistant kann beim Ladebeginn die Position mitschicken (Lademonitor-HA 0.10.0), damit auch dort der Ladeort erkannt wird. MyŠkoda und Renault liefern sie ohnehin.",
+        ],
+    },
+    {
         "version": "0.54.0",
         "date": "2026-11-13",
         "title": "Passwortmanager in der iOS-App",

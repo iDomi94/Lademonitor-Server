@@ -1012,6 +1012,23 @@ class ActiveSessionPush(BaseModel):
     energy_kwh: float | None = None
     odometer_km: int | None = None
     outside_temp_c: float | None = None
+    # Position beim Einstecken (seit 0.55.0), nur fuer die Preisschaetzung.
+    latitude: float | None = None
+    longitude: float | None = None
+
+    @field_validator("latitude", "longitude", mode="before")
+    @classmethod
+    def _tolerate_unknown_coordinate(cls, value: object, info) -> object:
+        """'unknown'/leer/ausserhalb des Wertebereichs -> weglassen statt 422."""
+        if isinstance(value, str):
+            try:
+                value = float(value.strip())
+            except ValueError:
+                return None
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        limit = 90 if info.field_name == "latitude" else 180
+        return value if -limit <= value <= limit else None
 
     @field_validator(
         "soc_start", "soc_current", "energy_kwh", "odometer_km", "outside_temp_c",
@@ -1067,6 +1084,15 @@ class ActiveSessionOut(BaseModel):
     updated_at: datetime | None = None
     # Rohzustand der Quelle (z.B. CHARGING, CONSERVING), nur Poller.
     charging_state: str | None = None
+    # Preisschaetzung (seit 0.55.0, siehe active_sessions.py): Ladeort und
+    # Anbieter nur, wenn die Position zu einem Ladeort passt.
+    location_name: str | None = None
+    provider_name: str | None = None
+    price_per_kwh: float | None = None
+    price_total: float | None = None
+    # provider = letzter Preis des Anbieters am Ladeort,
+    # average = Durchschnittspreis, None = keine Schaetzung moeglich.
+    price_source: str | None = None
 
 
 # ---------- Statistik ----------

@@ -3127,6 +3127,22 @@ greifen erst beim Anlegen - die Anzeige zeigt die Rohwerte und sagt das.
   dessen Ende nie ankam, fuer immer da.
 - BMW CarData: nur fertige Vorgaenge, taucht nie auf.
 
+**Preisschaetzung (seit 0.55.0, Wunsch des Nutzers 14.11.2026):** die
+Antwort traegt `price_per_kwh`/`price_total`/`price_source` plus
+`provider_name`/`location_name`. Passt die Position beim Einstecken
+(Poller: `open_latitude/longitude`; HA: neue optionale `latitude`/`longitude`
+der Startmeldung ab Lademonitor-HA 0.10.0, gespeichert verschluesselt in
+`ActiveChargeReport`) zu einem Ladeort mit Standardanbieter, gilt dessen
+letzter Preis der Lade-Art (`provider`, wie `apply_provider_price()`). Sonst
+`average`: Summe Gesamtpreis / Summe kWh der Vorgaenge DIESES Fahrzeugs der
+letzten 365 Tage, bevorzugt derselben Lade-Art, dann alle Lade-Arten, dann
+alle Fahrzeuge. Bewusst OHNE Grundgebuehren - die Liste zeigt den
+Gebuehrenanteil auch beim fertigen Vorgang getrennt vom Saeulenpreis. Die
+Apps sperren die Preiszeile auf aelteren Servern (`ServerCapabilities`).
+Die roten Striche auf dem Ladebalken der Apps sind die lokale Einstellung
+"Ladebalken" (Mindest-/Zielladestand), seit iOS 1.22.0/Android 1.13 auch auf
+der "Laedt gerade"-Karte.
+
 Je Fahrzeug hoechstens ein Eintrag; Poller vor HA. Web: Partial
 `templates/_active_charging.html` (Dashboard und Ladevorgaenge), laedt jede
 Minute nach. Apps: nur im Server-Modus, ein aelterer Server (404) zeigt

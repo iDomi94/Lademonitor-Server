@@ -51,6 +51,8 @@ _ENCRYPTABLE_COORDINATE_COLUMNS = (
     ("vw_data_act_configs", "open_longitude", False),
     ("renault_configs", "open_latitude", False),
     ("renault_configs", "open_longitude", False),
+    ("active_charge_reports", "latitude", False),
+    ("active_charge_reports", "longitude", False),
 )
 _ENCRYPTABLE_TEXT_COLUMNS = (
     ("charging_sessions", "notes"),
@@ -689,6 +691,14 @@ def run_light_migrations() -> None:
         conn.execute(
             text("ALTER TABLE vehicle_costs ADD COLUMN IF NOT EXISTS spread_months INTEGER")
         )
+
+        # Position der HA-Startmeldung fuer die Preisschaetzung von "laedt
+        # gerade" (models.ActiveChargeReport, v0.55.0). VARCHAR wie jede
+        # verschluesselte GPS-Spalte (crypto.EncryptedFloat).
+        for coord in ("latitude", "longitude"):
+            conn.execute(
+                text(f"ALTER TABLE active_charge_reports ADD COLUMN IF NOT EXISTS {coord} VARCHAR")
+            )
 
         # Einmalige Datenkorrekturen. Anders als ADD COLUMN IF NOT EXISTS sind
         # sie nicht von selbst idempotent: ein Nutzer kann den Wert danach von
