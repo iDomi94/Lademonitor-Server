@@ -6,6 +6,12 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.55.1] — 2026-11-14
+
+### Fixed
+- „Lädt gerade“ (`GET /api/sessions/active`) zeigt je Fahrzeug nur noch die genaueste Quelle (Rangfolge `session_merge.TIME_SOC_RANK`: Home Assistant vor MyŠkoda/Renault vor VW-Datenportal; bisher gewann immer der Poller).
+- Ein offener Vorgang, zu dem es schon einen fertigen Ladevorgang gibt (`session_merge.find_match()`), wird nicht mehr angezeigt – z. B. wenn Home Assistant das Ladeende gemeldet hat, das VW-Datenportal aber noch das Kabel sieht.
+
 ## [0.55.0] — 2026-11-14
 
 ### Added

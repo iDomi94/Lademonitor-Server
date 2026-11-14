@@ -3143,7 +3143,12 @@ Die roten Striche auf dem Ladebalken der Apps sind die lokale Einstellung
 "Ladebalken" (Mindest-/Zielladestand), seit iOS 1.22.0/Android 1.13 auch auf
 der "Laedt gerade"-Karte.
 
-Je Fahrzeug hoechstens ein Eintrag; Poller vor HA. Web: Partial
+Je Fahrzeug hoechstens ein Eintrag, aus der genauesten Quelle
+(`session_merge.TIME_SOC_RANK`, seit 0.55.1 - vorher Poller vor HA). Ein
+offener Vorgang, zu dem `session_merge.find_match()` schon einen FERTIGEN
+Ladevorgang findet, wird nicht angezeigt (Fall 14.11.2026: HA hatte beendet,
+das VW-Datenportal sah noch das Kabel); der Poller-Zustand bleibt dabei
+unberuehrt. Web: Partial
 `templates/_active_charging.html` (Dashboard und Ladevorgaenge), laedt jede
 Minute nach. Apps: nur im Server-Modus, ein aelterer Server (404) zeigt
 einfach nichts. Tests: `tests/test_active_sessions.py`.
