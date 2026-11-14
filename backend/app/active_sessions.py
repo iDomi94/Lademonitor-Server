@@ -24,6 +24,20 @@ auch beim fertigen Vorgang getrennt) der Vorgaenge DIESES Fahrzeugs aus den
 letzten 365 Tagen, bevorzugt derselben Lade-Art; ohne solche alle Fahrzeuge.
 `price_source` sagt, welcher Weg es war.
 
+**Mehrere Quellen fuer dasselbe Fahrzeug (seit 0.55.1):** je Fahrzeug zeigt
+die Liste nur die GENAUESTE Quelle, nach derselben Rangfolge wie beim
+Zusammenfuehren fertiger Vorgaenge (`session_merge.TIME_SOC_RANK`: Home
+Assistant vor MyŠkoda/Renault vor dem VW-Datenportal). Ausserdem verschwindet
+ein offener Vorgang, sobald es fuer ihn schon einen FERTIGEN Ladevorgang gibt
+(`session_merge.find_match()`, also genau der, in den die Quelle ihr Ende
+spaeter einfliessen liesse): dann hat eine andere Quelle das Ladeende schon
+gemeldet, und die langsamere zeigt nur noch einen veralteten Stand. Anlass:
+Enyaq mit HA und VW-Datenportal (14.11.2026) - nach dem HA-Push stand der
+Vorgang fertig in der Liste, darueber zeigte "laedt gerade" weiter den
+Stunden alten Stand des Datenportals. Der Zustand des Pollers bleibt dabei
+unberuehrt; er ergaenzt den fertigen Vorgang wie bisher, sobald er das
+Ausstecken sieht.
+
 Es wird nichts gespeichert und nichts korrigiert: Rueckdatierung und
 Start-SoC aus der Energie (charge_detection.py) greifen erst beim Anlegen des
 Vorgangs. Die Anzeige zeigt die Rohwerte - sie ist ein Zwischenstand.
@@ -208,16 +222,36 @@ def _entry(
     }
 
 
+#: Quelle der Anzeige -> Schluessel in session_merge.TIME_SOC_RANK.
+_MERGE_KEYS = {
+    SOURCE_HOME_ASSISTANT: "ha",
+    "myskoda": "myskoda",
+    "renault": "renault",
+    "vw_data_act": "vwda",
+}
+
+
+def _already_finished(db: Session, user_id: str, entry: dict) -> bool:
+    """Gibt es fuer diesen offenen Vorgang schon einen fertigen Ladevorgang?"""
+    from .session_merge import find_match
+
+    if entry["start_time"] is None:
+        return False
+    match = find_match(db, user_id, entry["vehicle_id"], entry["start_time"], None)
+    return match is not None and match.end_time is not None
+
+
 def list_active(db: Session, user: models.User, now: datetime | None = None) -> list[dict]:
     """Alle laufenden Vorgaenge des Nutzers, neuester Beginn zuerst.
 
-    Je Fahrzeug hoechstens einer: meldet Home Assistant UND ein Poller fuer
-    dasselbe Fahrzeug (eigentlich ein Konfigurationsfehler, siehe CLAUDE.md),
-    gewinnt der Poller - er hat den aktuellen SoC.
+    Je Fahrzeug hoechstens einer, aus der genauesten Quelle; offene Vorgaenge,
+    die schon als fertiger Ladevorgang vorliegen, fallen weg (siehe
+    Modul-Docstring).
     """
-    # Lokal importiert: charge_detection importiert routers/sessions.py, das
-    # wiederum dieses Modul braucht.
+    # Lokal importiert: charge_detection und session_merge importieren
+    # routers/sessions.py, das wiederum dieses Modul braucht.
     from .charge_detection import utc_to_local
+    from .session_merge import TIME_SOC_RANK
 
     now_utc = now or datetime.utcnow()
     now_local = utc_to_local(now_utc)
@@ -225,7 +259,7 @@ def list_active(db: Session, user: models.User, now: datetime | None = None) -> 
         v.id: v
         for v in db.query(models.Vehicle).filter(models.Vehicle.user_id == user.id)
     }
-    by_vehicle: dict[str, dict] = {}
+    candidates: list[dict] = []
 
     for source, config_cls in _POLLER_SOURCES:
         configs = (
@@ -239,10 +273,10 @@ def list_active(db: Session, user: models.User, now: datetime | None = None) -> 
         )
         for config in configs:
             vehicle = vehicles.get(config.vehicle_id)
-            if vehicle is None or vehicle.id in by_vehicle:
+            if vehicle is None:
                 continue
             soc_now = config.last_soc if config.last_soc is not None else config.open_soc_last
-            by_vehicle[vehicle.id] = _entry(
+            candidates.append(_entry(
                 db,
                 vehicle,
                 source=source,
@@ -263,7 +297,7 @@ def list_active(db: Session, user: models.User, now: datetime | None = None) -> 
                 latitude=config.open_latitude,
                 longitude=config.open_longitude,
                 now=now_local,
-            )
+            ))
 
     reports = (
         db.query(models.ActiveChargeReport)
@@ -274,9 +308,9 @@ def list_active(db: Session, user: models.User, now: datetime | None = None) -> 
         if now_utc - report.updated_at > HA_REPORT_MAX_AGE:
             continue
         vehicle = vehicles.get(report.vehicle_id)
-        if vehicle is None or vehicle.id in by_vehicle:
+        if vehicle is None:
             continue
-        by_vehicle[vehicle.id] = _entry(
+        candidates.append(_entry(
             db,
             vehicle,
             source=SOURCE_HOME_ASSISTANT,
@@ -293,7 +327,15 @@ def list_active(db: Session, user: models.User, now: datetime | None = None) -> 
             latitude=report.latitude,
             longitude=report.longitude,
             now=now_local,
-        )
+        ))
+
+    by_vehicle: dict[str, dict] = {}
+    for entry in sorted(
+        candidates, key=lambda e: TIME_SOC_RANK.get(_MERGE_KEYS[e["source"]], 9)
+    ):
+        if entry["vehicle_id"] in by_vehicle or _already_finished(db, user.id, entry):
+            continue
+        by_vehicle[entry["vehicle_id"]] = entry
 
     return sorted(
         by_vehicle.values(),

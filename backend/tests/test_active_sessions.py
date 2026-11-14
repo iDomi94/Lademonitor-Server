@@ -221,3 +221,73 @@ def test_no_price_without_any_priced_session(client):
     [entry] = _active(client)
     assert entry["price_source"] is None
     assert entry["price_per_kwh"] is None and entry["price_total"] is None
+
+
+# --- Mehrere Quellen (seit 0.55.1) ------------------------------------------
+
+def _vw_open(db_session, vehicle_id, start_utc):
+    user_id = db_session.query(models.User).one().id
+    config = models.VwDataActConfig(
+        user_id=user_id, vehicle_id=vehicle_id, enabled=True,
+        open_start_time=start_utc, open_soc_start=54, open_soc_last=71, last_soc=71,
+        open_charging_type="AC", last_captured_at=start_utc + timedelta(hours=1),
+        last_charging_state="CHARGING",
+    )
+    db_session.add(config)
+    db_session.commit()
+    return config
+
+
+def test_home_assistant_beats_vw_data_portal(client, db_session):
+    register(client)
+    vehicle = create_vehicle(client, capacity=77.0)
+    _vw_open(db_session, vehicle["id"], datetime.utcnow() - timedelta(hours=2))
+    client.post("/api/sessions/active", json={
+        "vehicle_external_id": "enyaq", "soc_start": 49, "soc_current": 72,
+    })
+    [entry] = _active(client)
+    assert entry["source"] == "home_assistant"
+    assert entry["soc_start"] == 49
+
+
+def test_finished_session_hides_slower_source(client, db_session):
+    """Echter Fall 14.11.2026: HA hat den Vorgang beendet, das VW-Datenportal
+    sieht noch das Kabel - "laedt gerade" darf nicht stehen bleiben."""
+    from app.charge_detection import utc_to_local
+
+    register(client)
+    vehicle = create_vehicle(client, capacity=77.0)
+    start_utc = (datetime.utcnow() - timedelta(hours=3)).replace(microsecond=0)
+    config = _vw_open(db_session, vehicle["id"], start_utc + timedelta(minutes=1))
+    assert _active(client)[0]["source"] == "vw_data_act"
+
+    start_local = utc_to_local(start_utc)
+    r = client.post("/api/sessions/auto", json={
+        "vehicle_external_id": "enyaq", "external_session_id": "ha-14-11",
+        "start_time": start_local.isoformat(),
+        "end_time": (start_local + timedelta(hours=1, minutes=40)).isoformat(),
+        "soc_start": 49, "soc_end": 89,
+    })
+    assert r.status_code == 201, r.text
+    assert _active(client) == []
+
+    # Der Poller-Zustand bleibt, damit er den Vorgang spaeter ergaenzen kann.
+    db_session.refresh(config)
+    assert config.open_start_time is not None
+
+
+def test_new_charge_after_finished_one_is_shown(client, db_session):
+    from app.charge_detection import utc_to_local
+
+    register(client)
+    vehicle = create_vehicle(client, capacity=77.0)
+    earlier = utc_to_local(datetime.utcnow() - timedelta(hours=10)).replace(microsecond=0)
+    client.post("/api/sessions/auto", json={
+        "vehicle_external_id": "enyaq", "external_session_id": "ha-frueher",
+        "start_time": earlier.isoformat(),
+        "end_time": (earlier + timedelta(hours=1)).isoformat(),
+        "soc_start": 30, "soc_end": 60,
+    })
+    _vw_open(db_session, vehicle["id"], datetime.utcnow() - timedelta(hours=1))
+    [entry] = _active(client)
+    assert entry["source"] == "vw_data_act"

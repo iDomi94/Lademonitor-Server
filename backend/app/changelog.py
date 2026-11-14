@@ -5,6 +5,15 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.55.1",
+        "date": "2026-11-14",
+        "title": "„Lädt gerade“ nur aus der genauesten Quelle",
+        "changes": [
+            "Hat ein Fahrzeug mehrere Quellen (z. B. Home Assistant und das VW-Datenportal), zeigt „Lädt gerade“ nur noch die genaueste: Home Assistant vor MyŠkoda und Renault vor dem VW-Datenportal – dieselbe Reihenfolge wie beim Zusammenführen fertiger Ladevorgänge. Bisher gewann immer der Abruf auf dem Server.",
+            "Steht ein Ladevorgang schon fertig in der Liste, weil eine schnellere Quelle das Ladeende gemeldet hat, verschwindet „Lädt gerade“ dafür, statt den stundenalten Stand der langsameren Quelle weiter anzuzeigen. Die langsamere Quelle ergänzt den fertigen Vorgang weiterhin, sobald sie das Ausstecken sieht.",
+        ],
+    },
+    {
         "version": "0.55.0",
         "date": "2026-11-14",
         "title": "Preisschätzung beim laufenden Ladevorgang",
