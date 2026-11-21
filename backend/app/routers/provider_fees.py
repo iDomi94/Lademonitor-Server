@@ -5,7 +5,7 @@ Apps spiegeln die Tabelle wie die vier Kern-Entitaeten ueber eine einfache
 Liste, und `provider_id` ist ohnehin ein Feld des Datensatzes.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -14,7 +14,7 @@ from .. import models, schemas
 from ..auth import get_current_user
 from ..idempotency import existing as existing_for_key, key_header, remember as remember_key
 from ..database import get_db
-from ..fees import charged_to_date
+from ..fees import add_months, charged_to_date
 from ..sync import record_deletion
 
 router = APIRouter(prefix="/api/provider-fees", tags=["provider-fees"])
@@ -29,8 +29,31 @@ def _day(value: datetime | None) -> datetime | None:
     return datetime(value.year, value.month, value.day)
 
 
+def _normalize(fee: models.ProviderFee) -> None:
+    """Leitet die abhaengigen Felder ab, bevor geprueft wird.
+
+    Eine Ladung bzw. x Monate gibt es nur bei `once`. Bei x Monaten steht das
+    Enddatum fest (letzter Tag vor dem Monatstag x Monate spaeter) - so sehen
+    auch aeltere Apps, die `spread_months` nicht kennen, den richtigen
+    Zeitraum. Eine Ladung hat kein Enddatum.
+    """
+    if fee.interval != models.FeeInterval.ONCE:
+        fee.single_session = False
+        fee.spread_months = None
+        return
+    if fee.single_session:
+        fee.spread_months = None
+        fee.end_date = None
+    elif fee.spread_months:
+        start = fee.start_date.date()
+        end = add_months(start, fee.spread_months) - timedelta(days=1)
+        fee.end_date = datetime(end.year, end.month, end.day)
+
+
 def _validate(fee: models.ProviderFee) -> None:
-    if fee.interval == models.FeeInterval.ONCE and fee.end_date is None:
+    if fee.amount is None or fee.amount == 0:
+        raise HTTPException(422, "Der Betrag darf nicht 0 sein")
+    if fee.interval == models.FeeInterval.ONCE and fee.end_date is None and not fee.single_session:
         raise HTTPException(422, "Eine einmalige Gebuehr braucht ein Enddatum")
     if fee.end_date is not None and fee.end_date < fee.start_date:
         raise HTTPException(422, "Das Enddatum liegt vor dem Startdatum")
@@ -81,6 +104,7 @@ def create_fee(
     data["start_date"] = _day(data["start_date"])
     data["end_date"] = _day(data["end_date"])
     fee = models.ProviderFee(**data, user_id=user.id)
+    _normalize(fee)
     _validate(fee)
     db.add(fee)
     remember_key(db, user, idem_key, fee)
@@ -111,8 +135,14 @@ def update_fee(
         fields.pop("amount", None)
     if fields.get("interval") is None:
         fields.pop("interval", None)
+    if fields.get("single_session") is None:
+        fields.pop("single_session", None)
+    if "end_date" in fields and "spread_months" not in fields:
+        # Aeltere App hat das Enddatum gesetzt: das gilt dann, nicht mehr x Monate.
+        fee.spread_months = None
     for field, value in fields.items():
         setattr(fee, field, value)
+    _normalize(fee)
     _validate(fee)
     db.commit()
     db.refresh(fee)

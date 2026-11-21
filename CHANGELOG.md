@@ -6,6 +6,12 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.56.0] — 2026-11-21
+
+### Added
+- Gutschriften (Rabatte, Gutscheine) für Ladeanbieter: `ProviderFee.amount` darf negativ sein und wird wie eine Grundgebühr nach kWh umgelegt (0 → 422). Neue Felder `single_session` (ganzer Betrag auf die erste Ladung des Anbieters ab `start_date`) und `spread_months` (Zeitraum in Monaten, der Server setzt `end_date`), beide nur bei `once`. Migration: zwei Spalten an `provider_fees`; Backup `fees.csv` um beide Spalten erweitert.
+- Web: Art „Gebühr / Abo“ oder „Gutschrift“, bei „Einmalig“ Auswahl „Verteilen auf“ (eine Ladung / Monate / Zeitraum bis Enddatum). Liste und Dashboard benennen Gutschriften als solche.
+
 ## [0.55.1] — 2026-11-14
 
 ### Fixed

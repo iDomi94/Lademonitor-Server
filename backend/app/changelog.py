@@ -5,6 +5,17 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.56.0",
+        "date": "2026-11-21",
+        "title": "Gutschriften: Rabatte und Gutscheine für Ladeanbieter",
+        "changes": [
+            "Unter „Grundgebühren, Abos & Gutschriften“ lässt sich jetzt auch eine Gutschrift für einen Anbieter eintragen, z. B. ein 5-€-Gutschein von EnBW. Sie wird wie eine Grundgebühr umgelegt, nur abgezogen, und senkt so Gesamtkosten, Preis je kWh und Kosten je 100 km.",
+            "Einmalige Beträge lassen sich verteilen auf: eine Ladung (die nächste Ladung des Anbieters ab dem Datum), eine Anzahl Monate ab dem Datum oder einen Zeitraum bis zum Enddatum. Das gilt auch für einmalige Gebühren.",
+            "In der Ladevorgangsliste steht eine Gutschrift als „− 2,00 € Gutschrift“ unter dem Säulenpreis.",
+            "Die Apps können Gutschriften ab iOS 1.23.0 bzw. Android 1.14 eintragen. Ältere Apps rechnen sie richtig mit, zeigen sie aber als negative Gebühr.",
+        ],
+    },
+    {
         "version": "0.55.1",
         "date": "2026-11-14",
         "title": "„Lädt gerade“ nur aus der genauesten Quelle",

@@ -691,6 +691,16 @@ def run_light_migrations() -> None:
         conn.execute(
             text("ALTER TABLE vehicle_costs ADD COLUMN IF NOT EXISTS spread_months INTEGER")
         )
+        # v0.56.0: Gutschriften auf eine Ladung bzw. auf Monate (models.ProviderFee).
+        conn.execute(
+            text(
+                "ALTER TABLE provider_fees "
+                "ADD COLUMN IF NOT EXISTS single_session BOOLEAN NOT NULL DEFAULT FALSE"
+            )
+        )
+        conn.execute(
+            text("ALTER TABLE provider_fees ADD COLUMN IF NOT EXISTS spread_months INTEGER")
+        )
 
         # Position der HA-Startmeldung fuer die Preisschaetzung von "laedt
         # gerade" (models.ActiveChargeReport, v0.55.0). VARCHAR wie jede

@@ -152,6 +152,8 @@ const OTHER_PROVIDERS_LABEL = {{ t('dashboard.other_providers')|tojson }};
 // "davon X € Grundgebuehren" unter den Gesamtkosten (siehe fees.py) - die
 // Kosten selbst enthalten sie bereits, ebenso Preis je kWh und je 100 km.
 const FEES_INCLUDED_TEXT = {{ t('dashboard.stat.cost_fees')|tojson }};
+// Ueberwiegen Gutschriften (Rabatte, Gutscheine), ist die Summe negativ.
+const CREDITS_INCLUDED_TEXT = {{ t('dashboard.stat.cost_credits')|tojson }};
 
 const TEMP_T = {
   axisX: {{ t('temp.axis_x')|tojson }},
@@ -667,7 +669,8 @@ async function loadStats() {
     setText('s-kwh', data.total_kwh.toFixed(1) + ' kWh');
     setText('s-cost', data.total_cost.toFixed(2) + ' €');
     setText('s-cost-fees', data.total_fees
-      ? FEES_INCLUDED_TEXT.replace('{amount}', data.total_fees.toFixed(2) + ' €') : '');
+      ? (data.total_fees < 0 ? CREDITS_INCLUDED_TEXT : FEES_INCLUDED_TEXT)
+          .replace('{amount}', Math.abs(data.total_fees).toFixed(2) + ' €') : '');
     setText('s-price', data.avg_price_per_kwh ? data.avg_price_per_kwh.toFixed(3) + ' €' : '–');
     setText('s-consumption', data.avg_consumption_kwh_per_100km ? data.avg_consumption_kwh_per_100km.toFixed(1) + ' kWh' : '–');
     setText('s-price-100km', data.price_per_100km != null ? data.price_per_100km.toFixed(2) + ' €' : '–');

@@ -430,8 +430,21 @@ class ProviderFee(Base):
     provider_id: Mapped[str] = mapped_column(ForeignKey("providers.id"), index=True)
     # Betrag JE PERIODE in Euro. Nicht verschluesselt: kein personenbezogenes
     # Datum, und die Statistik rechnet damit.
+    # NEGATIV = Gutschrift (Rabatt, Gutschein, seit v0.56.0): wird genauso
+    # umgelegt und senkt damit den effektiven Preis. Bewusst ein Vorzeichen
+    # statt eines eigenen Feldes - aeltere Apps rechnen so ohne Anpassung
+    # richtig mit (sie legen einfach einen negativen Betrag um).
     amount: Mapped[float] = mapped_column(Float)
     interval: Mapped[FeeInterval] = mapped_column(Enum(FeeInterval), default=FeeInterval.MONTHLY)
+    # Nur bei `once` (seit v0.56.0): ganzer Betrag auf die ERSTE Ladung des
+    # Anbieters ab `start_date` statt auf einen Zeitraum ("5 EUR Gutschein
+    # beim naechsten Laden"). `end_date` bleibt dann leer.
+    single_session: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Nur bei `once` (seit v0.56.0): Zeitraum in Monaten ab `start_date`.
+    # Der Server leitet daraus `end_date` ab, aeltere Apps sehen also einen
+    # gewoehnlichen einmaligen Zeitraum; gespeichert, damit das Formular
+    # "3 Monate" statt eines Enddatums wieder anzeigt.
+    spread_months: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Erster Tag der ersten Periode und - optional - letzter Tag, an dem die
     # Gebuehr noch gilt (Kuendigung; bei ONCE Pflicht). Beide als naive
     # datetime um Mitternacht statt als Date, aus demselben Grund wie
