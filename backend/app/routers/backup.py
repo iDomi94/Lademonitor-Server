@@ -97,6 +97,8 @@ SESSION_FIELDS = [
 FEE_FIELDS = [
     "id", "provider_id", "provider_name", "amount", "interval",
     "start_date", "end_date", "label", "notes", "created_at",
+    # Seit v0.56.0 (Gutschriften auf eine Ladung bzw. auf Monate).
+    "single_session", "spread_months",
 ]
 
 # Seit v0.32.0 (Fahrzeugkosten, siehe models.VehicleCost), beim Import optional.
@@ -322,6 +324,7 @@ def build_backup_zip(db: Session, user: models.User) -> bytes:
             "amount": _c(f.amount), "interval": _c(f.interval),
             "start_date": _c(f.start_date), "end_date": _c(f.end_date),
             "label": _c(f.label), "notes": _c(f.notes), "created_at": _c(f.created_at),
+            "single_session": _c(bool(f.single_session)), "spread_months": _c(f.spread_months),
         }
         for f in fees
     ]
@@ -838,6 +841,8 @@ async def import_backup(
                     end_date=_parse_dt(row.get("end_date")),
                     label=_parse_str(row.get("label")),
                     notes=_parse_str(row.get("notes")),
+                    single_session=_parse_bool(row.get("single_session")) or False,
+                    spread_months=_parse_int(row.get("spread_months")),
                     created_at=_parse_dt(row.get("created_at")),
                 )
             )

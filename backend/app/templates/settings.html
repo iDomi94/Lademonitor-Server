@@ -101,7 +101,14 @@
       <form class="inline-form" id="fee-form">
         <div><label>{{ t('settings.fee.provider') }}</label><select id="f-provider" required></select></div>
         <div><label>{{ t('settings.fee.label') }}</label><input id="f-label" placeholder="{{ t('settings.fee.label_placeholder') }}"></div>
-        <div><label>{{ t('settings.fee.amount') }}</label><input type="number" step="0.01" min="0" id="f-amount" required></div>
+        <div>
+          <label>{{ t('settings.fee.kind') }}</label>
+          <select id="f-kind">
+            <option value="fee">{{ t('settings.fee.kind.fee') }}</option>
+            <option value="credit">{{ t('settings.fee.kind.credit') }}</option>
+          </select>
+        </div>
+        <div><label>{{ t('settings.fee.amount') }}</label><input type="number" step="0.01" min="0.01" id="f-amount" required></div>
         <div>
           <label>{{ t('settings.fee.interval') }}</label>
           <select id="f-interval">
@@ -110,8 +117,17 @@
             <option value="once">{{ t('settings.fee.interval.once') }}</option>
           </select>
         </div>
-        <div><label>{{ t('settings.fee.start_date') }}</label><input type="date" id="f-start" required></div>
-        <div><label id="f-end-label">{{ t('settings.fee.end_date') }}</label><input type="date" id="f-end"></div>
+        <div id="f-spread-row">
+          <label>{{ t('settings.fee.spread') }}</label>
+          <select id="f-spread">
+            <option value="session">{{ t('settings.fee.spread.session') }}</option>
+            <option value="months">{{ t('settings.fee.spread.months') }}</option>
+            <option value="range">{{ t('settings.fee.spread.range') }}</option>
+          </select>
+        </div>
+        <div id="f-months-row"><label>{{ t('settings.fee.months') }}</label><input type="number" step="1" min="1" max="120" id="f-months" value="1"></div>
+        <div><label id="f-start-label">{{ t('settings.fee.start_date') }}</label><input type="date" id="f-start" required></div>
+        <div id="f-end-row"><label id="f-end-label">{{ t('settings.fee.end_date') }}</label><input type="date" id="f-end"></div>
         <div class="form-actions">
           <button type="button" id="fee-cancel-btn" style="background:var(--muted); display:none">{{ t('settings.fee.cancel') }}</button>
           <button type="submit" id="fee-submit-btn">{{ t('settings.fee.submit_new') }}</button>
@@ -464,6 +480,11 @@ const T = {
   feeOpenEnd: {{ t('settings.fee.open_end')|tojson }},
   feeEndDate: {{ t('settings.fee.end_date')|tojson }},
   feeEndDateOnce: {{ t('settings.fee.end_date_once')|tojson }},
+  feeStartDate: {{ t('settings.fee.start_date')|tojson }},
+  feeStartDateSession: {{ t('settings.fee.start_date_session')|tojson }},
+  feeCreditPer: {{ t('settings.fee.per.credit')|tojson }},
+  feeNextSession: {{ t('settings.fee.next_session')|tojson }},
+  feeMonthsText: {{ t('settings.fee.months_text')|tojson }},
   feeError: {{ t('settings.fee.error')|tojson }},
 
   locationEditHeading: {{ t('settings.location.edit_heading')|tojson }},
@@ -764,25 +785,50 @@ async function loadFees() {
   setCount('fee-count', fees.length);
   document.getElementById('fee-rows').innerHTML = fees.map(f => {
     const provider = providers.find(p => p.id === f.provider_id);
-    const period = f.interval === 'once'
-      ? `${feeDate(f.start_date)} – ${feeDate(f.end_date)}`
-      : `${T.feeFrom} ${feeDate(f.start_date)}` + (f.end_date ? ` – ${feeDate(f.end_date)}` : ` (${T.feeOpenEnd})`);
+    let period;
+    if (f.interval === 'once' && f.single_session) {
+      period = T.feeNextSession.replace('{date}', feeDate(f.start_date));
+    } else if (f.interval === 'once') {
+      period = `${feeDate(f.start_date)} – ${feeDate(f.end_date)}`
+        + (f.spread_months ? ` (${T.feeMonthsText.replace('{n}', f.spread_months)})` : '');
+    } else {
+      period = `${T.feeFrom} ${feeDate(f.start_date)}` + (f.end_date ? ` – ${feeDate(f.end_date)}` : ` (${T.feeOpenEnd})`);
+    }
     const label = f.label ? `<div style="color:var(--muted); font-size:0.85em">${f.label}</div>` : '';
+    // Gutschriften (negativer Betrag) als solche benennen statt "-5,00 €".
+    const per = f.amount < 0 && f.interval === 'once' ? T.feeCreditPer : (T.feeIntervals[f.interval] || '');
     return `<tr><td>${provider ? provider.name : '–'}${label}</td>
-      <td>${feeMoney(f.amount)} ${T.feeIntervals[f.interval] || ''}</td>
+      <td>${feeMoney(f.amount)} ${per}</td>
       <td>${period}</td><td>${feeMoney(f.charged_to_date)}</td>
       <td class="col-actions">${actionButtons('Fee', f.id)}</td></tr>`;
   }).join('');
 }
 
-// Bei "einmalig" ist das Enddatum Pflicht (ein Zeitraum), sonst optional
-// (Kuendigung) - die Beschriftung sagt, welcher Fall gerade gilt.
+// Bei "einmalig" waehlt man, worauf der Betrag verteilt wird: eine Ladung,
+// x Monate oder einen Zeitraum bis zum Enddatum (dann Pflicht). Sonst ist das
+// Enddatum optional (Kuendigung) - die Beschriftung sagt, welcher Fall gilt.
 function syncFeeEndField() {
   const once = document.getElementById('f-interval').value === 'once';
-  document.getElementById('f-end').required = once;
+  const spread = document.getElementById('f-spread').value;
+  document.getElementById('f-spread-row').style.display = once ? '' : 'none';
+  document.getElementById('f-months-row').style.display = once && spread === 'months' ? '' : 'none';
+  const showEnd = !once || spread === 'range';
+  document.getElementById('f-end-row').style.display = showEnd ? '' : 'none';
+  document.getElementById('f-end').required = once && spread === 'range';
   document.getElementById('f-end-label').textContent = once ? T.feeEndDateOnce : T.feeEndDate;
+  document.getElementById('f-start-label').textContent =
+    once && spread === 'session' ? T.feeStartDateSession : T.feeStartDate;
 }
 document.getElementById('f-interval').addEventListener('change', syncFeeEndField);
+document.getElementById('f-spread').addEventListener('change', syncFeeEndField);
+syncFeeEndField();
+// Eine Gutschrift ist fast immer einmalig - beim Umschalten gleich vorwaehlen.
+document.getElementById('f-kind').addEventListener('change', () => {
+  if (document.getElementById('f-kind').value === 'credit') {
+    document.getElementById('f-interval').value = 'once';
+    syncFeeEndField();
+  }
+});
 
 function startEditFee(id) {
   const f = fees.find(x => x.id === id);
@@ -790,8 +836,11 @@ function startEditFee(id) {
   editingFeeId = id;
   document.getElementById('f-provider').value = f.provider_id;
   document.getElementById('f-label').value = f.label ?? '';
-  document.getElementById('f-amount').value = f.amount;
+  document.getElementById('f-kind').value = f.amount < 0 ? 'credit' : 'fee';
+  document.getElementById('f-amount').value = Math.abs(f.amount);
   document.getElementById('f-interval').value = f.interval;
+  document.getElementById('f-spread').value = f.single_session ? 'session' : (f.spread_months ? 'months' : 'range');
+  document.getElementById('f-months').value = f.spread_months || 1;
   document.getElementById('f-start').value = f.start_date.slice(0, 10);
   document.getElementById('f-end').value = f.end_date ? f.end_date.slice(0, 10) : '';
   syncFeeEndField();
@@ -822,12 +871,17 @@ async function deleteItemFee(id) {
 
 document.getElementById('fee-form').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const end = document.getElementById('f-end').value;
+  const interval = document.getElementById('f-interval').value;
+  const spread = interval === 'once' ? document.getElementById('f-spread').value : null;
+  const end = spread === null || spread === 'range' ? document.getElementById('f-end').value : '';
+  const sign = document.getElementById('f-kind').value === 'credit' ? -1 : 1;
   const payload = {
     provider_id: document.getElementById('f-provider').value,
     label: document.getElementById('f-label').value || null,
-    amount: parseFloat(document.getElementById('f-amount').value),
-    interval: document.getElementById('f-interval').value,
+    amount: sign * Math.abs(parseFloat(document.getElementById('f-amount').value)),
+    interval,
+    single_session: spread === 'session',
+    spread_months: spread === 'months' ? parseInt(document.getElementById('f-months').value, 10) || 1 : null,
     start_date: document.getElementById('f-start').value + 'T00:00:00',
     end_date: end ? end + 'T00:00:00' : null,
   };

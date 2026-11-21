@@ -197,6 +197,7 @@ const T = {
   noneOption: {{ t('common.none_option')|tojson }},
   badgeManual: {{ t('sessions.badge.manual')|tojson }},
   feeShare: {{ t('sessions.fee_share')|tojson }},
+  feeCredit: {{ t('sessions.fee_credit')|tojson }},
   feeShareTooltip: {{ t('sessions.fee_share_tooltip')|tojson }},
   solarShare: {{ t('sessions.solar_share')|tojson }},
   solarShareTooltip: {{ t('sessions.solar_share_tooltip')|tojson }},
@@ -332,7 +333,10 @@ function sessionView(s) {
     pricePerKwh: s.price_per_kwh != null ? s.price_per_kwh.toFixed(3) : null,
     // Anteil an Grundgebuehren des Anbieters (fees.py) - kommt ZUSAETZLICH
     // zum Saeulenpreis, der bleibt unveraendert stehen.
-    feeShare: s.fee_share ? T.feeShare.replace('{amount}', s.fee_share.toFixed(2) + ' €') : null,
+    // Negativ = Gutschrift (Rabatt, Gutschein) ueberwiegt.
+    feeShare: s.fee_share
+      ? (s.fee_share < 0 ? T.feeCredit : T.feeShare).replace('{amount}', Math.abs(s.fee_share).toFixed(2) + ' €')
+      : null,
     // Sonnenanteil einer Heimladung mit PV/Hausakku - nur wenn Home Assistant
     // den Netzbezug gemessen hat (leer heisst unbekannt, nicht "alles Netz").
     solarShare: s.grid_energy_kwh != null && s.energy_kwh

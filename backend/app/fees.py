@@ -13,6 +13,12 @@ Umlage die VOLLSTAENDIGE Menge der Ladevorgaenge des Anbieters - ein
 Datumsfilter in der Statistik darf erst NACH der Umlage greifen, sonst
 bekaeme der letzte Vorgang vor der Filtergrenze die ganze Gebuehr.
 
+Gutschriften (Rabatt, Gutschein, seit v0.56.0) sind Gebuehren mit
+NEGATIVEM Betrag und laufen durch dieselbe Umlage - auf einen Zeitraum
+(einmalig mit Enddatum bzw. x Monaten) oder mit `single_session` auf die
+erste Ladung des Anbieters ab dem Startdatum. Der Anteil eines Vorgangs kann
+dadurch negativ werden.
+
 Die Apps rechnen dasselbe lokal nach (LocalFeeAllocator in beiden Repos),
 weil ihr Dashboard immer lokal entsteht. Aenderungen an den Regeln hier
 MUESSEN dort mitgezogen werden; tests/test_fees.py haelt die Faelle fest,
@@ -44,6 +50,9 @@ class FeePeriod:
     start: date
     end: date
     amount: float
+    # Gutschrift/Gebuehr fuer genau EINE Ladung: gilt fuer die erste Ladung
+    # des Anbieters ab `start`, `end` ist dann bedeutungslos.
+    single_session: bool = False
 
 
 @dataclass
@@ -87,6 +96,11 @@ def periods(fee: models.ProviderFee, until: date) -> list[FeePeriod]:
         return []
 
     if fee.interval == models.FeeInterval.ONCE:
+        if getattr(fee, "single_session", False):
+            # Eine Ladung: die "Periode" ist der Starttag, allocate() sucht
+            # die erste Ladung ab dann. Ohne Ladung zaehlt der Betrag wie
+            # jede nicht umgelegte Periode an ihrem Beginn.
+            return [FeePeriod(fee.id, fee.provider_id, start, start + timedelta(days=1), fee.amount, True)]
         last = end_incl if end_incl and end_incl >= start else start
         return [FeePeriod(fee.id, fee.provider_id, start, last + timedelta(days=1), fee.amount)]
 
@@ -157,7 +171,11 @@ def allocate(
     for fee in fees:
         candidates = by_provider.get(fee.provider_id, [])
         for period in periods(fee, until):
-            in_period = [s for s in candidates if period.start <= s.start_time.date() < period.end]
+            if period.single_session:
+                first = next((s for s in candidates if s.start_time.date() >= period.start), None)
+                in_period = [first] if first is not None else []
+            else:
+                in_period = [s for s in candidates if period.start <= s.start_time.date() < period.end]
             if not in_period:
                 result.unallocated.append(period)
                 continue

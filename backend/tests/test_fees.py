@@ -254,14 +254,15 @@ def test_validation(client):
         json={"provider_id": ionity["id"], "amount": 5, "interval": "once", "start_date": "2026-05-03"},
     )
     backwards = client.patch(f"/api/provider-fees/{fee['id']}", json={"end_date": "2026-01-01"})
-    negative = client.post(
+    zero = client.post(
         "/api/provider-fees",
-        json={"provider_id": ionity["id"], "amount": -1, "start_date": "2026-05-03"},
+        json={"provider_id": ionity["id"], "amount": 0, "start_date": "2026-05-03"},
     )
 
     assert other.status_code == 422
     assert backwards.status_code == 422
-    assert negative.status_code == 422
+    # Negativ ist seit v0.56.0 eine Gutschrift, 0 bleibt sinnlos.
+    assert zero.status_code == 422
     assert client.get("/api/provider-fees").json()[0]["end_date"].startswith("2026-06-02")
 
 
@@ -372,3 +373,112 @@ def test_backup_without_fees_csv_still_imports(client):
 
     assert result["sessions_imported"] == 4
     assert result["fees_imported"] == 0
+
+
+# ---------- Gutschriften (Rabatt, Gutschein, seit v0.56.0) ----------
+
+
+def test_credit_over_a_period_is_split_like_a_fee():
+    result = fees.allocate(
+        [_fee("2026-05-03", "once", end="2026-06-02", amount=-5.0)],
+        [_session("a", "2026-05-04T10:00:00", 30), _session("b", "2026-05-20T10:00:00", 20)],
+        until=date(2026, 6, 20),
+    )
+
+    assert result.shares == {"a": -3.0, "b": -2.0}
+
+
+def test_single_session_goes_to_the_first_charge_from_the_start_day():
+    fee = _fee("2026-05-10", "once", amount=-5.0)
+    fee.single_session = True
+    sessions = [
+        _session("before", "2026-05-09T10:00:00", 30),
+        _session("later", "2026-05-20T10:00:00", 20),
+        _session("first", "2026-05-12T10:00:00", 40),
+        _session("other", "2026-05-11T10:00:00", 40, provider_id="p2"),
+    ]
+
+    result = fees.allocate([fee], sessions, until=date(2026, 6, 20))
+
+    assert result.shares == {"first": -5.0}
+    assert result.unallocated == []
+
+
+def test_single_session_without_a_charge_yet_counts_on_its_day():
+    fee = _fee("2026-05-10", "once", amount=-5.0)
+    fee.single_session = True
+
+    result = fees.allocate([fee], [_session("before", "2026-05-09T10:00:00", 30)], until=date(2026, 6, 20))
+
+    assert result.shares == {}
+    assert [(p.start, p.amount) for p in result.unallocated] == [(date(2026, 5, 10), -5.0)]
+
+
+def test_credit_api_months_and_single_session(client):
+    register(client)
+    vehicle, ionity, enbw, _ = _seed(client)
+
+    months = client.post(
+        "/api/provider-fees",
+        json={"provider_id": ionity["id"], "amount": -5.0, "interval": "once",
+              "start_date": "2026-05-03", "spread_months": 1, "label": "Gutschein"},
+    )
+    session = client.post(
+        "/api/provider-fees",
+        json={"provider_id": enbw["id"], "amount": -2.0, "interval": "once",
+              "start_date": "2026-04-20", "single_session": True},
+    )
+    assert months.status_code == 201, months.text
+    assert session.status_code == 201, session.text
+    # Monate -> Enddatum vom Server, damit aeltere Apps denselben Zeitraum sehen.
+    assert months.json()["end_date"].startswith("2026-06-02")
+    assert months.json()["spread_months"] == 1
+    assert session.json()["end_date"] is None
+    assert session.json()["single_session"] is True
+    assert session.json()["charged_to_date"] == -2.0
+
+    by_start = {s["start_time"][:10]: s for s in client.get("/api/sessions").json()}
+    # Powerpass 15 EUR minus Gutschein 5 EUR, beide nach kWh 40/20/15.
+    assert by_start["2026-05-04"]["fee_share"] == 8.0 - 2.67
+    assert by_start["2026-05-01"]["fee_share"] == -2.0
+
+    stats = client.get("/api/stats/summary").json()
+    assert stats["total_fees"] == 15.0 - 5.0 - 2.0
+    enbw_stat = next(p for p in stats["by_provider"] if p["provider_name"] == "EnBW")
+    assert enbw_stat["total_cost"] == 3.0
+
+
+def test_credit_patch_from_an_older_app_keeps_or_clears_the_new_fields(client):
+    register(client)
+    _, ionity, _, _ = _seed(client)
+    fee = client.post(
+        "/api/provider-fees",
+        json={"provider_id": ionity["id"], "amount": -5.0, "interval": "once",
+              "start_date": "2026-05-03", "spread_months": 2},
+    ).json()
+    assert fee["end_date"].startswith("2026-07-02")
+
+    # Aeltere App kennt die Felder nicht, schickt aber das Enddatum mit:
+    # dann gilt dieses, die Monatsangabe faellt weg.
+    changed = client.patch(
+        f"/api/provider-fees/{fee['id']}",
+        json={"amount": -6.0, "interval": "once", "start_date": "2026-05-03", "end_date": "2026-05-31"},
+    ).json()
+    assert changed["spread_months"] is None
+    assert changed["end_date"].startswith("2026-05-31")
+
+    single = client.post(
+        "/api/provider-fees",
+        json={"provider_id": ionity["id"], "amount": -3.0, "interval": "once",
+              "start_date": "2026-05-03", "single_session": True},
+    ).json()
+    kept = client.patch(
+        f"/api/provider-fees/{single['id']}",
+        json={"amount": -4.0, "interval": "once", "start_date": "2026-05-03", "end_date": None},
+    )
+    assert kept.status_code == 200, kept.text
+    assert kept.json()["single_session"] is True
+
+    # Nicht einmalig: die Zusatzfelder gelten nicht.
+    monthly = client.patch(f"/api/provider-fees/{single['id']}", json={"interval": "monthly"}).json()
+    assert monthly["single_session"] is False

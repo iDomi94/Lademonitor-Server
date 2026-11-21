@@ -503,9 +503,16 @@ class ProviderOut(ProviderBase):
 
 class ProviderFeeBase(BaseModel):
     provider_id: str
-    # Betrag je Periode in EUR.
-    amount: float = Field(ge=0)
+    # Betrag je Periode in EUR. Negativ = Gutschrift (Rabatt, Gutschein,
+    # seit v0.56.0).
+    amount: float
     interval: FeeInterval = FeeInterval.MONTHLY
+    # Nur bei `once` (seit v0.56.0): ganzer Betrag auf die erste Ladung des
+    # Anbieters ab `start_date`.
+    single_session: bool = False
+    # Nur bei `once` (seit v0.56.0): Zeitraum in Monaten ab `start_date`, der
+    # Server setzt `end_date` daraus.
+    spread_months: int | None = Field(default=None, ge=1, le=120)
     # Nur das Datum zaehlt, eine Uhrzeit wird beim Speichern verworfen (siehe
     # routers/provider_fees.py) - wie bei TireSet.installed_on als naive
     # datetime, weil die Apps nur dieses Format dekodieren.
@@ -523,8 +530,13 @@ class ProviderFeeCreate(ProviderFeeBase):
 
 class ProviderFeeUpdate(BaseModel):
     provider_id: str | None = None
-    amount: float | None = Field(default=None, ge=0)
+    amount: float | None = None
     interval: FeeInterval | None = None
+    # null = unveraendert (aeltere Apps kennen die Felder nicht).
+    single_session: bool | None = None
+    # Mitgeschicktes null entfernt die Angabe (wie end_date), fehlt das Feld,
+    # bleibt sie stehen.
+    spread_months: int | None = Field(default=None, ge=1, le=120)
     start_date: datetime | None = None
     end_date: datetime | None = None
     label: str | None = None

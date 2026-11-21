@@ -2170,6 +2170,20 @@ in der Detailansicht zusaetzlich "effektiv gesamt/pro kWh").
   sie steht an keinem Vorgang, zaehlt aber in der Statistik - in Gesamtkosten,
   unter dem Anbieternamen (mit 0 kWh) und im Monat, in dem die Periode beginnt.
 
+**Gutschriften (seit v0.56.0, Wunsch des Nutzers 21.11.2026):** ein Rabatt
+oder Gutschein ("5 EUR EnBW-Gutschein") ist eine `ProviderFee` mit NEGATIVEM
+`amount` - bewusst ein Vorzeichen statt eines eigenen Typs, damit aeltere Apps
+sie ohne Anpassung richtig mitrechnen (nur die Beschriftung stimmt dort
+nicht). Fuer `once` zwei neue Felder: `single_session` (ganzer Betrag auf die
+ERSTE Ladung des Anbieters ab `start_date`, kein Enddatum; ohne Ladung zaehlt
+er als nicht umgelegt an seinem Tag) und `spread_months` (x Monate ab dem
+Startdatum - der Server setzt daraus `end_date` = Monatstag x Monate spaeter
+minus 1, aeltere Apps sehen also einen normalen Zeitraum). PATCH: fehlen die
+Felder, bleiben sie; ein mitgeschicktes `end_date` OHNE `spread_months`
+(aeltere App) loescht die Monatsangabe; nicht `once` setzt beide zurueck.
+Ein Anteil am Vorgang kann dadurch negativ sein. Die Apps sperren das
+Eintragen gegen einen aelteren Server (`ServerCapabilities`, 0.56.0).
+
 **Statistik (`routers/stats.py`):** die Umlage laeuft ueber ALLE Vorgaenge des
 Nutzers, Filter greifen erst danach - sonst bekaeme der letzte Vorgang vor der
 Filtergrenze die ganze Gebuehr. Nicht umgelegte Perioden zaehlen nur OHNE
