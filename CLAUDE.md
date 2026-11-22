@@ -1174,6 +1174,16 @@ Zwei Ausloeserarten:
   wie das WebDAV-Backup): Ablaufwarnung des API-Keys (14/7/1 Tage),
   Prüf-Sammelmeldung (pro Nutzer aus/taeglich/woechentlich), Monatsbericht.
 
+**Anhaltende Abruffehler (seit v0.56.3):** `_run_stalled_sources()` im selben
+Takt meldet eine eingeschaltete automatische Quelle (MyŠkoda, BMW, VW-Datenportal,
+Renault), die seit `STALLED_AFTER` (24 h) auf `error` oder `rate_limited`
+steht - einmal je Stoerung, Merker `stalled_since`/`stalled_notified_at`
+(`models.SourceHealthMixin`), geleert bei jedem anderen Status. Anlass: der
+Umzug des VW-Datenportals (16.11.2026) lief eine Woche als stiller `error`
+("kein JSON"), gemeldet wurde erst der Anmeldefehler danach. Gemessen ab dem
+ersten Scheduler-Lauf, der den Fehler sieht; die Poller selbst bleiben
+unberuehrt. Status mit eigener Sofort-Mail sind bewusst ausgenommen.
+
 Die Merkerspalten (`last_failure_notified_at`, `api_key_expiry_notified_days`,
 `last_review_digest_at`, `last_monthly_report_at`) sind nicht optional: ohne sie
 ginge dieselbe Mail viertelstuendlich erneut raus. Auch wenn nichts zu melden

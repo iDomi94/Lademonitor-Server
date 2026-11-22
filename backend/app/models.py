@@ -952,6 +952,17 @@ class WebdavBackupFile(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
 
 
+class SourceHealthMixin:
+    """Merker fuer die Status-Mail bei anhaltenden Abruffehlern
+    (notifications._run_stalled_sources, seit v0.56.3). `stalled_since` ist der
+    Zeitpunkt, an dem der Scheduler den Fehler zum ersten Mal gesehen hat,
+    `stalled_notified_at` verhindert eine zweite Mail fuer dieselbe Stoerung.
+    Beides wird geleert, sobald ein Abruf wieder klappt. Nur Serverzustand."""
+
+    stalled_since: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    stalled_notified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class ChargeDetectionStateMixin:
     """Einstellungen und Zustand der Ladeerkennung aus wiederholt abgefragten
     Fahrzeugzustaenden (siehe charge_detection.py) - gemeinsam fuer jede Quelle,
@@ -1044,7 +1055,7 @@ class ChargeDetectionStateMixin:
     open_charging_seen: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
 
-class MySkodaConfig(ChargeDetectionStateMixin, Base):
+class MySkodaConfig(SourceHealthMixin, ChargeDetectionStateMixin, Base):
     """Konfiguration UND Zustandsspeicher der automatischen Ladeerkennung ueber
     die MyŠkoda Public API - eine Zeile pro Fahrzeug.
 
@@ -1149,7 +1160,7 @@ class MySkodaLogEntry(Base):
     payload: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
 
 
-class BmwCarDataConfig(Base):
+class BmwCarDataConfig(SourceHealthMixin, Base):
     """Konfiguration UND Anmeldezustand der Ladehistorie ueber BMW CarData -
     eine Zeile pro Fahrzeug (siehe bmw_cardata.py, bmw_cardata_poller.py).
 
@@ -1231,7 +1242,7 @@ class BmwCarDataLogEntry(Base):
     payload: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
 
 
-class VwDataActConfig(ChargeDetectionStateMixin, Base):
+class VwDataActConfig(SourceHealthMixin, ChargeDetectionStateMixin, Base):
     """Konfiguration UND Zustandsspeicher der Ladeerkennung ueber das
     Datenportal des VW-Konzerns nach EU Data Act (siehe vw_data_act.py) - eine
     Zeile pro Fahrzeug. Gilt fuer alle Konzernmarken ausser Porsche.
@@ -1305,7 +1316,7 @@ class VwDataActLogEntry(Base):
     payload: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
 
 
-class RenaultConfig(ChargeDetectionStateMixin, Base):
+class RenaultConfig(SourceHealthMixin, ChargeDetectionStateMixin, Base):
     """Konfiguration UND Zustandsspeicher der Ladeerkennung ueber die
     Fahrzeug-API der Renault-Gruppe (Renault, Dacia, Alpine; siehe renault.py)
     - eine Zeile pro Fahrzeug.
