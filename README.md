@@ -304,7 +304,7 @@ Hinweise:
 
 Für alle Marken des VW-Konzerns außer Porsche (Volkswagen, VW Nutzfahrzeuge,
 Audi, Škoda, SEAT, Cupra, Bentley) gibt es eine vierte automatische Quelle:
-das [Datenportal](https://eu-data-act.drivesomethinggreater.com), in dem jeder
+das [Datenportal](https://eu-data-act.vwgroup-datahub.com), in dem jeder
 Halter nach EU Data Act seine Fahrzeugdaten abrufen kann. Das Portal stellt
 alle 15 Minuten einen Datensatz bereit; Lademonitor erkennt daraus wie bei
 MyŠkoda Einstecken, Laden und Ausstecken. Die kWh gelten als geschätzt: der

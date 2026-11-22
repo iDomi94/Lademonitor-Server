@@ -2909,6 +2909,15 @@ Entscheidung des Nutzers 19.10.2026: lieber unvollstaendig als gar nicht. Ein ZI
 Ladezustaende tragen: den des Standardberichts und die Kopie aus einem
 Ladeauftrag (`RbcStateReportForStopChargingJob`), siehe `REPORT_COPY_KEYS`.
 
+**Umzug des Portals (v0.56.2):** Mitte November 2026 zog das Portal nach
+`eu-data-act.vwgroup-datahub.com`; die alte Adresse leitet alles per 301 um,
+API-Pfade auf `/euda-b2u/...` (404). `BASE_URL` ist die neue Adresse, die
+OIDC-`redirect_uri` bleibt bewusst auf der alten (dort sind die Clients
+registriert, wie in hass-vw-eu-data-act 0.3.4); der Login folgt ueber beide
+Hosts und haelt erst am Callback an, der nicht nur weiterleitet. Kommt bei
+einem Abruf eine Umleitung, meldet `_get()` das statt "kein JSON". Gegen das
+echte Portal hier nicht pruefbar (Netz gesperrt).
+
 **Sonstiges:** Einschalten wird mit 422 abgelehnt, wenn fuer das Fahrzeug
 MyŠkoda oder BMW CarData aktiv ist. E-Mail, Passwort, FIN und Rohdaten
 verschluesselt (`database.py`-Listen), Passwort nie in der Antwort

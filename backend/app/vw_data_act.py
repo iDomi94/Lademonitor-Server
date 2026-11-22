@@ -1,6 +1,7 @@
 """Client fuer das Datenportal des VW-Konzerns nach EU Data Act.
 
-Portal: https://eu-data-act.drivesomethinggreater.com - dort kann jeder Halter
+Portal: https://eu-data-act.vwgroup-datahub.com (bis November 2026
+https://eu-data-act.drivesomethinggreater.com, das seitdem dorthin umleitet) - dort kann jeder Halter
 eines Fahrzeugs von Volkswagen, VW Nutzfahrzeuge, Audi, Škoda, SEAT, Cupra oder
 Bentley eine fortlaufende Datenanfrage anlegen ("All Data", alle 15 Minuten).
 Das Portal stellt die Daten danach als rollierende Liste von ZIP-Dateien bereit,
@@ -71,9 +72,17 @@ logger = logging.getLogger(__name__)
 # Portal / OIDC
 # --------------------------------------------------------------------------
 
-BASE_URL = "https://eu-data-act.drivesomethinggreater.com"
+BASE_URL = "https://eu-data-act.vwgroup-datahub.com"
+#: Alte Adresse des Portals (bis Mitte November 2026). Sie leitet jede Anfrage
+#: per 301 auf BASE_URL um - fuer die API ist das nutzlos (die Umleitung landet
+#: auf einem anderen Pfad, der 404 liefert), im Login laeuft die Kette aber
+#: weiterhin ueber sie, weil die OIDC-Clients mit ihrer redirect_uri
+#: registriert sind.
+LEGACY_BASE_URL = "https://eu-data-act.drivesomethinggreater.com"
 IDENTITY_BASE = "https://identity.vwgroup.io"
 PORTAL_HOST = urlparse(BASE_URL).netloc
+LEGACY_PORTAL_HOST = urlparse(LEGACY_BASE_URL).netloc
+PORTAL_HOSTS = frozenset({PORTAL_HOST, LEGACY_PORTAL_HOST})
 IDENTITY_HOST = urlparse(IDENTITY_BASE).netloc
 
 CALLBACK_LOGIN_PATH = "/services/callbacklogin"
@@ -86,7 +95,10 @@ MAX_LOGIN_REDIRECTS = 10
 
 OIDC_AUTHORIZE_URL = IDENTITY_BASE + "/oidc/v1/authorize"
 OIDC_SCOPE = "openid cars profile"
-OIDC_REDIRECT_URI = BASE_URL + "/login"
+#: Bewusst noch die ALTE Adresse: bei ihr sind die Clients registriert (so
+#: auch hass-vw-eu-data-act 0.3.4); das alte Portal leitet den Code an das
+#: neue weiter, das danach `/services/callbacklogin` aufruft.
+OIDC_REDIRECT_URI = LEGACY_BASE_URL + "/login"
 
 VEHICLES_PATH = "/proxy_api/consent/me/vehicles"
 METADATA_PATH = "/proxy_api/euda-apim/datarequest/vehicles/{vin}/metadata/partial"
@@ -246,8 +258,22 @@ def _login_error(html: str) -> str | None:
 
 
 def _is_portal_callback(url: str) -> bool:
+    """Callback auf einem der beiden Portal-Hosts (alt oder neu)."""
     parsed = urlparse(url)
-    return parsed.netloc == PORTAL_HOST and parsed.path.startswith(CALLBACK_LOGIN_PATH)
+    return parsed.netloc.lower() in PORTAL_HOSTS and parsed.path.startswith(CALLBACK_LOGIN_PATH)
+
+
+def _is_final_callback(resp: httpx.Response) -> bool:
+    """Am Callback anhalten - ausser der Callback auf dem ALTEN Host leitet
+    nur an den Callback des neuen weiter (dort wird erst das Cookie gesetzt)."""
+    if not _is_portal_callback(str(resp.url)):
+        return False
+    location = resp.headers.get("Location")
+    if resp.status_code in LOGIN_REDIRECT_STATUSES and location:
+        target = urljoin(str(resp.url), location)
+        if _is_portal_callback(target) and urlparse(target).netloc != resp.url.host:
+            return False
+    return True
 
 
 def _marketing_consent_callback(url: str) -> str | None:
@@ -424,17 +450,18 @@ class DataActClient:
 
     def _follow_login_redirects(self, resp: httpx.Response) -> httpx.Response:
         """Weiterleitungen bis zum Portal-Callback, nach VWs eigener Vorgabe:
-        hoechstens 10 Spruenge, nur https auf Identity- oder Portal-Host, Halt
-        beim Callback (der setzt das Cookie), Marketing-Frage ueberspringen."""
+        hoechstens 10 Spruenge, nur https auf Identity- oder Portal-Host (alt
+        und neu), Halt beim Callback (der setzt das Cookie), Marketing-Frage
+        ueberspringen."""
         for _ in range(MAX_LOGIN_REDIRECTS):
-            if _is_portal_callback(str(resp.url)) or resp.status_code not in LOGIN_REDIRECT_STATUSES:
+            if _is_final_callback(resp) or resp.status_code not in LOGIN_REDIRECT_STATUSES:
                 return resp
             location = resp.headers.get("Location")
             if not location:
                 return resp
             target = urljoin(str(resp.url), location)
             parsed = urlparse(target)
-            if parsed.scheme != "https" or parsed.netloc.lower() not in (IDENTITY_HOST, PORTAL_HOST):
+            if parsed.scheme != "https" or parsed.netloc.lower() not in (IDENTITY_HOST, *PORTAL_HOSTS):
                 raise DataActAuthError(
                     f"Die Anmeldung leitete an eine unerwartete Adresse weiter "
                     f"({parsed.scheme}://{parsed.netloc})."
@@ -502,6 +529,15 @@ class DataActClient:
             resp = self._http.get(url, headers=headers)
         except httpx.HTTPError as exc:
             raise DataActError(f"Portal nicht erreichbar: {exc}") from exc
+        if resp.is_redirect:
+            # Seit dem Umzug im November 2026 leitet die alte Adresse alles um -
+            # ohne diese Pruefung kam das als "Portal lieferte kein JSON" an.
+            raise DataActError(
+                "Das Portal leitete die Anfrage um nach "
+                f"{urljoin(url, resp.headers.get('Location', ''))} - vermutlich ist es "
+                "wieder umgezogen.",
+                status=resp.status_code,
+            )
         if resp.status_code in (401, 403) and retry:
             # Sitzung abgelaufen - genau einmal neu anmelden.
             self.logged_in = False

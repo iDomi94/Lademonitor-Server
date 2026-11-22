@@ -6,6 +6,11 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.56.2] — 2026-11-22
+
+### Fixed
+- VW-Datenportal: Umzug von `eu-data-act.drivesomethinggreater.com` nach `eu-data-act.vwgroup-datahub.com`. API-Abrufe gehen an die neue Adresse (die alte leitet per 301 auf einen Pfad um, der 404 liefert - das kam seit 16.11. als „Portal lieferte kein JSON“ an). Der Login erlaubt beide Hosts in der Weiterleitungskette und hält erst am Callback der neuen Adresse an; die OIDC-`redirect_uri` bleibt auf der alten Adresse, bei der die Clients registriert sind. Eine Umleitung bei einem API-Abruf wird als solche gemeldet.
+
 ## [0.56.1] — 2026-11-22
 
 ### Changed

@@ -22,7 +22,8 @@ from conftest import create_vehicle, register
 
 VIN = "VSSZZZK1ZRP012345"
 IDENTITY = "https://identity.vwgroup.io"
-PORTAL = "https://eu-data-act.drivesomethinggreater.com"
+PORTAL = "https://eu-data-act.vwgroup-datahub.com"
+LEGACY_PORTAL = "https://eu-data-act.drivesomethinggreater.com"
 EMAIL = "fahrer@example.org"
 PASSWORD = "richtig"
 
@@ -222,6 +223,9 @@ class FakePortal(httpx.BaseTransport):
         self.list_status = 200
         self.expire_session_once = False
         self.logins = 0
+        #: Wie seit dem Umzug im November 2026: der Identity-Dienst leitet an
+        #: die registrierte ALTE Adresse, die per 301 auf die neue umleitet.
+        self.callback_via_legacy = True
 
     # Hilfen fuer die Tests
     def add(self, name: str, created: datetime, payload: dict | None):
@@ -236,8 +240,15 @@ class FakePortal(httpx.BaseTransport):
         path = url.path
         if host == "identity.vwgroup.io":
             return self._identity(request, path)
-        if host == "eu-data-act.drivesomethinggreater.com":
+        if host == "eu-data-act.vwgroup-datahub.com":
             return self._portal(request, path)
+        if host == "eu-data-act.drivesomethinggreater.com":
+            # Die alte Adresse leitet alles um - API-Pfade auf einen Pfad,
+            # der beim neuen Portal 404 liefert (echtes Verhalten).
+            target = PORTAL + path.replace("/proxy_api/euda-apim/", "/euda-b2u/")
+            if url.query:
+                target += "?" + url.query.decode()
+            return httpx.Response(301, headers={"Location": target})
         return httpx.Response(404)
 
     def _identity(self, request, path):
@@ -277,7 +288,8 @@ class FakePortal(httpx.BaseTransport):
         if path.startswith("/signin-service/v1/x/terms-and-conditions"):
             return httpx.Response(200, html="<html>AGB</html>")
         if path == "/oidc/v1/oauth/client/callback":
-            return httpx.Response(302, headers={"Location": f"{PORTAL}/services/callbacklogin?code=abc"})
+            base = LEGACY_PORTAL if self.callback_via_legacy else PORTAL
+            return httpx.Response(302, headers={"Location": f"{base}/services/callbacklogin?code=abc"})
         return httpx.Response(404)
 
     def _portal(self, request, path):
@@ -350,6 +362,36 @@ def test_login_flow_uses_brand_client_and_stops_at_callback(portal):
     # Keine Portal-Startseite vorab.
     assert portal.requests[0].url.host == "identity.vwgroup.io"
     assert client.list_vehicles() == [{"vin": VIN, "nickname": "Tavascan"}]
+
+
+def test_login_follows_the_old_portal_address_to_the_new_one(portal):
+    client = _client()
+    client.login()
+    authorize = next(r for r in portal.requests if r.url.path == "/oidc/v1/authorize")
+    params = urllib.parse.parse_qs(authorize.url.query.decode())
+    assert params["redirect_uri"] == [LEGACY_PORTAL + "/login"]
+    callbacks = [r.url.host for r in portal.requests if r.url.path == "/services/callbacklogin"]
+    assert callbacks == ["eu-data-act.drivesomethinggreater.com", "eu-data-act.vwgroup-datahub.com"]
+    assert portal.logins == 1
+    assert client.get_identifier(VIN) == "req-1"
+    # Abrufe gehen direkt an die neue Adresse.
+    api = [r for r in portal.requests if "/proxy_api/" in r.url.path]
+    assert api and all(r.url.host == "eu-data-act.vwgroup-datahub.com" for r in api)
+
+
+def test_login_directly_on_the_new_address_also_works(portal):
+    portal.callback_via_legacy = False
+    client = _client()
+    client.login()
+    assert client.logged_in and portal.logins == 1
+
+
+def test_redirected_api_call_is_reported_as_such(portal, monkeypatch):
+    client = _client()
+    client.login()
+    monkeypatch.setattr(vw_data_act, "BASE_URL", LEGACY_PORTAL)
+    with pytest.raises(vw_data_act.DataActError, match="leitete die Anfrage um"):
+        client.get_identifier(VIN)
 
 
 def test_wrong_password_is_an_auth_error(portal):

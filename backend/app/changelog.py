@@ -5,6 +5,15 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.56.2",
+        "date": "2026-11-22",
+        "title": "VW-Datenportal: Umzug auf neue Adresse",
+        "changes": [
+            "Das Datenportal des VW-Konzerns ist Mitte November von eu-data-act.drivesomethinggreater.com nach eu-data-act.vwgroup-datahub.com umgezogen. Seitdem schlug der Abruf mit „Portal lieferte kein JSON“ und danach die Anmeldung mit „unerwartete Adresse“ fehl. Lademonitor nutzt jetzt die neue Adresse und folgt beim Anmelden auch der Umleitung von der alten.",
+            "Leitet das Portal einen Abruf künftig wieder um, steht das so in der Fehlermeldung statt „kein JSON“.",
+        ],
+    },
+    {
         "version": "0.56.1",
         "date": "2026-11-22",
         "title": "Gutschriften im Kostenbalken nach links",
