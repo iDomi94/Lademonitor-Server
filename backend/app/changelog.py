@@ -5,6 +5,15 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.56.3",
+        "date": "2026-11-22",
+        "title": "Mail, wenn eine automatische Quelle einen Tag lang nicht abrufen kann",
+        "changes": [
+            "Scheitert der Abruf über MyŠkoda, BMW CarData, das VW-Datenportal oder My Renault seit mindestens 24 Stunden, kommt jetzt eine Mail - auch bei Fehlern, die bisher still blieben (z. B. „Portal lieferte kein JSON“). Bisher gab es nur bei abgelehnter Anmeldung eine Mail.",
+            "Je Störung kommt nur eine Mail; nach dem nächsten erfolgreichen Abruf gilt ein neuer Fehler wieder als neue Störung. Die Mail hängt am bisherigen Schalter für die automatische Erfassung unter Einstellungen → Benachrichtigungen.",
+        ],
+    },
+    {
         "version": "0.56.2",
         "date": "2026-11-22",
         "title": "VW-Datenportal: Umzug auf neue Adresse",

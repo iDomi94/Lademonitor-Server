@@ -6,6 +6,12 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.56.3] — 2026-11-22
+
+### Added
+- Status-Mail bei anhaltenden Abruffehlern (`notifications._run_stalled_sources`, 15-min-Scheduler): steht eine eingeschaltete Quelle (MyŠkoda, BMW CarData, VW-Datenportal, Renault) seit mindestens 24 h auf `error` oder `rate_limited`, geht eine Mail raus (Schalter `notify_myskoda_error`). Je Störung einmal, Merker `stalled_since`/`stalled_notified_at` an den vier Config-Tabellen (Migration), zurückgesetzt bei jedem anderen Status. `auth_error`/`no_request`/`tfa_required` behalten ihre Sofort-Mail.
+- Hinweis zur abgelaufenen VW-Datenanfrage nennt die neue Portaladresse.
+
 ## [0.56.2] — 2026-11-22
 
 ### Fixed

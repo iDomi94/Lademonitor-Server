@@ -738,6 +738,71 @@ def _run_reimbursement_reports(db: Session) -> None:
         db.commit()
 
 
+# Status, die nach STALLED_AFTER als "Erfassung steht" gemeldet werden. Bewusst
+# nur die beiden, zu denen es KEINE Sofort-Mail gibt: `auth_error`,
+# `no_request` und `tfa_required` melden die notify_*_status-Funktionen schon
+# beim Uebergang. Ein einzelner `error` heilt meist beim naechsten Abruf - haelt
+# er aber einen ganzen Tag, ist es keine Netzstoerung mehr (Fall 16.-22.11.2026:
+# das VW-Datenportal zog um, jeder Abruf scheiterte mit "kein JSON", gemeldet
+# wurde erst eine Woche spaeter der daraus folgende Anmeldefehler).
+STALLED_STATUSES = ("error", "rate_limited")
+STALLED_AFTER = timedelta(hours=24)
+# Quellen fuer die Pruefung: Modell und Name in der Mail (Uebersetzungsschluessel).
+STALLED_SOURCES = (
+    (models.MySkodaConfig, "email.stalled.source_myskoda"),
+    (models.BmwCarDataConfig, "email.stalled.source_bmw"),
+    (models.VwDataActConfig, "email.stalled.source_vwda"),
+    (models.RenaultConfig, "email.stalled.source_renault"),
+)
+
+
+def _run_stalled_sources(db: Session) -> None:
+    """Eine Mail, wenn der Abruf einer automatischen Quelle seit mindestens
+    STALLED_AFTER mit `error`/`rate_limited` scheitert. Gemessen ab dem ersten
+    Lauf dieses Schedulers, der den Fehler sieht (`stalled_since`, auf 15 min
+    genau) - die Poller selbst bleiben unberuehrt. Je Stoerung genau eine Mail;
+    ein erfolgreicher Abruf (oder ein Status mit eigener Mail) setzt beide
+    Merker zurueck. Haengt am selben Schalter wie die Anmelde-Mails."""
+    now = datetime.utcnow()
+    for model, source_key in STALLED_SOURCES:
+        for config in db.query(model).filter(model.enabled.is_(True)).all():
+            if config.last_status not in STALLED_STATUSES:
+                if config.stalled_since is not None or config.stalled_notified_at is not None:
+                    config.stalled_since = None
+                    config.stalled_notified_at = None
+                    db.commit()
+                continue
+            if config.stalled_since is None:
+                config.stalled_since = now
+                db.commit()
+                continue
+            if config.stalled_notified_at is not None or now - config.stalled_since < STALLED_AFTER:
+                continue
+            # Merker vor dem Versand setzen: auch ohne Adresse/Schalter soll
+            # die Pruefung nicht jede Viertelstunde erneut zuschlagen.
+            config.stalled_notified_at = now
+            db.commit()
+            user = db.get(models.User, config.user_id)
+            if not user or not user.email or not user.notify_myskoda_error:
+                continue
+            vehicle = db.get(models.Vehicle, config.vehicle_id)
+            with language_context(user.language):
+                source = translate(source_key)
+                mail = mailer.Mail(
+                    subject=translate("email.stalled.subject", source=source),
+                    heading=translate("email.stalled.heading", source=source),
+                    intro=[translate("email.stalled.intro", source=source)],
+                    rows=[
+                        (translate("email.myskoda_error.row_vehicle"), vehicle.name if vehicle else "–"),
+                        (translate("email.stalled.row_since"), _fmt_dt(config.stalled_since)),
+                        (translate("email.myskoda_error.row_when"), _fmt_dt(config.last_poll_at)),
+                        (translate("email.myskoda_error.row_error"), config.last_error or "–"),
+                    ],
+                    note=translate("email.stalled.note"),
+                )
+            _send(db, user, mail, "source_stalled")
+
+
 def run_due_notifications() -> None:
     """Einstiegspunkt des Scheduler-Tasks (siehe main.py). Faengt pro Bereich
     ab, damit ein Fehler in einem die uebrigen nicht mitreisst."""
@@ -747,7 +812,7 @@ def run_due_notifications() -> None:
             return
         for step in (
             _run_key_expiry_warnings, _run_review_digests, _run_monthly_reports, _run_yearly_reviews,
-            _run_reminders, _run_reimbursement_reports,
+            _run_reminders, _run_reimbursement_reports, _run_stalled_sources,
         ):
             try:
                 step(db)

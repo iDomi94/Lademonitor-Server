@@ -681,6 +681,18 @@ def run_light_migrations() -> None:
                     "ADD COLUMN IF NOT EXISTS open_energy_first_kwh DOUBLE PRECISION"
                 )
             )
+        # v0.56.3: Status-Mail bei anhaltenden Abruffehlern
+        # (models.SourceHealthMixin, notifications._run_stalled_sources).
+        for source_table in (
+            "myskoda_configs", "bmw_cardata_configs", "vw_data_act_configs", "renault_configs",
+        ):
+            for health_column in ("stalled_since", "stalled_notified_at"):
+                conn.execute(
+                    text(
+                        f"ALTER TABLE {source_table} "
+                        f"ADD COLUMN IF NOT EXISTS {health_column} TIMESTAMP"
+                    )
+                )
         conn.execute(
             text(
                 "ALTER TABLE webdav_backup_configs "
