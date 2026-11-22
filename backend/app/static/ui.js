@@ -40,23 +40,38 @@
     cleaning: '#6cc4e0', thg: '#16a34a', other: '#6b7280',
   };
 
-  /** Je Kategorie eine Zeile mit Balken (relativ zur groessten), Betrag und
-   *  Anteil an der Summe. `labels` bildet die Kategorie auf ihren Namen ab. */
+  /** Je Kategorie eine Zeile mit Balken, Betrag und Anteil an der Summe.
+   *  `labels` bildet die Kategorie auf ihren Namen ab. Gutschriften
+   *  (THG-Quote) kommen negativ und wachsen von einer Nulllinie aus nach
+   *  LINKS, Kosten nach rechts - beide im selben Massstab, damit 288 EUR
+   *  Gutschrift neben 4.000 EUR Wertverlust auch so klein aussehen. Ohne
+   *  Gutschrift liegt die Nulllinie ganz links und alles bleibt wie bisher. */
   window.renderCostBars = function (items, labels) {
-    // Gutschriften (THG-Quote) kommen negativ: Balken nach Betrag, Anteil
-    // gegen die Summe der Kosten, damit "-8 %" lesbar bleibt.
+    // Anteil gegen die Summe der Kosten, damit "-8 %" lesbar bleibt.
     const total = items.reduce((sum, c) => sum + Math.max(c.amount, 0), 0);
-    const max = Math.max(...items.map(c => Math.abs(c.amount)), 0);
+    const maxPos = Math.max(...items.map(c => c.amount), 0);
+    const maxNeg = Math.max(...items.map(c => -c.amount), 0);
+    const span = maxPos + maxNeg;
+    const zero = span ? maxNeg / span * 100 : 0;
     const money = n => Number(n).toLocaleString(window.LADEMONITOR_LANG,
       { style: 'currency', currency: 'EUR' });
-    return items.map(c => `
+    // Eine gemeinsame Tabelle statt Zeilen je fuer sich: sonst haengt die
+    // Balkenbreite an der Breite des Betrags, und die Nulllinien stuenden
+    // in jeder Zeile woanders.
+    return '<div class="cost-list">' + items.map(c => {
+      const width = span ? Math.abs(c.amount) / span * 100 : 0;
+      const credit = c.amount < 0;
+      const left = credit ? zero - width : zero;
+      return `
       <div class="cost-row">
         <div class="cost-name">${labels[c.category] || c.category}</div>
-        <div class="cost-bar"><div style="width:${max ? Math.abs(c.amount) / max * 100 : 0}%;
+        <div class="cost-bar${maxNeg ? ' has-credit' : ''}" style="--zero:${zero}%">
+          <div class="${credit ? 'credit' : ''}" style="left:${left}%;width:${width}%;
           background:${window.COST_COLORS[c.category] || window.COST_COLORS.other}"></div></div>
-        <div class="cost-amount">${money(c.amount)}
+        <div class="cost-amount${credit ? ' credit' : ''}">${money(c.amount)}
           <small>${total ? Math.round(c.amount / total * 100) : 0}%</small></div>
-      </div>`).join('');
+      </div>`;
+    }).join('') + '</div>';
   };
 
   /** Vertikales (Saeulen-)Diagramm als Inline-SVG, z.B. fuer den

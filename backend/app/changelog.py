@@ -5,6 +5,15 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.56.1",
+        "date": "2026-11-22",
+        "title": "Gutschriften im Kostenbalken nach links",
+        "changes": [
+            "In „Gesamtkosten“ (Dashboard und Seite „Fahrzeug“) wachsen Gutschriften wie die THG-Quote jetzt von einer Nulllinie aus nach links, Kosten nach rechts, beide im selben Maßstab. Der Betrag einer Gutschrift steht in Grün.",
+            "Die Balken sind in allen Zeilen gleich breit, unabhängig von der Länge des Betrags.",
+        ],
+    },
+    {
         "version": "0.56.0",
         "date": "2026-11-21",
         "title": "Gutschriften: Rabatte und Gutscheine für Ladeanbieter",
