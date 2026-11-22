@@ -6,6 +6,11 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.56.1] — 2026-11-22
+
+### Changed
+- Kostenbalken (`static/ui.js::renderCostBars`): Gutschriften (negative Beträge, z. B. THG-Quote) wachsen von einer Nulllinie nach links, Kosten nach rechts, gemeinsamer Maßstab; Betrag grün. Die Zeilen liegen in einem gemeinsamen Grid (`.cost-list`), damit Balkenbreite und Nulllinie in allen Zeilen gleich sind.
+
 ## [0.56.0] — 2026-11-21
 
 ### Added
