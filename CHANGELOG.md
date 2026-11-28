@@ -6,6 +6,14 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.57.0] — 2026-11-28
+
+### Added
+- MyŠkoda Public API 1.2.0: `charging.status.state = CHARGING_ERROR` zählt als „Kabel steckt“ (offener Vorgang läuft weiter), `chargingErrorReason` wird gelesen (`VehicleSnapshot.charging_error_reason`, in `summary()`) und als Protokollzeile `charging_error` mit Grund geschrieben.
+
+### Fixed
+- Unbekannter Wert von `state` ohne `plugConnectionState`: `is_plugged_in` liefert jetzt `None` und `charging_state` `None`, die Zustandsmaschine entscheidet nichts (Protokoll: „Unbekannter Ladezustand …“). Bis 0.56.3 galt jeder unbekannte Wert als ausgesteckt und hätte einen laufenden Vorgang beendet - die API kündigt neue Werte ausdrücklich an.
+
 ## [0.56.3] — 2026-11-22
 
 ### Added

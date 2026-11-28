@@ -409,9 +409,14 @@ entschieden (ein laufender Vorgang wuerde sonst faelschlich beendet).
 benannten Zustand ergeben (eingesteckt+entriegelt ohne Ladung, kurz nach der
 Fahrt), und sagt ausdruecklich, dass das NICHT ausgesteckt heisst. Ohne `state`
 liefert `VehicleSnapshot.charging_state` dann `PLUG_CONNECTED`/
-`PLUG_DISCONNECTED`; `DISCHARGING` bleibt "nicht verbunden". Der Stand der API
-wird woechentlich geprueft (`analysen/skoda-public-api-stand.md` im
-Projektordner).
+`PLUG_DISCONNECTED`; `DISCHARGING` bleibt "nicht verbunden". **Seit v0.57.0**
+(API 1.2.0) zaehlt `CHARGING_ERROR` (Ladefehler bei steckendem Kabel) als
+"verbunden", der Grund (`chargingErrorReason`) landet als `charging_error` im
+Debug-Log. Ein UNBEKANNTER `state` ohne Steckerangabe ist "unbekannt"
+(`is_plugged_in`/`charging_state` None, nichts entschieden) - bis 0.56.3 galt
+er als ausgesteckt, die API kuendigt neue Werte aber ausdruecklich an. Der
+Stand der API wird woechentlich geprueft (`analysen/skoda-public-api-stand.md`
+im Projektordner).
 
 ### Bekannte Ungenauigkeiten (bewusst so, nicht uebersehen)
 

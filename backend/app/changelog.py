@@ -5,6 +5,15 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.57.0",
+        "date": "2026-11-28",
+        "title": "MyŠkoda: Ladefehler erkennen (API 1.2.0)",
+        "changes": [
+            "Die offizielle MyŠkoda-Schnittstelle meldet seit Version 1.2.0 einen Ladefehler bei steckendem Kabel (z. B. Phase an der Ladesäule abgeschaltet) samt Grund. Lademonitor behandelt das als „Kabel steckt“, der laufende Ladevorgang bleibt also offen, und schreibt den Grund ins Debug-Protokoll.",
+            "Meldet die Schnittstelle künftig einen Ladezustand, den Lademonitor noch nicht kennt, und fehlt die Angabe zum Stecker, wird nichts entschieden. Bisher hätte so ein Wert einen laufenden Ladevorgang beendet.",
+        ],
+    },
+    {
         "version": "0.56.3",
         "date": "2026-11-22",
         "title": "Mail, wenn eine automatische Quelle einen Tag lang nicht abrufen kann",

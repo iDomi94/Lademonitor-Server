@@ -1142,7 +1142,7 @@ class MySkodaLogEntry(Base):
     # info | warning | error
     level: Mapped[str] = mapped_column(String, default="info")
     # Maschinenlesbarer Anlass, z.B. poll | session_started | session_finished |
-    # session_discarded | missed_session | api_error | rate_limit | test
+    # session_discarded | missed_session | charging_error | api_error | rate_limit | test
     event: Mapped[str] = mapped_column(String)
     message: Mapped[str] = mapped_column(Text)
 
