@@ -30,6 +30,7 @@ from sqlalchemy.orm import Session
 from . import models, notifications
 from .database import SessionLocal
 from .myskoda import (
+    CHARGING_ERROR_STATE,
     DISCHARGING_STATES,
     MySkodaAuthError,
     MySkodaClient,
@@ -214,11 +215,19 @@ def _apply_snapshot(
         # Kein Ladeteil in der Antwort (Fahrzeug ohne Ladeunterstuetzung, oder
         # der Teil war gerade nicht abrufbar). Nichts entscheiden, sonst wuerde
         # ein laufender Vorgang faelschlich beendet.
+        # Seit 0.57.0 auch bei einem UNBEKANNTEN Wert von `state` ohne
+        # Steckerangabe - die API kuendigt neue Werte ausdruecklich an.
+        unknown = snapshot.api_charging_state
+        reason = (
+            f"Unbekannter Ladezustand {unknown} ohne Steckerangabe"
+            if unknown
+            else "Antwort enthielt keinen Ladezustand"
+        )
         log_event(
             db,
             config,
             "poll",
-            "Antwort enthielt keinen Ladezustand"
+            reason
             + (f" (Fehler: {', '.join(snapshot.error_types)})" if snapshot.error_types else "")
             + " - Zustand unveraendert uebernommen.",
             level="warning",
@@ -227,6 +236,20 @@ def _apply_snapshot(
         _absorb_meta(config, snapshot)
         _schedule_next(config, active=had_open_session)
         return
+
+    if snapshot.api_charging_state == CHARGING_ERROR_STATE:
+        # API 1.2.0: Ladefehler bei steckendem Kabel. Der Vorgang laeuft weiter
+        # (Kabel steckt), der Grund steht im Protokoll.
+        log_event(
+            db,
+            config,
+            "charging_error",
+            "Fahrzeug meldet einen Ladefehler"
+            + (f" ({snapshot.charging_error_reason})" if snapshot.charging_error_reason else "")
+            + ".",
+            level="warning",
+            snapshot=snapshot,
+        )
 
     _absorb_meta(config, snapshot)
     _schedule_next(config, active=config.open_start_time is not None)

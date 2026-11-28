@@ -57,14 +57,18 @@ REQUEST_TIMEOUT = 30.0
 #: erreicht, Ladung unterbrochen). Deckungsgleich mit den "aktiven Zustaenden"
 #: des Home-Assistant-Blueprints, damit beide Quellen dieselben Vorgaenge
 #: schneiden.
+#: `CHARGING_ERROR` (seit API 1.2.0) meldet einen Ladefehler bei steckendem
+#: Kabel - der Vorgang laeuft also weiter, er ist nur gestoert.
 PLUGGED_IN_STATES = frozenset(
-    {"CHARGING", "CONSERVING", "READY_FOR_CHARGING", "CHARGING_INTERRUPTED"}
+    {"CHARGING", "CONSERVING", "READY_FOR_CHARGING", "CHARGING_INTERRUPTED", "CHARGING_ERROR"}
 )
 #: Kabel nicht verbunden. "CONNECT_CABLE" ist die Aufforderung, das Kabel
 #: anzuschliessen - also der Ruhezustand, NICHT "verbunden".
 UNPLUGGED_STATES = frozenset({"CONNECT_CABLE"})
 #: Rueckspeisung (V2H/V2G) - kein Ladevorgang, wird wie ausgesteckt behandelt.
 DISCHARGING_STATES = frozenset({"DISCHARGING"})
+#: Ladefehler bei steckendem Kabel, Grund in `chargingErrorReason` (API 1.2.0).
+CHARGING_ERROR_STATE = "CHARGING_ERROR"
 #: Kabelstatus aus `charging.status.plugConnectionState` (seit API 1.1.0).
 #: Unbekannte Werte (die API kuendigt neue an) zaehlen als "nicht gemeldet".
 PLUG_CONNECTED = "CONNECTED"
@@ -210,7 +214,8 @@ class VehicleSnapshot:
     @property
     def api_charging_state(self) -> str | None:
         """`charging.status.state` wie geliefert: CONNECT_CABLE | CHARGING |
-        CONSERVING | READY_FOR_CHARGING | DISCHARGING | CHARGING_INTERRUPTED.
+        CONSERVING | READY_FOR_CHARGING | DISCHARGING | CHARGING_INTERRUPTED |
+        CHARGING_ERROR (seit 1.2.0). Die API kuendigt weitere Werte an.
 
         Seit API 1.1.0 laesst die API das Feld weg, wenn die Kombination aus
         Ladeprozess und Stecker keinen Namen hat (eingesteckt und entriegelt
@@ -218,6 +223,14 @@ class VehicleSnapshot:
         NICHT ausgesteckt."""
         state = self._part("charging").get("status", {}).get("state")
         return state if isinstance(state, str) else None
+
+    @property
+    def charging_error_reason(self) -> str | None:
+        """`charging.status.chargingErrorReason` (seit API 1.2.0), nur bei
+        `CHARGING_ERROR`, z. B. ERROR_CHARGING_SYSTEM, ERROR_LOCK,
+        NO_GRID_VOLTAGE. Wird nur angezeigt, nicht ausgewertet."""
+        value = self._part("charging").get("status", {}).get("chargingErrorReason")
+        return value if isinstance(value, str) else None
 
     @property
     def plug_connection_state(self) -> str | None:
@@ -236,12 +249,16 @@ class VehicleSnapshot:
         return None
 
     @property
-    def is_plugged_in(self) -> bool:
+    def is_plugged_in(self) -> bool | None:
         """Steckt das Kabel (im Sinne eines Ladevorgangs)?
 
         Rueckspeisung zaehlt immer als ausgesteckt, auch bei steckendem Kabel.
         Sonst gilt der Kabelstatus - die API-Doku verlangt ausdruecklich, ihn
         dafuer zu lesen statt `state` - und erst ohne ihn der Ladezustand.
+        None, wenn sich das nicht sagen laesst: kein Kabelstatus und ein
+        Zustand, der fehlt oder unbekannt ist. Die API kuendigt neue Werte an;
+        bis 0.56.3 zaehlte ein unbekannter als ausgesteckt und haette einen
+        laufenden Vorgang beendet.
         """
         state = self.api_charging_state
         if state in DISCHARGING_STATES:
@@ -249,21 +266,25 @@ class VehicleSnapshot:
         plug = self.plug_connected
         if plug is not None:
             return plug
-        return (state or "") in PLUGGED_IN_STATES
+        if state in PLUGGED_IN_STATES:
+            return True
+        if state in UNPLUGGED_STATES:
+            return False
+        return None
 
     @property
     def charging_state(self) -> str | None:
         """Was die Zustandsmaschine als Zustand sieht: der Ladezustand der API,
         fehlt er, ein Ersatz aus dem Kabelstatus (PLUG_CONNECTED |
         PLUG_DISCONNECTED). None nur, wenn beides fehlt - dann wird nichts
-        entschieden."""
+        entschieden; ebenso bei einem unbekannten Zustand ohne Kabelstatus."""
+        plugged = self.is_plugged_in
+        if plugged is None:
+            return None
         state = self.api_charging_state
         if state:
             return state
-        plug = self.plug_connected
-        if plug is None:
-            return None
-        return PLUG_ONLY_CONNECTED if plug else PLUG_ONLY_DISCONNECTED
+        return PLUG_ONLY_CONNECTED if plugged else PLUG_ONLY_DISCONNECTED
 
     @property
     def soc_percent(self) -> int | None:
@@ -384,6 +405,8 @@ class VehicleSnapshot:
         return {
             "vin": self.vin,
             "charging_state": self.charging_state,
+            "api_charging_state": self.api_charging_state,
+            "charging_error_reason": self.charging_error_reason,
             "plug_connection_state": self.plug_connection_state,
             "soc_percent": self.soc_percent,
             "charge_power_kw": self.charge_power_kw,

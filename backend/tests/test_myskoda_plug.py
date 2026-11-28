@@ -123,3 +123,68 @@ def test_plugged_without_state_does_not_end_open_session(db_session, config):
     assert sessions == []
     assert config.open_start_time is not None
     assert config.last_charging_state == "PLUG_CONNECTED"
+
+
+# --- API 1.2.0: CHARGING_ERROR und unbekannte Zustaende (0.57.0) -----------
+
+def test_charging_error_counts_as_plugged_in():
+    s = snap(state="CHARGING_ERROR")
+    assert s.is_plugged_in is True
+    assert s.charging_state == "CHARGING_ERROR"
+
+
+def test_charging_error_reason_is_read_and_summarised():
+    when = T0
+    payload = {"vehicle": {"vin": VIN, "charging": {
+        "status": {"state": "CHARGING_ERROR", "chargingErrorReason": "NO_GRID_VOLTAGE",
+                   "battery": {"stateOfChargeInPercent": 40}},
+        "carCapturedTimestamp": when.isoformat() + "Z"}}}
+    s = VehicleSnapshot.from_response(VIN, payload, fetched_at=when)
+    assert s.charging_error_reason == "NO_GRID_VOLTAGE"
+    assert s.summary()["charging_error_reason"] == "NO_GRID_VOLTAGE"
+    assert snap(state="CHARGING").charging_error_reason is None
+
+
+def test_unknown_state_without_plug_is_undecided():
+    s = snap(state="SOMETHING_NEW")
+    assert s.is_plugged_in is None
+    assert s.charging_state is None
+    assert s.summary()["api_charging_state"] == "SOMETHING_NEW"
+    # Mit Steckerangabe entscheidet der Stecker.
+    assert snap(state="SOMETHING_NEW", plug="CONNECTED").is_plugged_in is True
+    assert snap(state="SOMETHING_NEW", plug="DISCONNECTED").is_plugged_in is False
+
+
+def test_unknown_state_does_not_end_open_session(db_session, config):
+    run(db_session, config, [
+        snap(0, state="CONNECT_CABLE", soc=30),
+        snap(20, state="CHARGING", soc=35, power=11),
+    ])
+    assert not charge_detection.apply_snapshot(
+        db_session, config, snap(40, state="SOMETHING_NEW", soc=40), SOURCE)
+    assert config.open_start_time is not None
+    assert db_session.query(models.ChargingSession).count() == 0
+
+
+def test_charging_error_keeps_open_session_and_is_logged(db_session, config):
+    from app import myskoda_poller
+
+    run(db_session, config, [
+        snap(0, state="CONNECT_CABLE", soc=30),
+        snap(20, state="CHARGING", soc=35, power=11),
+    ])
+    payload = {"vehicle": {"vin": VIN, "charging": {
+        "status": {"state": "CHARGING_ERROR", "chargingErrorReason": "ERROR_CHARGING_SYSTEM",
+                   "battery": {"stateOfChargeInPercent": 41}},
+        "carCapturedTimestamp": (T0 + timedelta(minutes=40)).isoformat() + "Z"}}}
+    err = VehicleSnapshot.from_response(VIN, payload, fetched_at=T0 + timedelta(minutes=40))
+    myskoda_poller._apply_snapshot(db_session, config, err)
+    db_session.commit()
+    assert config.open_start_time is not None
+    assert db_session.query(models.ChargingSession).count() == 0
+    entry = (db_session.query(models.MySkodaLogEntry)
+             .filter_by(event="charging_error").one())
+    assert "ERROR_CHARGING_SYSTEM" in entry.message
+    # Danach ausgesteckt: der Vorgang wird normal beendet.
+    sessions = run(db_session, config, [snap(60, state="CONNECT_CABLE", soc=41)])
+    assert len(sessions) == 1
