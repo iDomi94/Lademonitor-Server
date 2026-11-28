@@ -547,6 +547,27 @@ def push_auto_session(
 
     resolve_location(session, user.id, db)
 
+    # Auch HA bemerkt das Einstecken erst beim naechsten Cloud-Abruf - mit dem
+    # SoC davor wird der Ladebeginn zurueckgerechnet wie beim MyŠkoda-Abruf.
+    # VOR der Energieschaetzung, sonst fehlt ihr der verschluckte Anteil.
+    from ..charge_detection import backdate_pushed_start
+
+    soc_start, start_time, reason = backdate_pushed_start(
+        start_time=payload.start_time,
+        end_time=payload.end_time,
+        soc_start=payload.soc_start,
+        soc_end=payload.soc_end,
+        soc_before=payload.soc_before,
+        soc_before_time=payload.soc_before_time,
+        detected_time=payload.detected_time,
+        start_time_measured=payload.start_time_measured,
+        capacity_kwh=vehicle.battery_capacity_kwh,
+    )
+    if reason:
+        session.soc_start = soc_start
+        session.start_time = start_time
+        session.notes = reason
+
     estimate_energy_kwh(session, vehicle)
     clamp_grid_energy(session)
     # Laeuft auch bei gemessenem Preis: hier wird ueber den Ladeort der

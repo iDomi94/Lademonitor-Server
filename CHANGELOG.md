@@ -6,6 +6,14 @@ auch in der App sichtbar – auf den Versions-Badge im Header klicken.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/), Versionen
 folgen [Semantic Versioning](https://semver.org/).
 
+## [0.58.0] — 2026-11-28
+
+### Added
+- HA-Push: optionale Felder `soc_before`, `soc_before_time`, `detected_time`, `start_time_measured` (Lademonitor-HA 0.11.0). `charge_detection.backdate_pushed_start()` datiert Start-SoC und Startzeit zurück wie beim MyŠkoda-Abruf (Alterswächter 60 min, Physik-Wächter mit der mittleren Leistung nach dem Erkennen). Mit gemessenem Start (Wallbox-Zähler) bleibt die Startzeit, nur der Start-SoC wird nachgerechnet.
+
+### Fixed
+- Zusammenführen mehrerer Quellen: ein früherer Beginn mit niedrigerem Start-SoC gewinnt immer gegen einen späteren mit höherem. Vorher überschrieb ein später bemerkter HA-Start einen zurückdatierten Poller-Start.
+
 ## [0.57.0] — 2026-11-28
 
 ### Added

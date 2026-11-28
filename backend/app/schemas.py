@@ -947,6 +947,33 @@ class AutoSessionPush(BaseModel):
     # unbrauchbarer Sensorwert verwirft den Push nicht (siehe unten).
     grid_energy_kwh: float | None = Field(default=None, ge=0)
     price_total: float | None = Field(default=None, ge=0)
+    # Rueckdatierung des Ladebeginns (v0.58.0, Lademonitor-HA 0.11.0): auch
+    # Home Assistant bemerkt das Einstecken erst beim naechsten Abruf der
+    # Fahrzeug-Cloud. `soc_before`/`soc_before_time` sind der letzte SoC VOR
+    # dem Einstecken aus dem HA-Verlauf, `detected_time` der Moment, in dem HA
+    # das Einstecken bemerkt hat (ohne Angabe: start_time). Kommt start_time
+    # aus dem Wallbox-Zaehler (`start_time_measured`), bleibt sie stehen und
+    # nur der Start-SoC wird nachgerechnet. Siehe
+    # charge_detection.backdate_pushed_start().
+    soc_before: int | None = None
+    soc_before_time: datetime | None = None
+    detected_time: datetime | None = None
+    start_time_measured: bool = False
+
+    @field_validator("soc_before", mode="before")
+    @classmethod
+    def _tolerate_unknown_soc_before(cls, value: object) -> object:
+        """Ein unbrauchbarer Wert laesst nur die Korrektur weg, nie den Push."""
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, str):
+            try:
+                value = float(value.strip())
+            except ValueError:
+                return None
+        if isinstance(value, (int, float)):
+            return int(round(value)) if 0 <= value <= 100 else None
+        return None
 
     @field_validator("grid_energy_kwh", "price_total", mode="before")
     @classmethod

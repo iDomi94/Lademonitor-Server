@@ -24,7 +24,10 @@ von `START_WINDOW`. Bei mehreren Kandidaten gewinnt der naechstgelegene Beginn.
   `TIME_SOC_RANK` gewinnt. Home Assistant meldet ereignisgesteuert auf die
   Sekunde, BMW liefert fertige Vorgaenge aus dem Fahrzeug, MyŠkoda und
   Renault pollen im Minutentakt, das VW-Datenportal hinkt bis zu Stunden
-  hinterher.
+  hinterher. **Ausnahme Beginn/Start-SoC (seit v0.58.0):** ein frueherer
+  Beginn mit niedrigerem SoC gewinnt immer - HA liest dieselbe Cloud wie die
+  Poller und sieht das Einstecken genauso spaet; ein zurueckdatierter
+  Poller-Start darf nicht vom spaeter bemerkten HA-Start ueberschrieben werden.
 * Energie: gemessene kWh schlagen geschaetzte, unabhaengig von der Quelle.
   Sind beide gemessen, bleibt der vorhandene Wert. Aendert sich der SoC und
   die Energie war nur geschaetzt, wird sie neu geschaetzt.
@@ -146,6 +149,16 @@ def _fmt(value) -> str:
     return str(value)
 
 
+def _earlier_and_lower(start_a, soc_a, start_b, soc_b) -> bool:
+    """True, wenn A frueher beginnt UND mit niedrigerem SoC als B."""
+    if None in (start_a, soc_a, start_b, soc_b):
+        return False
+    try:
+        return start_a < start_b and soc_a < soc_b
+    except TypeError:
+        return False
+
+
 def merge_into(
     db: Session,
     existing: models.ChargingSession,
@@ -171,9 +184,22 @@ def merge_into(
         setattr(existing, field, value)
         return True
 
-    take("start_time", "Beginn", naive_local(incoming.start_time), overwrite=better)
+    # Beginn und Start-SoC gehoeren zusammen. Jede Quelle, die pollt, sieht
+    # das Einstecken zu spaet - mit HOEHEREM SoC. Ein frueherer Beginn mit
+    # niedrigerem SoC ist deshalb immer naeher an der Wahrheit, egal von wem
+    # (z.B. ein zurueckdatierter MyŠkoda-Start gegen den spaeter bemerkten
+    # HA-Start); sonst entscheidet die Rangfolge.
+    incoming_start = naive_local(incoming.start_time)
+    incoming_earlier = _earlier_and_lower(
+        incoming_start, incoming.soc_start, existing.start_time, existing.soc_start
+    )
+    existing_earlier = _earlier_and_lower(
+        existing.start_time, existing.soc_start, incoming_start, incoming.soc_start
+    )
+    take_start = editable and (incoming_earlier or (better and not existing_earlier))
+    take("start_time", "Beginn", incoming_start, overwrite=take_start)
     take("end_time", "Ende", naive_local(incoming.end_time), overwrite=better)
-    soc_changed = take("soc_start", "SoC Start", incoming.soc_start, overwrite=better)
+    soc_changed = take("soc_start", "SoC Start", incoming.soc_start, overwrite=take_start)
     soc_changed |= take("soc_end", "SoC Ende", incoming.soc_end, overwrite=better)
     take("odometer_km", "km-Stand", incoming.odometer_km, overwrite=better)
     take(

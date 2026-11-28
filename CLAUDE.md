@@ -302,7 +302,9 @@ Endpunkt `POST /api/sessions/auto` nimmt Pushes entgegen (Schema
 [Duplikatschutz], start_time, end_time, charging_type, soc_start, soc_end,
 odometer_km, latitude, longitude, energy_kwh optional; dazu energy_meter,
 outside_temp_c und seit v0.41.0 grid_energy_kwh/price_total - siehe Abschnitt
-"Heimladung mit PV/Hausakku")).
+"Heimladung mit PV/Hausakku"), seit v0.58.0 soc_before/soc_before_time/
+detected_time/start_time_measured - siehe "Rueckdatierung auch fuer den
+HA-Push").
 
 Datenquelle: MySkoda-Integration in Home Assistant liefert
 `sensor.skoda_enyaq_battery_percentage`, `sensor.skoda_enyaq_charging_state`
@@ -484,6 +486,23 @@ Durchschnittsleistung unphysikalisch: 53 kWh in den gemessenen 19 min waeren
 Abschaltbar per `backdate_session_start`. Die Rohwerte beider Abrufe stehen
 weiterhin in `notes`, die angewandte Korrektur dort und als
 `session_backdated`-Zeile im Debug-Log; die Vorgaenge bleiben `needs_review`.
+
+**Rueckdatierung auch fuer den HA-Push (v0.58.0, Lademonitor-HA 0.11.0):**
+Home Assistant liest dieselbe Cloud und bemerkt das Einstecken genauso spaet.
+Die Integration holt beim `begin_charging_session` den letzten SoC VOR dem
+Erkennen samt Zeitpunkt aus dem HA-Verlauf (Recorder) und schickt ihn beim
+Ladeende mit (`soc_before`, `soc_before_time`). Mit Wallbox-Zaehler sucht sie
+im Verlauf ausserdem den ersten Anstieg des Zaehlers seit diesem Zeitpunkt:
+das ist der gemessene Ladebeginn (`start_time`, `start_time_measured=true`,
+`detected_time` = Erkennen), und der Zaehlerstand davor ist der Ausgangswert
+der kWh - vorher fehlte der verschluckte Anteil auch dort.
+`charge_detection.backdate_pushed_start()` nutzt `backdated_start()` mit zwei
+Unterschieden: die Leistung fuer den Physik-Waechter ist die mittlere NACH dem
+Erkennen (SoC-Zuwachs x Kapazitaet / Dauer, eher zu klein bei DC), der
+Alterswaechter steht fest auf 60 min (`PUSH_BACKDATE_MAX_GAP_SECONDS`). Bei
+gemessenem Start entfaellt der Alterswaechter, die Luecke ist Zaehler-Start bis
+Erkennen, die Startzeit bleibt. Ohne Akkukapazitaet oder SoC-Ende: keine
+Korrektur. Die `external_session_id` bleibt die von HA.
 
 **Zeitzone (Fix 2026-10-19, v0.43.4):** die Zustandsmaschine rechnet in
 naiver UTC, `charge_detection.create_session()` rechnet Start/Ende per
@@ -3220,6 +3239,12 @@ neu geschaetzt; DC schlaegt AC; Fahrzeugtemperatur schlaegt Wetterdienst;
 gemessene HA-Kosten schlagen den Anbieterpreis. Jede Aenderung als Zeile
 "Ergaenzt durch <Quelle>: ..." in der Notiz. HA-Zeitstempel (mit Offset) werden
 fuer den Vergleich per `naive_local()` in naive Ortszeit umgerechnet.
+
+**Beginn und Start-SoC (seit v0.58.0):** ein frueherer Beginn mit
+niedrigerem Start-SoC gewinnt unabhaengig von der Rangfolge, ein spaeterer mit
+hoeherem verliert auch gegen eine schlechtere Quelle - jede pollende Quelle,
+HA eingeschlossen, sieht das Einstecken zu spaet. Vorher ueberschrieb ein
+spaeter bemerkter HA-Start den zurueckdatierten MyŠkoda-Start.
 
 Die Sperre "nur eine Quelle" (`_other_active_source` in den VW-/Renault-Routern,
 `auto_enable.other_source_active`) ist entfallen.
