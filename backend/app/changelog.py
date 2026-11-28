@@ -5,6 +5,16 @@ lesen direkt aus dieser Liste, kein separater Build-Schritt noetig."""
 
 CHANGELOG = [
     {
+        "version": "0.58.0",
+        "date": "2026-11-28",
+        "title": "Home Assistant: Ladebeginn zurückrechnen",
+        "changes": [
+            "Auch Home Assistant bemerkt das Einstecken erst beim nächsten Abruf der Fahrzeug-Cloud. Mit Lademonitor-HA 0.11.0 kommt der letzte Akkustand vor dem Einstecken mit, und Lademonitor rechnet Start-SoC und Startzeit zurück wie beim MyŠkoda-Abruf: nur wenn der Wert davor höchstens eine Stunde alt ist und nur so weit, wie in der Lücke physikalisch geladen werden konnte.",
+            "Mit Wallbox-Zähler steht der Ladebeginn fest: die Startzeit kommt dann vom Zähler, nachgerechnet wird nur der Start-SoC.",
+            "Laufen Home Assistant und ein Abruf (MyŠkoda, VW-Datenportal, Renault) für dasselbe Fahrzeug, überschreibt ein später bemerkter Beginn mit höherem Akkustand keinen früheren mehr.",
+        ],
+    },
+    {
         "version": "0.57.0",
         "date": "2026-11-28",
         "title": "MyŠkoda: Ladefehler erkennen (API 1.2.0)",

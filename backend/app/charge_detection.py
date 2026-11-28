@@ -338,6 +338,103 @@ def backdated_start(
     return corrected, corrected_time, reason
 
 
+# Home Assistant (v0.58.0): so alt darf der SoC vor dem Einstecken hoechstens
+# sein, wenn die Startzeit nicht vom Wallbox-Zaehler kommt. Das Doppelte des
+# typischen Cloud-Abrufs der Fahrzeug-Integrationen (30 min) - wie beim
+# MyŠkoda-Abruf, der das Doppelte seines Leerlaufintervalls nimmt.
+PUSH_BACKDATE_MAX_GAP_SECONDS = 60 * 60
+
+
+def _seconds_between(later: datetime | None, earlier: datetime | None) -> float | None:
+    """Abstand in Sekunden, oder None, wenn ein Wert fehlt oder die beiden
+    nicht vergleichbar sind (einer mit, einer ohne Zeitzone)."""
+    if later is None or earlier is None:
+        return None
+    try:
+        return (later - earlier).total_seconds()
+    except TypeError:
+        return None
+
+
+def backdate_pushed_start(
+    *,
+    start_time: datetime,
+    end_time: datetime | None,
+    soc_start: int | None,
+    soc_end: int | None,
+    soc_before: int | None,
+    soc_before_time: datetime | None,
+    detected_time: datetime | None,
+    start_time_measured: bool,
+    capacity_kwh: float | None,
+) -> tuple[int | None, datetime, str | None]:
+    """Rueckdatierung fuer den Home-Assistant-Push: `(soc_start, start_time, Begruendung)`.
+
+    Dieselbe Rechnung wie `backdated_start()` beim MyŠkoda-Abruf - HA liest
+    die Fahrzeugdaten ebenfalls aus der Cloud und bemerkt das Einstecken erst
+    beim naechsten Abruf. Unterschiede:
+
+    * Eine Ladeleistung kennt der Push nicht. Fuer den Physik-Waechter dient
+      die mittlere Leistung NACH dem Erkennen (SoC-Zuwachs x Kapazitaet /
+      Dauer) - bei DC faellt die Leistung zum Ende ab, die Korrektur ist dann
+      eher zu klein als zu gross.
+    * Kommt die Startzeit vom Wallbox-Zaehler, steht der Ladebeginn fest. Dann
+      gibt es keinen Alterswaechter (das Einstecken ist ja gemessen), die
+      Luecke fuer den Physik-Waechter ist die Zeit vom Zaehler-Start bis zum
+      Erkennen, und die Startzeit bleibt unveraendert.
+
+    Ein hoeherer SoC davor heisst wie beim Abruf: dazwischen wurde gefahren,
+    der erkannte Wert ist dann der richtige.
+    """
+    unchanged = (soc_start, start_time, None)
+    if soc_before is None or soc_start is None or soc_before >= soc_start:
+        return unchanged
+    detected = detected_time or start_time
+    since_before = _seconds_between(detected, soc_before_time)
+    if since_before is None or since_before < 0:
+        return unchanged
+
+    if start_time_measured:
+        gap = _seconds_between(detected, start_time)
+        if gap is None or gap < 0:
+            return unchanged
+        limit = gap
+    else:
+        gap = since_before
+        limit = PUSH_BACKDATE_MAX_GAP_SECONDS
+
+    power = 0.0
+    observed = _seconds_between(end_time, detected)
+    if capacity_kwh and soc_end is not None and soc_end > soc_start and observed and observed > 0:
+        power = (soc_end - soc_start) / 100 * capacity_kwh / (observed / 3600)
+
+    state = type("PushedStart", (), {})()
+    state.backdate_session_start = True
+    state.open_soc_start = soc_start
+    state.open_start_time = detected
+    state.open_soc_before = soc_before
+    state.open_gap_before_seconds = int(gap)
+    state.open_max_power_kw = power
+    corrected, corrected_time, _ = backdated_start(state, capacity_kwh, int(limit))
+    if corrected is None or corrected >= soc_start:
+        return unchanged
+
+    if start_time_measured:
+        reason = (
+            f"Start-SoC zurückgerechnet: {soc_start} % → {corrected} % "
+            f"(Home Assistant hat das Einstecken {fmt_minutes(int(gap))} nach dem "
+            f"Ladebeginn laut Wallbox bemerkt; SoC davor {soc_before} %)."
+        )
+        return corrected, start_time, reason
+    moved = _seconds_between(detected, corrected_time) or 0
+    reason = (
+        f"Ladebeginn zurückdatiert: Startwert {soc_start} % → {corrected} % "
+        f"(letzter SoC in Home Assistant vor {fmt_minutes(int(since_before))} mit "
+        f"{soc_before} %), Startzeit um {fmt_minutes(int(moved))} vorgezogen."
+    )
+    return corrected, corrected_time, reason
+
+
 # Ab so vielen Prozentpunkten Abstand gilt der aus der Energie gerechnete
 # Startwert als besser als der erfasste. Kleinere Abweichungen sind Rundung
 # (SoC ganzzahlig, Zaehler je kWh) und Nennkapazitaet gegen echte Kapazitaet.
